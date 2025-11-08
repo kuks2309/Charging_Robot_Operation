@@ -8,16 +8,31 @@ import sys
 import os
 
 # Fix Qt plugin conflict between OpenCV and PyQt5
-# Remove OpenCV's Qt plugin path to avoid conflicts
-os.environ.pop('QT_QPA_PLATFORM_PLUGIN_PATH', None)
+# Delete OpenCV's Qt plugin directory from cv2 module after import
+def fix_cv2_qt_conflict():
+    """Remove OpenCV's Qt plugins to prevent conflicts with PyQt5"""
+    import cv2
+    cv2_dir = os.path.dirname(cv2.__file__)
+    qt_plugin_dir = os.path.join(cv2_dir, 'qt', 'plugins')
+
+    # Check if cv2 qt plugins directory exists
+    if os.path.exists(qt_plugin_dir):
+        # Set empty plugin path to disable cv2's Qt
+        os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = ''
+
+    return cv2
 
 import numpy as np
-import cv2
-import pyrealsense2 as rs
-import yaml
+
+# Import PyQt5 first to claim the Qt plugin system
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 from PyQt5.QtCore import QTimer, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap
+
+# Then import cv2 with conflict fix
+cv2 = fix_cv2_qt_conflict()
+import pyrealsense2 as rs
+import yaml
 
 # Add lib directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
