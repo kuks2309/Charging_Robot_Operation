@@ -1,0 +1,44 @@
+# ArduCam 40-degree Camera Calibration Data
+# Generated from calibration process
+
+camera_name: Arducam_40_degree
+serial_number: ""
+
+# Image resolution
+image_width: 1280
+image_height: 720
+
+# Camera intrinsic parameters
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1514.84717697704, 0.0, 676.3515449128528,
+         0.0, 1529.876308608247, 311.1706201358423,
+         0.0, 0.0, 1.0]
+
+# Focal lengths
+fx: 1514.84717697704
+fy: 1529.876308608247
+
+# Principal point
+cx: 676.3515449128528
+cy: 311.1706201358423
+
+# Skew coefficient
+skew: 0.0
+
+# Distortion coefficients (k1, k2, p1, p2, k3)
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.434355724, 0.007141673, 0.0, 0.0, 0.0]
+
+# Individual distortion parameters
+k1: -0.434355724
+k2: 0.007141673
+p1: 0.0
+p2: 0.0
+k3: 0.0
+
+# Calibration quality
+reprojection_error: 0.0

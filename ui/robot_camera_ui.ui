@@ -1,0 +1,1273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1800</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Robot TCP Control &amp; Dual Camera Monitor</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <layout class="QVBoxLayout" name="verticalLayout_cameras">
+      <item>
+       <widget class="QGroupBox" name="d435CameraGroup">
+        <property name="title">
+         <string>D435 Camera (Far Field View)</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QGroupBox {
+    font-size: 14pt;
+    font-weight: bold;
+    border: 2px solid #3498db;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_d435">
+         <item>
+          <widget class="QLabel" name="d435CameraLabel">
+           <property name="minimumSize">
+            <size>
+             <width>800</width>
+             <height>450</height>
+            </size>
+           </property>
+           <property name="font">
+            <font>
+             <pointsize>14</pointsize>
+            </font>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    background-color: #2c3e50;
+    border: 2px solid #34495e;
+    border-radius: 5px;
+    color: #95a5a6;
+}</string>
+           </property>
+           <property name="text">
+            <string>D435 Camera Not Started</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_d435">
+           <item>
+            <widget class="QCheckBox" name="d435EnableArucoCheckBox">
+             <property name="font">
+              <font>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    color: #2c3e50;
+    padding: 5px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+QCheckBox::indicator:unchecked {
+    border: 2px solid #95a5a6;
+    background-color: white;
+    border-radius: 3px;
+}
+QCheckBox::indicator:checked {
+    border: 2px solid #2ecc71;
+    background-color: #2ecc71;
+    border-radius: 3px;
+}</string>
+             </property>
+             <property name="text">
+              <string>ArUco Detection</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="d435EnableCharucoCheckBox">
+             <property name="font">
+              <font>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    color: #2c3e50;
+    padding: 5px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+QCheckBox::indicator:unchecked {
+    border: 2px solid #95a5a6;
+    background-color: white;
+    border-radius: 3px;
+}
+QCheckBox::indicator:checked {
+    border: 2px solid #3498db;
+    background-color: #3498db;
+    border-radius: 3px;
+}</string>
+             </property>
+             <property name="text">
+              <string>ChArUco Board</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="d435StatusLabel">
+             <property name="font">
+              <font>
+               <pointsize>9</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">color: #e74c3c; padding: 5px;</string>
+             </property>
+             <property name="text">
+              <string>Status: Disconnected</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_d435">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="arducamCameraGroup">
+        <property name="title">
+         <string>ArduCam (Near Field View)</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QGroupBox {
+    font-size: 14pt;
+    font-weight: bold;
+    border: 2px solid #e67e22;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_arducam">
+         <item>
+          <widget class="QLabel" name="arducamCameraLabel">
+           <property name="minimumSize">
+            <size>
+             <width>800</width>
+             <height>450</height>
+            </size>
+           </property>
+           <property name="font">
+            <font>
+             <pointsize>14</pointsize>
+            </font>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    background-color: #2c3e50;
+    border: 2px solid #34495e;
+    border-radius: 5px;
+    color: #95a5a6;
+}</string>
+           </property>
+           <property name="text">
+            <string>ArduCam Not Started</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_arducam">
+           <item>
+            <widget class="QCheckBox" name="arducamEnableArucoCheckBox">
+             <property name="font">
+              <font>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    color: #2c3e50;
+    padding: 5px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+QCheckBox::indicator:unchecked {
+    border: 2px solid #95a5a6;
+    background-color: white;
+    border-radius: 3px;
+}
+QCheckBox::indicator:checked {
+    border: 2px solid #2ecc71;
+    background-color: #2ecc71;
+    border-radius: 3px;
+}</string>
+             </property>
+             <property name="text">
+              <string>ArUco Detection</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="arducamEnableCharucoCheckBox">
+             <property name="font">
+              <font>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    color: #2c3e50;
+    padding: 5px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+QCheckBox::indicator:unchecked {
+    border: 2px solid #95a5a6;
+    background-color: white;
+    border-radius: 3px;
+}
+QCheckBox::indicator:checked {
+    border: 2px solid #3498db;
+    background-color: #3498db;
+    border-radius: 3px;
+}</string>
+             </property>
+             <property name="text">
+              <string>ChArUco Board</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="arducamStatusLabel">
+             <property name="font">
+              <font>
+               <pointsize>9</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">color: #e74c3c; padding: 5px;</string>
+             </property>
+             <property name="text">
+              <string>Status: Disconnected</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_arducam">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="controlGroup">
+      <property name="maximumSize">
+       <size>
+        <width>420</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="title">
+       <string>Robot Control Panel</string>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">QGroupBox {
+    font-size: 14pt;
+    font-weight: bold;
+    border: 2px solid #2ecc71;
+    border-radius: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QGroupBox" name="tcpGroup">
+         <property name="title">
+          <string>Current TCP Position</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QGroupBox {
+    font-size: 12pt;
+    font-weight: bold;
+    border: 1px solid #95a5a6;
+    border-radius: 3px;
+    margin-top: 10px;
+    padding-top: 10px;
+}</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item row="0" column="0" colspan="2">
+           <widget class="QLabel" name="positionHeaderLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Position (mm)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="xLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>X:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLabel" name="xValue">
+            <property name="minimumSize">
+             <size>
+              <width>110</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">background-color: #ecf0f1;
+border: 1px solid #bdc3c7;
+border-radius: 3px;
+padding: 4px;
+color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>0.000</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="yLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Y:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="yValue">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">background-color: #ecf0f1;
+border: 1px solid #bdc3c7;
+border-radius: 3px;
+padding: 4px;
+color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>0.000</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="zLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Z:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="zValue">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">background-color: #ecf0f1;
+border: 1px solid #bdc3c7;
+border-radius: 3px;
+padding: 4px;
+color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>0.000</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0" colspan="2">
+           <widget class="Line" name="line">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0" colspan="2">
+           <widget class="QLabel" name="orientationHeaderLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Orientation (deg)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="rollLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Rx:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QLabel" name="rollValue">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">background-color: #ecf0f1;
+border: 1px solid #bdc3c7;
+border-radius: 3px;
+padding: 4px;
+color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>0.000</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="pitchLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Ry:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QLabel" name="pitchValue">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">background-color: #ecf0f1;
+border: 1px solid #bdc3c7;
+border-radius: 3px;
+padding: 4px;
+color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>0.000</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="yawLabel">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>Rz:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QLabel" name="yawValue">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">background-color: #ecf0f1;
+border: 1px solid #bdc3c7;
+border-radius: 3px;
+padding: 4px;
+color: #2c3e50;</string>
+            </property>
+            <property name="text">
+             <string>0.000</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="robotControlGroup">
+         <property name="title">
+          <string>Robot Controls</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QGroupBox {
+    font-size: 11pt;
+    font-weight: bold;
+    border: 1px solid #95a5a6;
+    border-radius: 3px;
+    margin-top: 10px;
+    padding-top: 10px;
+}</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_robot">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QPushButton" name="connectRobotButton">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #9b59b6;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #8e44ad;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Connect Robot</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="readTcpButton">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #3498db;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #2980b9;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Read TCP Position</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="targetTcpGroup">
+         <property name="title">
+          <string>Target TCP Position</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QGroupBox {
+    font-size: 11pt;
+    font-weight: bold;
+    border: 1px solid #95a5a6;
+    border-radius: 3px;
+    margin-top: 10px;
+    padding-top: 10px;
+}</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_target">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="targetXLabel">
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>X (mm):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="targetXInput">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    background-color: white;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    padding: 4px;
+}
+QLineEdit:disabled {
+    background-color: #ecf0f1;
+}</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="targetYLabel">
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Y (mm):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="targetYInput">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    background-color: white;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    padding: 4px;
+}
+QLineEdit:disabled {
+    background-color: #ecf0f1;
+}</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="targetZLabel">
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Z (mm):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="targetZInput">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    background-color: white;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    padding: 4px;
+}
+QLineEdit:disabled {
+    background-color: #ecf0f1;
+}</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="targetRxLabel">
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Rx (deg):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="targetRxInput">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    background-color: white;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    padding: 4px;
+}
+QLineEdit:disabled {
+    background-color: #ecf0f1;
+}</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="targetRyLabel">
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Ry (deg):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLineEdit" name="targetRyInput">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    background-color: white;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    padding: 4px;
+}
+QLineEdit:disabled {
+    background-color: #ecf0f1;
+}</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="targetRzLabel">
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Rz (deg):</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLineEdit" name="targetRzInput">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    background-color: white;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    padding: 4px;
+}
+QLineEdit:disabled {
+    background-color: #ecf0f1;
+}</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0" colspan="2">
+           <widget class="QPushButton" name="useCurrentButton">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #16a085;
+    color: white;
+    padding: 6px;
+    border-radius: 5px;
+    border: 2px solid #138d75;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Use Current Position</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0" colspan="2">
+           <widget class="QPushButton" name="moveTcpButton">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #f39c12;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #e67e22;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Move to Target</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="cameraControlGroup">
+         <property name="title">
+          <string>Camera Controls</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QGroupBox {
+    font-size: 11pt;
+    font-weight: bold;
+    border: 1px solid #95a5a6;
+    border-radius: 3px;
+    margin-top: 10px;
+    padding-top: 10px;
+}</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_3">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QPushButton" name="startD435Button">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #3498db;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #2980b9;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Start D435</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="stopD435Button">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #e74c3c;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #c0392b;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Stop D435</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="startArducamButton">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #e67e22;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #d35400;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Start ArduCam</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="stopArducamButton">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #e74c3c;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #c0392b;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Stop ArduCam</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="snapshotButton">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #16a085;
+    color: white;
+    padding: 8px;
+    border-radius: 5px;
+    border: 2px solid #138d75;
+}
+QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QPushButton:disabled {
+    background-color: #95a5a6;
+    border-color: #7f8c8d;
+}</string>
+            </property>
+            <property name="text">
+             <string>Capture Snapshot</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1800</width>
+     <height>22</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,41 @@
+# Intel RealSense D435 Camera Calibration Data
+# Generated from calibration process
+
+camera_name: Intel_RealSense_D435
+serial_number: "207522071359"
+
+# Image resolution
+image_width: 640
+image_height: 480
+
+# Camera intrinsic parameters
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [563.6249596576276, 0.0, 330.61502722186367,
+         0.0, 566.4088608878184, 259.117865685683,
+         0.0, 0.0, 1.0]
+
+# Focal lengths
+fx: 563.6249596576276
+fy: 566.4088608878184
+
+# Principal point
+cx: 330.61502722186367
+cy: 259.117865685683
+
+# Distortion coefficients (k1, k2, p1, p2, k3)
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [0.088571538, -0.098454002, 0.0, 0.0, 0.0]
+
+# Individual distortion parameters
+k1: 0.088571538
+k2: -0.098454002
+p1: 0.0
+p2: 0.0
+k3: 0.0
+
+# Calibration quality
+reprojection_error: 0.208
