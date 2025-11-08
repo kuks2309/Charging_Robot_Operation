@@ -6,6 +6,11 @@ Main UI application for controlling dual camera system and robot TCP
 
 import sys
 import os
+
+# Fix Qt plugin conflict between OpenCV and PyQt5
+# Remove OpenCV's Qt plugin path to avoid conflicts
+os.environ.pop('QT_QPA_PLATFORM_PLUGIN_PATH', None)
+
 import numpy as np
 import cv2
 import pyrealsense2 as rs
