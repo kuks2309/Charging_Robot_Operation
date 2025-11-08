@@ -38,6 +38,7 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
 
 from aruco import ArucoCameraPoseEstimator
+from robot_controller import RobotTCPController
 
 
 class D435CameraController:
@@ -216,6 +217,9 @@ class RobotCameraApp(QtWidgets.QMainWindow):
         # Initialize cameras
         self.d435_camera = None
 
+        # Initialize robot controller
+        self.robot = None
+
         # Camera timers
         self.d435_timer = QTimer()
         self.d435_timer.timeout.connect(self.update_d435_frame)
@@ -360,31 +364,144 @@ class RobotCameraApp(QtWidgets.QMainWindow):
 
         self.show_info(f"Snapshot saved to {snapshot_dir}/")
 
-    # ==================== Robot Control Placeholders ====================
+    # ==================== Robot Control ====================
 
     @pyqtSlot()
     def connect_robot(self):
-        """Connect to robot (placeholder)"""
-        print("⚠️  Robot connection not implemented yet")
-        self.show_info("Robot connection not implemented yet")
+        """Connect to robot"""
+        try:
+            if self.robot is None:
+                # Create robot controller with default settings
+                # You can change IP and port here if needed
+                self.robot = RobotTCPController(ip="192.168.0.29", port=1502)
+
+            if self.robot.connect():
+                self.connectRobotButton.setEnabled(False)
+                self.readTcpButton.setEnabled(True)
+                self.useCurrentButton.setEnabled(True)
+                self.moveTcpButton.setEnabled(True)
+
+                # Enable target input fields
+                self.targetXInput.setEnabled(True)
+                self.targetYInput.setEnabled(True)
+                self.targetZInput.setEnabled(True)
+                self.targetRxInput.setEnabled(True)
+                self.targetRyInput.setEnabled(True)
+                self.targetRzInput.setEnabled(True)
+
+                print("✅ Robot connected successfully")
+                self.show_info("Robot connected successfully!")
+
+                # Auto-read initial TCP position
+                self.read_tcp_position()
+            else:
+                self.show_error("Failed to connect to robot")
+
+        except Exception as e:
+            self.show_error(f"Error connecting to robot: {str(e)}")
 
     @pyqtSlot()
     def read_tcp_position(self):
-        """Read robot TCP position (placeholder)"""
-        print("⚠️  Read TCP not implemented yet")
-        self.show_info("Read TCP not implemented yet")
+        """Read robot TCP position"""
+        if self.robot is None or not self.robot.is_connected():
+            self.show_error("Robot not connected")
+            return
+
+        try:
+            tcp_pos = self.robot.read_tcp_position()
+
+            if tcp_pos is not None:
+                # Update current position labels
+                self.xValue.setText(f"{tcp_pos['x']:.3f}")
+                self.yValue.setText(f"{tcp_pos['y']:.3f}")
+                self.zValue.setText(f"{tcp_pos['z']:.3f}")
+                self.rollValue.setText(f"{tcp_pos['rx']:.3f}")
+                self.pitchValue.setText(f"{tcp_pos['ry']:.3f}")
+                self.yawValue.setText(f"{tcp_pos['rz']:.3f}")
+
+                print(f"📍 TCP Position: X={tcp_pos['x']:.3f}, Y={tcp_pos['y']:.3f}, Z={tcp_pos['z']:.3f}")
+                print(f"   Orientation: Rx={tcp_pos['rx']:.3f}, Ry={tcp_pos['ry']:.3f}, Rz={tcp_pos['rz']:.3f}")
+            else:
+                self.show_error("Failed to read TCP position")
+
+        except Exception as e:
+            self.show_error(f"Error reading TCP position: {str(e)}")
 
     @pyqtSlot()
     def use_current_position(self):
-        """Use current TCP position as target (placeholder)"""
-        print("⚠️  Use current position not implemented yet")
-        self.show_info("Use current position not implemented yet")
+        """Use current TCP position as target"""
+        if self.robot is None or not self.robot.is_connected():
+            self.show_error("Robot not connected")
+            return
+
+        try:
+            # Read current position first
+            tcp_pos = self.robot.read_tcp_position()
+
+            if tcp_pos is not None:
+                # Set target inputs to current position
+                self.targetXInput.setText(f"{tcp_pos['x']:.3f}")
+                self.targetYInput.setText(f"{tcp_pos['y']:.3f}")
+                self.targetZInput.setText(f"{tcp_pos['z']:.3f}")
+                self.targetRxInput.setText(f"{tcp_pos['rx']:.3f}")
+                self.targetRyInput.setText(f"{tcp_pos['ry']:.3f}")
+                self.targetRzInput.setText(f"{tcp_pos['rz']:.3f}")
+
+                print("✅ Current position copied to target")
+            else:
+                self.show_error("Failed to read current position")
+
+        except Exception as e:
+            self.show_error(f"Error: {str(e)}")
 
     @pyqtSlot()
     def move_to_target(self):
-        """Move robot to target position (placeholder)"""
-        print("⚠️  Move to target not implemented yet")
-        self.show_info("Move to target not implemented yet")
+        """Move robot to target position"""
+        if self.robot is None or not self.robot.is_connected():
+            self.show_error("Robot not connected")
+            return
+
+        try:
+            # Get target values from input fields
+            target_x = float(self.targetXInput.text())
+            target_y = float(self.targetYInput.text())
+            target_z = float(self.targetZInput.text())
+            target_rx = float(self.targetRxInput.text())
+            target_ry = float(self.targetRyInput.text())
+            target_rz = float(self.targetRzInput.text())
+
+            # Confirm with user
+            msg = f"Move robot to:\n\n"
+            msg += f"Position: X={target_x:.3f}, Y={target_y:.3f}, Z={target_z:.3f}\n"
+            msg += f"Orientation: Rx={target_rx:.3f}, Ry={target_ry:.3f}, Rz={target_rz:.3f}\n\n"
+            msg += "Are you sure?"
+
+            reply = QtWidgets.QMessageBox.question(
+                self, 'Confirm Movement', msg,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No
+            )
+
+            if reply == QtWidgets.QMessageBox.Yes:
+                # Write pose to robot
+                success = self.robot.write_pose(
+                    target_x, target_y, target_z,
+                    target_rx, target_ry, target_rz
+                )
+
+                if success:
+                    print(f"✅ Target position sent to robot")
+                    self.show_info("Target position sent successfully!")
+
+                    # Read back the position after a short delay
+                    QtCore.QTimer.singleShot(1000, self.read_tcp_position)
+                else:
+                    self.show_error("Failed to send target position")
+
+        except ValueError:
+            self.show_error("Invalid input values. Please enter valid numbers.")
+        except Exception as e:
+            self.show_error(f"Error moving robot: {str(e)}")
 
     # ==================== Utility Methods ====================
 
@@ -401,6 +518,11 @@ class RobotCameraApp(QtWidgets.QMainWindow):
         # Stop cameras
         if self.d435_camera and self.d435_camera.is_running():
             self.stop_d435_camera()
+
+        # Disconnect robot
+        if self.robot and self.robot.is_connected():
+            self.robot.disconnect()
+            print("🔌 Robot disconnected")
 
         event.accept()
 
