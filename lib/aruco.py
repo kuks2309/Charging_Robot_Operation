@@ -285,9 +285,9 @@ class ArucoCameraPoseEstimator:
                 f"Distance: {distance:.3f}m",
                 f"Cam Pos: [{camera_pos[0]:.3f}, {camera_pos[1]:.3f}, {camera_pos[2]:.3f}]",
                 f"Cam Rot: [{euler_angles[0]:.1f}, {euler_angles[1]:.1f}, {euler_angles[2]:.1f}]deg",
-                f"Similarity: {similarity_vectors if similarity_vectors is not None else "Nan"}",
-                f"PC Distance: {p_centroid if p_centroid is not None else "Nan"}",
-                f"C Distance: {c_centroid if c_centroid is not None else "Nan"}"
+                f"Similarity: {similarity_vectors if similarity_vectors is not None else 'Nan'}",
+                f"PC Distance: {p_centroid if p_centroid is not None else 'Nan'}",
+                f"C Distance: {c_centroid if c_centroid is not None else 'Nan'}"
             ]
             
             # Draw text background
