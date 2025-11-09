@@ -50,15 +50,21 @@ class D435CameraController:
         self.config = None
         self._is_running = False
 
-        # ArUco detector
+        # ArUco detector (default to AprilTag 36h11)
+        # Will be updated based on UI selection
+        self.current_marker_dict = cv2.aruco.DICT_APRILTAG_36h11
         self.aruco_estimator = ArucoCameraPoseEstimator(
-            marker_size_meters=0.02,  # 2cm markers
-            dictionary_type=cv2.aruco.DICT_4X4_50
+            marker_size_meters=0.02,  # 20mm markers
+            dictionary_type=self.current_marker_dict
         )
 
-        # ChArUco board configuration
+        # Chessboard configuration (10x7 internal corners for 11x8 grid)
+        self.chessboard_size = (10, 7)  # Internal corners
+        self.square_size = 0.05  # 5cm squares
+
+        # ChArUco board configuration (backup if using ChArUco board)
         self.charuco_board_config = {
-            'grid_size': (8, 6),        # 8x6 grid
+            'grid_size': (11, 8),       # 11x8 grid (10x7 checkerboard corners)
             'square_size': 0.05,        # 5cm squares
             'marker_size': 0.035,       # 3.5cm markers
         }
@@ -148,6 +154,19 @@ class D435CameraController:
             print(f"❌ Failed to start D435: {e}")
             return False
 
+    def update_marker_type(self, marker_dict_type):
+        """Update the ArUco/AprilTag marker dictionary type"""
+        self.current_marker_dict = marker_dict_type
+        self.aruco_estimator = ArucoCameraPoseEstimator(
+            marker_size_meters=0.02,  # 20mm markers
+            dictionary_type=marker_dict_type
+        )
+
+        # Check if AprilTag
+        is_apriltag = 'APRILTAG' in str(marker_dict_type)
+        marker_type = "AprilTag" if is_apriltag else "ArUco"
+        print(f"🔄 Marker type updated to: {marker_type}")
+
     def stop(self):
         """Stop the camera"""
         if self.pipeline is not None:
@@ -187,6 +206,20 @@ class D435CameraController:
         marker_poses = self.aruco_estimator.detect_and_estimate_pose(image, self.intrinsics)
         if marker_poses:
             return self.aruco_estimator.visualize_markers(image, self.intrinsics, marker_poses)
+        return image
+
+    def detect_chessboard(self, image):
+        """Detect regular chessboard in image"""
+        if image is None:
+            return None
+
+        board_pose = self.aruco_estimator.detect_and_estimate_chessboard_pose(
+            image, self.intrinsics, self.chessboard_size, self.square_size
+        )
+        if board_pose:
+            return self.aruco_estimator.visualize_chessboard(
+                image, self.intrinsics, board_pose, self.chessboard_size, self.square_size
+            )
         return image
 
     def detect_charuco(self, image):
@@ -239,6 +272,9 @@ class RobotCameraApp(QtWidgets.QMainWindow):
         self.startD435Button.clicked.connect(self.start_d435_camera)
         self.stopD435Button.clicked.connect(self.stop_d435_camera)
 
+        # Marker type selection
+        self.markerTypeComboBox.currentIndexChanged.connect(self.on_marker_type_changed)
+
         # Robot controls (placeholders for now)
         self.connectRobotButton.clicked.connect(self.connect_robot)
         self.readTcpButton.clicked.connect(self.read_tcp_position)
@@ -258,6 +294,10 @@ class RobotCameraApp(QtWidgets.QMainWindow):
         try:
             if self.d435_camera is None:
                 self.d435_camera = D435CameraController()
+
+                # Apply currently selected marker type
+                current_index = self.markerTypeComboBox.currentIndex()
+                self.on_marker_type_changed(current_index)
 
             if self.d435_camera.start():
                 self.d435_timer.start(30)  # 30ms = ~33 FPS
@@ -295,6 +335,31 @@ class RobotCameraApp(QtWidgets.QMainWindow):
 
             print("D435 camera stopped")
 
+    @pyqtSlot(int)
+    def on_marker_type_changed(self, index):
+        """Handle marker type selection change"""
+        # Mapping from ComboBox index to dictionary type
+        marker_types = {
+            0: ('AprilTag 36h11', cv2.aruco.DICT_APRILTAG_36h11),
+            1: ('AprilTag 16h5', cv2.aruco.DICT_APRILTAG_16h5),
+            2: ('AprilTag 25h9', cv2.aruco.DICT_APRILTAG_25h9),
+            3: ('AprilTag 36h10', cv2.aruco.DICT_APRILTAG_36h10),
+            4: ('ArUco 6x6', cv2.aruco.DICT_6X6_250),
+            5: ('ArUco 4x4', cv2.aruco.DICT_4X4_50),
+            6: ('ArUco 5x5', cv2.aruco.DICT_5X5_100),
+            7: ('ArUco 7x7', cv2.aruco.DICT_7X7_50),
+        }
+
+        if index in marker_types:
+            marker_name, marker_dict = marker_types[index]
+
+            # Update D435 camera marker type if initialized
+            if self.d435_camera is not None:
+                self.d435_camera.update_marker_type(marker_dict)
+                print(f"✅ Marker type changed to: {marker_name}")
+            else:
+                print(f"⚠️  Marker type will be set to {marker_name} when camera starts")
+
     @pyqtSlot()
     def update_d435_frame(self):
         """Update D435 camera display"""
@@ -313,9 +378,9 @@ class RobotCameraApp(QtWidgets.QMainWindow):
         if self.d435EnableArucoCheckBox.isChecked():
             display_frame = self.d435_camera.detect_aruco(display_frame)
 
-        # ChArUco detection
+        # Chessboard detection (regular chessboard)
         if self.d435EnableCharucoCheckBox.isChecked():
-            display_frame = self.d435_camera.detect_charuco(display_frame)
+            display_frame = self.d435_camera.detect_chessboard(display_frame)
 
         # Convert to QPixmap and display
         self.display_image(display_frame, self.d435CameraLabel)
@@ -483,8 +548,8 @@ class RobotCameraApp(QtWidgets.QMainWindow):
             )
 
             if reply == QtWidgets.QMessageBox.Yes:
-                # Write pose to robot
-                success = self.robot.write_pose(
+                # Move robot to target pose
+                success = self.robot.move_tcp_to(
                     target_x, target_y, target_z,
                     target_rx, target_ry, target_rz
                 )

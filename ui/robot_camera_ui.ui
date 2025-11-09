@@ -133,8 +133,100 @@ QCheckBox::indicator:checked {
 }</string>
              </property>
              <property name="text">
-              <string>ChArUco Board</string>
+              <string>Chessboard (10x7)</string>
              </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="markerTypeLabel">
+             <property name="font">
+              <font>
+               <pointsize>10</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">color: #2c3e50; padding: 5px;</string>
+             </property>
+             <property name="text">
+              <string>Marker Type:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="markerTypeComboBox">
+             <property name="font">
+              <font>
+               <pointsize>9</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QComboBox {
+    padding: 5px;
+    border: 2px solid #3498db;
+    border-radius: 3px;
+    background-color: white;
+    min-width: 180px;
+}
+QComboBox:hover {
+    border: 2px solid #2980b9;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox::down-arrow {
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDEyIDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDFMNiA2TDExIDEiIHN0cm9rZT0iIzM0OThkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+Cg==);
+    width: 12px;
+    height: 8px;
+}
+QComboBox QAbstractItemView {
+    border: 2px solid #3498db;
+    selection-background-color: #3498db;
+    selection-color: white;
+}</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>AprilTag 36h11</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>AprilTag 16h5</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>AprilTag 25h9</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>AprilTag 36h10</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>ArUco 6x6 (DICT_6X6_250)</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>ArUco 4x4 (DICT_4X4_50)</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>ArUco 5x5 (DICT_5X5_100)</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>ArUco 7x7 (DICT_7X7_50)</string>
+              </property>
+             </item>
             </widget>
            </item>
            <item>
@@ -286,7 +378,7 @@ QCheckBox::indicator:checked {
 }</string>
              </property>
              <property name="text">
-              <string>ChArUco Board</string>
+              <string>Chessboard (10x7)</string>
              </property>
             </widget>
            </item>
