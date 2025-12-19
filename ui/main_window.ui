@@ -1,0 +1,2282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Charging Robot Task Manager</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+
+      <!-- ==================== Tab 1: Task 편집 ==================== -->
+      <widget class="QWidget" name="tabTaskEdit">
+       <attribute name="title">
+        <string>Task 편집</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayoutTask">
+
+        <!-- Column 1: Task Sequence -->
+        <item>
+         <widget class="QGroupBox" name="groupTaskSequence">
+          <property name="title">
+           <string>Task Sequence</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>280</width>
+            <height>0</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutSequence">
+           <item>
+            <widget class="QListWidget" name="listTaskSequence">
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutSeqButtons">
+             <item>
+              <widget class="QPushButton" name="btnMoveUp">
+               <property name="text">
+                <string>▲</string>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>40</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnMoveDown">
+               <property name="text">
+                <string>▼</string>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>40</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnDeleteTask">
+               <property name="text">
+                <string>삭제</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Column 2: Available Tasks -->
+        <item>
+         <widget class="QGroupBox" name="groupAvailableTasks">
+          <property name="title">
+           <string>Available Tasks</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>280</width>
+            <height>0</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutAvailable">
+           <item>
+            <widget class="QTreeWidget" name="treeAvailableTasks">
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+             <column>
+              <property name="text">
+               <string>Task</string>
+              </property>
+             </column>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnAddTask">
+             <property name="text">
+              <string>← Sequence에 추가</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Column 3: Task Parameters -->
+        <item>
+         <widget class="QGroupBox" name="groupTaskParams">
+          <property name="title">
+           <string>Task Parameters</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>300</width>
+            <height>0</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutParams">
+           <item>
+            <widget class="QLabel" name="labelSelectedTask">
+             <property name="text">
+              <string>선택된 Task 없음</string>
+             </property>
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelTaskType">
+             <property name="text">
+              <string></string>
+             </property>
+             <property name="styleSheet">
+              <string>color: gray;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="line">
+             <property name="frameShape">
+              <enum>QFrame::HLine</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Sunken</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QScrollArea" name="scrollAreaParams">
+             <property name="widgetResizable">
+              <bool>true</bool>
+             </property>
+             <widget class="QWidget" name="scrollAreaWidgetContents">
+              <property name="geometry">
+               <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>278</width>
+                <height>400</height>
+               </rect>
+              </property>
+              <layout class="QFormLayout" name="formLayoutParams">
+              </layout>
+             </widget>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutParamButtons">
+             <item>
+              <widget class="QPushButton" name="btnApplyParams">
+               <property name="text">
+                <string>파라미터 적용</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnTeachPosition">
+               <property name="text">
+                <string>현재위치 입력</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Column 4: Robot Status -->
+        <item>
+         <widget class="QGroupBox" name="groupRobotStatus">
+          <property name="title">
+           <string>Robot Status</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>280</width>
+            <height>0</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutRobot">
+           <!-- Network Info -->
+           <item>
+            <widget class="QGroupBox" name="groupNetwork">
+             <property name="title">
+              <string>Network</string>
+             </property>
+             <layout class="QFormLayout" name="formLayoutNetwork">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelRobotIP">
+                <property name="text">
+                 <string>Robot IP:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <layout class="QHBoxLayout" name="horizontalLayoutIP">
+                <item>
+                 <widget class="QLineEdit" name="editRobotIP">
+                  <property name="text">
+                   <string>192.168.0.29</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnConnect">
+                  <property name="text">
+                   <string>연결</string>
+                  </property>
+                  <property name="maximumSize">
+                   <size>
+                    <width>60</width>
+                    <height>16777215</height>
+                   </size>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelModbusPort">
+                <property name="text">
+                 <string>Port:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QSpinBox" name="spinModbusPort">
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>65535</number>
+                </property>
+                <property name="value">
+                 <number>1502</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelConnectionStatus">
+                <property name="text">
+                 <string>상태:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLabel" name="labelConnectionStatusValue">
+                <property name="text">
+                 <string>연결 안됨</string>
+                </property>
+                <property name="styleSheet">
+                 <string>color: red;</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Joint Position -->
+           <item>
+            <widget class="QGroupBox" name="groupJointPosition">
+             <property name="title">
+              <string>Joint Position (deg)</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayoutJoint">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelJ1">
+                <property name="text">
+                 <string>J1:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="editJ1">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="labelJ2">
+                <property name="text">
+                 <string>J2:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QLineEdit" name="editJ2">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelJ3">
+                <property name="text">
+                 <string>J3:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="editJ3">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="labelJ4">
+                <property name="text">
+                 <string>J4:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QLineEdit" name="editJ4">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelJ5">
+                <property name="text">
+                 <string>J5:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="editJ5">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="labelJ6">
+                <property name="text">
+                 <string>J6:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QLineEdit" name="editJ6">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- TCP Position -->
+           <item>
+            <widget class="QGroupBox" name="groupTCPPosition">
+             <property name="title">
+              <string>TCP Position</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayoutTCP">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelX">
+                <property name="text">
+                 <string>X:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="editX">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="labelUnitX">
+                <property name="text">
+                 <string>mm</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QLabel" name="labelRx">
+                <property name="text">
+                 <string>Rx:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="4">
+               <widget class="QLineEdit" name="editRx">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="5">
+               <widget class="QLabel" name="labelUnitRx">
+                <property name="text">
+                 <string>°</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelY">
+                <property name="text">
+                 <string>Y:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="editY">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="labelUnitY">
+                <property name="text">
+                 <string>mm</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QLabel" name="labelRy">
+                <property name="text">
+                 <string>Ry:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="4">
+               <widget class="QLineEdit" name="editRy">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="5">
+               <widget class="QLabel" name="labelUnitRy">
+                <property name="text">
+                 <string>°</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelZ">
+                <property name="text">
+                 <string>Z:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="editZ">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="labelUnitZ">
+                <property name="text">
+                 <string>mm</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QLabel" name="labelRz">
+                <property name="text">
+                 <string>Rz:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="4">
+               <widget class="QLineEdit" name="editRz">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="5">
+               <widget class="QLabel" name="labelUnitRz">
+                <property name="text">
+                 <string>°</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Control Buttons -->
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutHomeButtons">
+             <item>
+              <widget class="QPushButton" name="btnGoHome">
+               <property name="text">
+                <string>HOME 이동</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnSetHome">
+               <property name="text">
+                <string>현재위치→HOME</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+
+           <!-- Saved Poses -->
+           <item>
+            <widget class="QGroupBox" name="groupSavedPoses">
+             <property name="title">
+              <string>Saved Poses</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutSavedPoses">
+              <item>
+               <widget class="QListWidget" name="listSavedPoses">
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>150</height>
+                 </size>
+                </property>
+                <property name="alternatingRowColors">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QGridLayout" name="gridLayoutPoseButtons">
+                <item row="0" column="0">
+                 <widget class="QPushButton" name="btnSavePose">
+                  <property name="text">
+                   <string>현재위치 저장</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QPushButton" name="btnDeletePose">
+                  <property name="text">
+                   <string>삭제</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QPushButton" name="btnMoveToPose">
+                  <property name="text">
+                   <string>선택위치 이동</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string>background-color: #4CAF50; color: white;</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QPushButton" name="btnApproachPose">
+                  <property name="text">
+                   <string>어프로치</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string>background-color: #2196F3; color: white;</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <item>
+            <spacer name="verticalSpacerRobot">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+       </layout>
+      </widget>
+
+      <!-- ==================== Tab 2: Vision ==================== -->
+      <widget class="QWidget" name="tabVision">
+       <attribute name="title">
+        <string>비전</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayoutVision">
+
+        <!-- Left: Camera Stream -->
+        <item>
+         <widget class="QGroupBox" name="groupCameraStream">
+          <property name="title">
+           <string>Camera Stream</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutCamera">
+           <item>
+            <widget class="QLabel" name="labelCameraView">
+             <property name="minimumSize">
+              <size>
+               <width>640</width>
+               <height>480</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: #333333; border: 1px solid #555555;</string>
+             </property>
+             <property name="text">
+              <string>카메라 미연결</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
+             <item>
+              <widget class="QPushButton" name="btnStartCamera">
+               <property name="text">
+                <string>카메라 시작</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnStopCamera">
+               <property name="text">
+                <string>카메라 정지</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnSnapshot">
+               <property name="text">
+                <string>스냅샷 저장</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutGamma">
+             <item>
+              <widget class="QLabel" name="labelGamma">
+               <property name="text">
+                <string>감마 보정:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSlider" name="sliderGamma">
+               <property name="minimum">
+                <number>50</number>
+               </property>
+               <property name="maximum">
+                <number>200</number>
+               </property>
+               <property name="value">
+                <number>100</number>
+               </property>
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelGammaValue">
+               <property name="text">
+                <string>1.0</string>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>40</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutOverlay">
+             <item>
+              <widget class="QCheckBox" name="checkShowPoseAxes">
+               <property name="text">
+                <string>포즈 축 표시</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkShowBoundingBox">
+               <property name="text">
+                <string>바운딩 박스</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkShowKeypoints">
+               <property name="text">
+                <string>키포인트</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Right: Detection Info -->
+        <item>
+         <widget class="QGroupBox" name="groupDetectionInfo">
+          <property name="title">
+           <string>Detection Info</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>350</width>
+            <height>0</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutDetection">
+           <!-- Vision Processor Selection -->
+           <item>
+            <widget class="QGroupBox" name="groupVisionProcessor">
+             <property name="title">
+              <string>Vision Processor</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutVP">
+              <item>
+               <widget class="QRadioButton" name="radioProcessorGun">
+                <property name="text">
+                 <string>Gun (충전건)</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="radioProcessorPort">
+                <property name="text">
+                 <string>Port (충전 포트)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="radioProcessorStandard">
+                <property name="text">
+                 <string>Standard (차량 충전포트)</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Detection Result -->
+           <item>
+            <widget class="QGroupBox" name="groupDetectionResult">
+             <property name="title">
+              <string>감지 결과</string>
+             </property>
+             <layout class="QFormLayout" name="formLayoutDetection">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelArUcoID">
+                <property name="text">
+                 <string>ArUco ID:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLabel" name="labelArUcoIDValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelConfidence">
+                <property name="text">
+                 <string>신뢰도:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QProgressBar" name="progressConfidence">
+                <property name="value">
+                 <number>0</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelConvergence">
+                <property name="text">
+                 <string>수렴률:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QProgressBar" name="progressConvergence">
+                <property name="value">
+                 <number>0</number>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Pose in Camera -->
+           <item>
+            <widget class="QGroupBox" name="groupPoseCamera">
+             <property name="title">
+              <string>Pose (Camera 좌표)</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayoutPoseCamera">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelCamX">
+                <property name="text">
+                 <string>X:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="editCamX">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="labelCamRx">
+                <property name="text">
+                 <string>Rx:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QLineEdit" name="editCamRx">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelCamY">
+                <property name="text">
+                 <string>Y:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="editCamY">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="labelCamRy">
+                <property name="text">
+                 <string>Ry:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QLineEdit" name="editCamRy">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelCamZ">
+                <property name="text">
+                 <string>Z:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="editCamZ">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="labelCamRz">
+                <property name="text">
+                 <string>Rz:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QLineEdit" name="editCamRz">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <!-- Pose in World -->
+           <item>
+            <widget class="QGroupBox" name="groupPoseWorld">
+             <property name="title">
+              <string>Pose (World 좌표)</string>
+             </property>
+             <layout class="QGridLayout" name="gridLayoutPoseWorld">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelWorldX">
+                <property name="text">
+                 <string>X:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="editWorldX">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="labelWorldRx">
+                <property name="text">
+                 <string>Rx:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QLineEdit" name="editWorldRx">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelWorldY">
+                <property name="text">
+                 <string>Y:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="editWorldY">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="labelWorldRy">
+                <property name="text">
+                 <string>Ry:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QLineEdit" name="editWorldRy">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelWorldZ">
+                <property name="text">
+                 <string>Z:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="editWorldZ">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="2">
+               <widget class="QLabel" name="labelWorldRz">
+                <property name="text">
+                 <string>Rz:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="3">
+               <widget class="QLineEdit" name="editWorldRz">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+
+           <item>
+            <spacer name="verticalSpacerVision">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+       </layout>
+      </widget>
+
+      <!-- ==================== Tab 3: 실행 모니터 ==================== -->
+      <widget class="QWidget" name="tabMonitor">
+       <attribute name="title">
+        <string>실행 모니터</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayoutMonitor">
+
+        <!-- Execution Control -->
+        <item>
+         <widget class="QGroupBox" name="groupExecutionControl">
+          <property name="title">
+           <string>실행 제어</string>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayoutExecControl">
+           <item>
+            <widget class="QPushButton" name="btnRun">
+             <property name="text">
+              <string>▶ 실행</string>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>100</width>
+               <height>40</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnPause">
+             <property name="text">
+              <string>⏸ 일시정지</string>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>100</width>
+               <height>40</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStop">
+             <property name="text">
+              <string>⏹ 정지</string>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>100</width>
+               <height>40</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStep">
+             <property name="text">
+              <string>⏭ 스텝</string>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>100</width>
+               <height>40</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerExec">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnEmergencyStop">
+             <property name="text">
+              <string>비상 정지</string>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>120</width>
+               <height>40</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: #ff4444; color: white; font-weight: bold;</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Current Status -->
+        <item>
+         <widget class="QGroupBox" name="groupCurrentStatus">
+          <property name="title">
+           <string>현재 상태</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutStatus">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutCurrentTask">
+             <item>
+              <widget class="QLabel" name="labelCurrentTask">
+               <property name="text">
+                <string>현재 Task:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelCurrentTaskValue">
+               <property name="text">
+                <string>-</string>
+               </property>
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacerTask">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelExecutionState">
+               <property name="text">
+                <string>대기 중</string>
+               </property>
+               <property name="styleSheet">
+                <string>color: gray; font-weight: bold;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QProgressBar" name="progressExecution">
+             <property name="value">
+              <number>0</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Log and Modbus Monitor -->
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutLogModbus">
+          <!-- Execution Log -->
+          <item>
+           <widget class="QGroupBox" name="groupExecutionLog">
+            <property name="title">
+             <string>실행 로그</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayoutLog">
+             <item>
+              <widget class="QTextEdit" name="textExecutionLog">
+               <property name="readOnly">
+                <bool>true</bool>
+               </property>
+               <property name="styleSheet">
+                <string>font-family: 'Consolas', 'Monaco', monospace;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayoutLogButtons">
+               <item>
+                <widget class="QPushButton" name="btnClearLog">
+                 <property name="text">
+                  <string>로그 지우기</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnSaveLog">
+                 <property name="text">
+                  <string>로그 저장</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacerLog">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Modbus Monitor -->
+          <item>
+           <widget class="QGroupBox" name="groupModbusMonitor">
+            <property name="title">
+             <string>Modbus 모니터</string>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>400</width>
+              <height>0</height>
+             </size>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayoutModbus">
+             <item>
+              <widget class="QTableWidget" name="tableModbusRegisters">
+               <property name="rowCount">
+                <number>4</number>
+               </property>
+               <property name="columnCount">
+                <number>7</number>
+               </property>
+               <row>
+                <property name="text">
+                 <string>Pose Main (301-306)</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Pose Back (307-312)</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Command (351)</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Response (352)</string>
+                </property>
+               </row>
+               <column>
+                <property name="text">
+                 <string>Name</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>X</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Y</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Z</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Rx</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Ry</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>Rz</string>
+                </property>
+               </column>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayoutModbusButtons">
+               <item>
+                <widget class="QPushButton" name="btnRefreshModbus">
+                 <property name="text">
+                  <string>새로고침</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="checkAutoRefresh">
+                 <property name="text">
+                  <string>자동 갱신</string>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacerModbus">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+
+       </layout>
+      </widget>
+
+      <!-- ==================== Tab 4: 테스트 ==================== -->
+      <widget class="QWidget" name="tabTest">
+       <attribute name="title">
+        <string>테스트</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayoutTest">
+
+        <!-- Test Settings -->
+        <item>
+         <widget class="QGroupBox" name="groupTestSettings">
+          <property name="title">
+           <string>테스트 설정</string>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>300</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutTestSettings">
+           <item>
+            <widget class="QGroupBox" name="groupTestType">
+             <property name="title">
+              <string>테스트 유형</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutTestType">
+              <item>
+               <widget class="QRadioButton" name="radioSingleDetect">
+                <property name="text">
+                 <string>단일 감지 테스트</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="radioRepeatTest">
+                <property name="text">
+                 <string>반복 정밀도 테스트</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="radioPoseTracking">
+                <property name="text">
+                 <string>포즈 추적 테스트</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupRepeatSettings">
+             <property name="title">
+              <string>반복 설정</string>
+             </property>
+             <layout class="QFormLayout" name="formLayoutRepeat">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelRepeatCount">
+                <property name="text">
+                 <string>반복 횟수:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QSpinBox" name="spinRepeatCount">
+                <property name="minimum">
+                 <number>1</number>
+                </property>
+                <property name="maximum">
+                 <number>1000</number>
+                </property>
+                <property name="value">
+                 <number>50</number>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelInterval">
+                <property name="text">
+                 <string>간격 (ms):</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QSpinBox" name="spinInterval">
+                <property name="minimum">
+                 <number>100</number>
+                </property>
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+                <property name="value">
+                 <number>500</number>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutTestButtons">
+             <item>
+              <widget class="QPushButton" name="btnStartTest">
+               <property name="text">
+                <string>테스트 시작</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnStopTest">
+               <property name="text">
+                <string>테스트 중지</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QProgressBar" name="progressTest">
+             <property name="value">
+              <number>0</number>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacerTest">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Graph Area -->
+        <item>
+         <widget class="QGroupBox" name="groupTestGraph">
+          <property name="title">
+           <string>결과 그래프</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutGraph">
+           <item>
+            <widget class="QWidget" name="widgetGraph">
+             <property name="minimumSize">
+              <size>
+               <width>400</width>
+               <height>400</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: white; border: 1px solid #cccccc;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutGraphOptions">
+             <item>
+              <widget class="QCheckBox" name="checkShowX">
+               <property name="text">
+                <string>X축</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkShowY">
+               <property name="text">
+                <string>Y축</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkShowZ">
+               <property name="text">
+                <string>Z축</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkShowMean">
+               <property name="text">
+                <string>평균점 표시</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacerGraph">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Statistics -->
+        <item>
+         <widget class="QGroupBox" name="groupStatistics">
+          <property name="title">
+           <string>통계</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>250</width>
+            <height>0</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutStats">
+           <item>
+            <widget class="QTableWidget" name="tableStatistics">
+             <property name="rowCount">
+              <number>6</number>
+             </property>
+             <property name="columnCount">
+              <number>2</number>
+             </property>
+             <row>
+              <property name="text">
+               <string>감지 횟수</string>
+              </property>
+             </row>
+             <row>
+              <property name="text">
+               <string>성공률</string>
+              </property>
+             </row>
+             <row>
+              <property name="text">
+               <string>X 표준편차</string>
+              </property>
+             </row>
+             <row>
+              <property name="text">
+               <string>Y 표준편차</string>
+              </property>
+             </row>
+             <row>
+              <property name="text">
+               <string>Z 표준편차</string>
+              </property>
+             </row>
+             <row>
+              <property name="text">
+               <string>평균 수렴시간</string>
+              </property>
+             </row>
+             <column>
+              <property name="text">
+               <string>항목</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>값</string>
+              </property>
+             </column>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnExportCSV">
+             <property name="text">
+              <string>CSV 내보내기</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+       </layout>
+      </widget>
+
+      <!-- ==================== Tab 5: 설정 ==================== -->
+      <widget class="QWidget" name="tabSettings">
+       <attribute name="title">
+        <string>설정</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayoutSettings">
+
+        <!-- Connection Settings -->
+        <item>
+         <widget class="QGroupBox" name="groupConnectionSettings">
+          <property name="title">
+           <string>연결 설정</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutConnection">
+           <item>
+            <widget class="QGroupBox" name="groupModbusSettings">
+             <property name="title">
+              <string>Modbus TCP</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutModbusInner">
+              <item>
+               <layout class="QFormLayout" name="formLayoutModbusSettings">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="labelSettingsPCIP">
+                  <property name="text">
+                   <string>PC IP:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QLabel" name="labelPCIPValue">
+                  <property name="text">
+                   <string>-</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string>color: #0066cc; font-weight: bold;</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="labelSettingsRobotIP">
+                  <property name="text">
+                   <string>Robot IP:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QLineEdit" name="editSettingsRobotIP">
+                  <property name="text">
+                   <string>192.168.0.29</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="labelSettingsPort">
+                  <property name="text">
+                   <string>Port:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QSpinBox" name="spinSettingsPort">
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>65535</number>
+                  </property>
+                  <property name="value">
+                   <number>1502</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="labelTimeout">
+                  <property name="text">
+                   <string>Timeout (s):</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QDoubleSpinBox" name="spinTimeout">
+                  <property name="minimum">
+                   <double>0.100000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>10.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>0.100000000000000</double>
+                  </property>
+                  <property name="value">
+                   <double>1.000000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayoutConnectBtn">
+                <item>
+                 <widget class="QPushButton" name="btnTestConnection">
+                  <property name="text">
+                   <string>연결 테스트</string>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>35</height>
+                   </size>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="labelSettingsConnStatus">
+                  <property name="text">
+                   <string>연결 안됨</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string>color: red; font-weight: bold;</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="checkSimulationMode">
+             <property name="text">
+              <string>시뮬레이션 모드 (Modbus 없이 실행)</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupDebugLog">
+             <property name="title">
+              <string>Debug Log</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutDebugLog">
+              <item>
+               <widget class="QTextEdit" name="textDebugLog">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+                <property name="styleSheet">
+                 <string>font-family: 'Consolas', 'Monaco', monospace; font-size: 10px; background-color: #1e1e1e; color: #00ff00;</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btnClearDebugLog">
+                <property name="text">
+                 <string>로그 지우기</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Camera Settings -->
+        <item>
+         <widget class="QGroupBox" name="groupCameraSettings">
+          <property name="title">
+           <string>카메라 설정</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutCameraSettings">
+           <item>
+            <widget class="QGroupBox" name="groupResolution">
+             <property name="title">
+              <string>해상도</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutResolution">
+              <item>
+               <widget class="QRadioButton" name="radioRes1080">
+                <property name="text">
+                 <string>1920 x 1080</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="radioRes720">
+                <property name="text">
+                 <string>1280 x 720</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="radioRes480">
+                <property name="text">
+                 <string>640 x 480</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <layout class="QFormLayout" name="formLayoutCameraSettings">
+             <item row="0" column="0">
+              <widget class="QLabel" name="labelFPS">
+               <property name="text">
+                <string>FPS:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="spinFPS">
+               <property name="minimum">
+                <number>5</number>
+               </property>
+               <property name="maximum">
+                <number>60</number>
+               </property>
+               <property name="value">
+                <number>15</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupCalibration">
+             <property name="title">
+              <string>캘리브레이션</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayoutCalibration">
+              <item>
+               <widget class="QLabel" name="labelCalibStatus">
+                <property name="text">
+                 <string>상태: 기본값 사용 중</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayoutCalibButtons">
+                <item>
+                 <widget class="QPushButton" name="btnLoadCalib">
+                  <property name="text">
+                   <string>로드</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnNewCalib">
+                  <property name="text">
+                   <string>새 캘리브레이션</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacerCamera">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <!-- Offset Settings -->
+        <item>
+         <widget class="QGroupBox" name="groupOffsetSettings">
+          <property name="title">
+           <string>오프셋 설정</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayoutOffset">
+           <item>
+            <widget class="QGroupBox" name="groupApproachOffset">
+             <property name="title">
+              <string>접근 오프셋 (mm)</string>
+             </property>
+             <layout class="QFormLayout" name="formLayoutApproachOffset">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelOffsetX">
+                <property name="text">
+                 <string>X:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QDoubleSpinBox" name="spinOffsetX">
+                <property name="minimum">
+                 <double>-1000.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1000.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelOffsetY">
+                <property name="text">
+                 <string>Y:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="spinOffsetY">
+                <property name="minimum">
+                 <double>-1000.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1000.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelOffsetZ">
+                <property name="text">
+                 <string>Z:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QDoubleSpinBox" name="spinOffsetZ">
+                <property name="minimum">
+                 <double>-1000.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1000.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>200.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupArUcoSettings">
+             <property name="title">
+              <string>ArUco 마커 설정</string>
+             </property>
+             <layout class="QFormLayout" name="formLayoutArUco">
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelMarkerSize">
+                <property name="text">
+                 <string>마커 크기 (mm):</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QDoubleSpinBox" name="spinMarkerSize">
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>500.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>18.200000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelDictionary">
+                <property name="text">
+                 <string>Dictionary:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="comboDictionary">
+                <item>
+                 <property name="text">
+                  <string>DICT_4X4_50</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>DICT_4X4_100</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>DICT_4X4_250</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>DICT_5X5_50</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>DICT_6X6_50</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutSaveSettings">
+             <item>
+              <widget class="QPushButton" name="btnSaveSettings">
+               <property name="text">
+                <string>설정 저장</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnLoadSettings">
+               <property name="text">
+                <string>설정 불러오기</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <spacer name="verticalSpacerOffset">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+       </layout>
+      </widget>
+
+     </widget>
+    </item>
+   </layout>
+  </widget>
+
+  <!-- Menu Bar -->
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1400</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>파일</string>
+    </property>
+    <addaction name="actionNew"/>
+    <addaction name="actionOpen"/>
+    <addaction name="actionSave"/>
+    <addaction name="actionSaveAs"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuRobot">
+    <property name="title">
+     <string>로봇</string>
+    </property>
+    <addaction name="actionConnect"/>
+    <addaction name="actionDisconnect"/>
+    <addaction name="separator"/>
+    <addaction name="actionGoHome"/>
+   </widget>
+   <widget class="QMenu" name="menuVision">
+    <property name="title">
+     <string>비전</string>
+    </property>
+    <addaction name="actionStartCamera"/>
+    <addaction name="actionStopCamera"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>도움말</string>
+    </property>
+    <addaction name="actionAbout"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuRobot"/>
+   <addaction name="menuVision"/>
+   <addaction name="menuHelp"/>
+  </widget>
+
+  <!-- Status Bar -->
+  <widget class="QStatusBar" name="statusbar"/>
+
+  <!-- Tool Bar -->
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <addaction name="actionConnect"/>
+   <addaction name="separator"/>
+   <addaction name="actionGoHome"/>
+   <addaction name="separator"/>
+   <addaction name="actionEmergencyStop"/>
+  </widget>
+
+  <!-- Actions -->
+  <action name="actionNew">
+   <property name="text">
+    <string>새로 만들기</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="actionOpen">
+   <property name="text">
+    <string>열기</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="text">
+    <string>저장</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="actionSaveAs">
+   <property name="text">
+    <string>다른 이름으로 저장</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+S</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>종료</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="actionConnect">
+   <property name="text">
+    <string>연결</string>
+   </property>
+  </action>
+  <action name="actionDisconnect">
+   <property name="text">
+    <string>연결 해제</string>
+   </property>
+  </action>
+  <action name="actionGoHome">
+   <property name="text">
+    <string>HOME</string>
+   </property>
+  </action>
+  <action name="actionStartCamera">
+   <property name="text">
+    <string>카메라 시작</string>
+   </property>
+  </action>
+  <action name="actionStopCamera">
+   <property name="text">
+    <string>카메라 정지</string>
+   </property>
+  </action>
+  <action name="actionEmergencyStop">
+   <property name="text">
+    <string>비상 정지</string>
+   </property>
+  </action>
+  <action name="actionAbout">
+   <property name="text">
+    <string>정보</string>
+   </property>
+  </action>
+
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

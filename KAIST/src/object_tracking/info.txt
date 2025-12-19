@@ -1,0 +1,10 @@
+Charging Gun
+Aruco Marker: 
+    id: 1 4x4
+    size: 20 mm
+
+Charging Gun  Socket:
+    id: 2 4x4
+    size: 40 mm
+
+    

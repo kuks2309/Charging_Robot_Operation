@@ -1,0 +1,11 @@
+MUST:
+Make CONFIG file
+Add offset to CHARGING PORT Rx (2.5 deg) 
+
+Improve detection of April Tag on Gun
+Improve circle detection on YOLO and CHARGING PORT
+
+Clean the code
+
+Maybe:
+Add contour detection on PORT

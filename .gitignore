@@ -1,0 +1,40 @@
+# Large files excluded from GitHub (exceed 100MB limit)
+KAIST/src-20251218T055321Z-1-001.zip
+KAIST/src/keypoint_detector/utils/checkpoints/sam2.1_hiera_tiny.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
