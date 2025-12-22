@@ -7,6 +7,8 @@ import os
 import sys
 import socket
 from datetime import datetime
+import numpy as np
+import cv2
 from PyQt5 import uic
 from PyQt5.QtWidgets import (
     QMainWindow, QMessageBox, QFileDialog, QTreeWidgetItem,
@@ -18,6 +20,15 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap, QImage
 
 from Robot import ModbusClient, RobotController, PoseManager, PoseType
+from Sensor import ArucoCameraPoseEstimator
+
+# RealSense 카메라 (선택적 import)
+try:
+    import pyrealsense2 as rs
+    REALSENSE_AVAILABLE = True
+except ImportError:
+    REALSENSE_AVAILABLE = False
+    print("Warning: pyrealsense2 not available. Camera features will be disabled.")
 
 # UI 파일 경로
 UI_FILE = os.path.join(os.path.dirname(__file__), '..', 'ui', 'main_window.ui')
@@ -29,29 +40,136 @@ class MainWindow(QMainWindow):
     # Job 타입 정의 (단순화)
     JOB_TYPES = {
         # Motion
+        'go_home': {
+            'name': 'Go Home',
+            'category': 'Motion',
+            'params': {}
+        },
         'move_to_pose': {
             'name': '위치 이동',
             'category': 'Motion',
             'params': {
-                'pose_name': {'type': 'pose_select', 'default': '', 'description': '목표 위치'},
-            }
+                'x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 위치'},
+                'y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 위치'},
+                'z': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Z 위치'},
+                'rx': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Rx 회전'},
+                'ry': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Ry 회전'},
+                'rz': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Rz 회전'},
+            },
+            'has_read_position': True
         },
-        'approach_and_move': {
-            'name': '어프로치 후 이동',
+        'tcp_linear_x': {
+            'name': 'TCP Linear X',
             'category': 'Motion',
             'params': {
-                'pose_name': {'type': 'pose_select', 'default': '', 'description': '목표 위치'},
-                'approach_distance': {'type': 'float', 'default': 0.2, 'unit': 'm', 'description': '어프로치 거리'},
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
+                'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 이동 거리', 'description_absolute': 'X 목표 위치'},
+            }
+        },
+        'tcp_linear_y': {
+            'name': 'TCP Linear Y',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
+                'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 이동 거리', 'description_absolute': 'Y 목표 위치'},
+            }
+        },
+        'tcp_linear_z': {
+            'name': 'TCP Linear Z',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
+                'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Z 이동 거리', 'description_absolute': 'Z 목표 위치'},
+            }
+        },
+        'tcp_linear_xyz': {
+            'name': 'TCP Linear XYZ',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
+                'x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 이동 거리', 'description_absolute': 'X 목표 위치'},
+                'y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 이동 거리', 'description_absolute': 'Y 목표 위치'},
+                'z': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Z 이동 거리', 'description_absolute': 'Z 목표 위치'},
+            }
+        },
+        'tcp_rotate_rx': {
+            'name': 'TCP Rotate Rx',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '회전 모드'},
+                'angle': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Rx 회전 각도', 'description_absolute': 'Rx 목표 각도'},
+            }
+        },
+        'tcp_rotate_ry': {
+            'name': 'TCP Rotate Ry',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '회전 모드'},
+                'angle': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Ry 회전 각도', 'description_absolute': 'Ry 목표 각도'},
+            }
+        },
+        'tcp_rotate_rz': {
+            'name': 'TCP Rotate Rz',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '회전 모드'},
+                'angle': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Rz 회전 각도', 'description_absolute': 'Rz 목표 각도'},
+            }
+        },
+        'tcp_rotate_rxryrz': {
+            'name': 'TCP Rotate RxRyRz',
+            'category': 'Motion',
+            'params': {
+                'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '회전 모드'},
+                'rx': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Rx 회전 각도', 'description_absolute': 'Rx 목표 각도'},
+                'ry': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Ry 회전 각도', 'description_absolute': 'Ry 목표 각도'},
+                'rz': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': 'Rz 회전 각도', 'description_absolute': 'Rz 목표 각도'},
             }
         },
 
         # Vision
-        'detect_object': {
-            'name': '객체 감지',
+        'detect_aruco': {
+            'name': 'Aruco Tag 인식',
             'category': 'Vision',
             'params': {
-                'target': {'type': 'str', 'default': 'gun', 'options': ['gun', 'port', 'car_port']},
+                'tag_id': {'type': 'int', 'default': 0, 'description': 'Tag ID'},
                 'timeout': {'type': 'float', 'default': 10.0, 'unit': 'sec'},
+            }
+        },
+
+        # 정렬 (Alignment)
+        'align_aruco_center': {
+            'name': 'Aruco Tag 중심 정렬',
+            'category': '정렬',
+            'params': {
+                'tag_id': {'type': 'int', 'default': 0, 'description': 'Tag ID'},
+                'offset_x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 오프셋'},
+                'offset_y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 오프셋'},
+            }
+        },
+        'align_aruco_pose': {
+            'name': 'Aruco Tag 자세 정렬',
+            'category': '정렬',
+            'params': {
+                'tag_id': {'type': 'int', 'default': 0, 'description': 'Tag ID'},
+            }
+        },
+        'align_aruco_full': {
+            'name': 'Aruco Tag 전체 정렬',
+            'category': '정렬',
+            'params': {
+                'tag_id': {'type': 'int', 'default': 0, 'description': 'Tag ID'},
+                'offset_x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 오프셋'},
+                'offset_y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 오프셋'},
+            }
+        },
+        'tcp_offset_move': {
+            'name': 'TCP 오프셋 이동',
+            'category': '정렬',
+            'params': {
+                'offset_x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 오프셋'},
+                'offset_y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 오프셋'},
+                'offset_z': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Z 오프셋'},
             }
         },
 
@@ -60,8 +178,7 @@ class MainWindow(QMainWindow):
             'name': '그리퍼',
             'category': 'Gripper',
             'params': {
-                'action': {'type': 'str', 'default': 'close', 'options': ['open', 'close']},
-                'delay': {'type': 'float', 'default': 0.5, 'unit': 'sec'},
+                'action': {'type': 'str', 'default': 'close', 'options': ['open', 'close', 'home']},
             }
         },
 
@@ -87,7 +204,7 @@ class MainWindow(QMainWindow):
             'name': '대기',
             'category': 'Control',
             'params': {
-                'duration': {'type': 'float', 'default': 1.0, 'unit': 'sec'},
+                'duration': {'type': 'int', 'default': 500, 'unit': 'msec', 'min': 10, 'max': 10000, 'step': 10},
             }
         },
     }
@@ -111,6 +228,9 @@ class MainWindow(QMainWindow):
 
         # 파라미터 위젯 저장
         self.param_widgets = {}
+
+        # 카메라 및 Aruco 초기화
+        self._init_camera()
 
         # 초기화
         self._init_available_tasks()
@@ -194,6 +314,22 @@ class MainWindow(QMainWindow):
         self.btnStopCamera.clicked.connect(self._on_stop_camera)
         self.btnSnapshot.clicked.connect(self._on_snapshot)
         self.sliderGamma.valueChanged.connect(self._on_gamma_changed)
+
+        # Aruco 정렬 테스트 버튼
+        if hasattr(self, 'btnAlignCenter'):
+            self.btnAlignCenter.clicked.connect(self._on_align_center)
+        if hasattr(self, 'btnAlignPose'):
+            self.btnAlignPose.clicked.connect(self._on_align_pose)
+        if hasattr(self, 'btnAlignFull'):
+            self.btnAlignFull.clicked.connect(self._on_align_full)
+
+        # 데이터 수집 버튼
+        if hasattr(self, 'btnStartCollect'):
+            self.btnStartCollect.clicked.connect(self._on_start_collect)
+        if hasattr(self, 'btnStopCollect'):
+            self.btnStopCollect.clicked.connect(self._on_stop_collect)
+        if hasattr(self, 'btnSaveCollect'):
+            self.btnSaveCollect.clicked.connect(self._on_save_collect)
 
         # 실행 모니터 탭
         self.btnRun.clicked.connect(self._on_run)
@@ -376,19 +512,31 @@ class MainWindow(QMainWindow):
         layout.addRow(name_label, name_edit)
         self.param_widgets['_task_name'] = name_edit
 
+        # 라벨 저장용 딕셔너리 (모드 변경 시 라벨 업데이트용)
+        self.param_labels = {}
+
+        # 현재 모드 확인 (절대/상대)
+        current_mode = task['params'].get('mode', '상대')
+
         # 파라미터 위젯들
         for param_name, param_info in params_def.items():
             param_type = param_info['type']
             default = param_info.get('default')
             current_value = task['params'].get(param_name, default)
             unit = param_info.get('unit', '')
-            description = param_info.get('description', param_name)
+
+            # 모드에 따라 description 선택
+            if current_mode == '절대' and 'description_absolute' in param_info:
+                description = param_info.get('description_absolute', param_name)
+            else:
+                description = param_info.get('description', param_name)
 
             label_text = description if description else param_name
             if unit:
                 label_text += f" ({unit})"
 
             label = QLabel(label_text)
+            self.param_labels[param_name] = (label, param_info)  # 라벨과 정보 저장
 
             # 타입별 위젯 생성
             if param_type == 'float':
@@ -398,8 +546,12 @@ class MainWindow(QMainWindow):
                 widget.setValue(current_value if current_value else 0.0)
             elif param_type == 'int':
                 widget = QSpinBox()
-                widget.setRange(-10000, 10000)
-                widget.setValue(current_value if current_value else 0)
+                min_val = param_info.get('min', -10000)
+                max_val = param_info.get('max', 10000)
+                step_val = param_info.get('step', 1)
+                widget.setRange(min_val, max_val)
+                widget.setSingleStep(step_val)
+                widget.setValue(current_value if current_value else param_info.get('default', 0))
             elif param_type == 'bool':
                 widget = QCheckBox()
                 widget.setChecked(current_value if current_value else False)
@@ -421,12 +573,75 @@ class MainWindow(QMainWindow):
                 widget.addItems(param_info['options'])
                 if current_value in param_info['options']:
                     widget.setCurrentText(current_value)
+                # 모드 콤보박스인 경우 변경 시 라벨 업데이트 연결
+                if param_name == 'mode':
+                    widget.currentTextChanged.connect(self._on_mode_changed)
             else:
                 widget = QLineEdit()
                 widget.setText(str(current_value) if current_value else '')
 
             layout.addRow(label, widget)
             self.param_widgets[param_name] = widget
+
+        # "현재 위치 읽기" 버튼 추가 (has_read_position 플래그가 있는 경우)
+        if job_info.get('has_read_position', False):
+            from PyQt5.QtWidgets import QPushButton
+            read_btn = QPushButton("현재 위치 읽기")
+            read_btn.clicked.connect(self._on_read_current_position)
+            layout.addRow("", read_btn)
+
+    def _on_mode_changed(self, mode: str):
+        """모드 변경 시 라벨 텍스트 업데이트"""
+        if not hasattr(self, 'param_labels'):
+            return
+
+        for param_name, (label, param_info) in self.param_labels.items():
+            if param_name == 'mode':
+                continue
+
+            unit = param_info.get('unit', '')
+
+            # 모드에 따라 description 선택
+            if mode == '절대' and 'description_absolute' in param_info:
+                description = param_info.get('description_absolute', param_name)
+            else:
+                description = param_info.get('description', param_name)
+
+            label_text = description if description else param_name
+            if unit:
+                label_text += f" ({unit})"
+
+            label.setText(label_text)
+
+    def _on_read_current_position(self):
+        """로봇의 현재 위치를 읽어서 파라미터에 입력"""
+        if not self.robot or not self.robot.is_connected:
+            self._log("로봇이 연결되지 않았습니다")
+            return
+
+        # 로봇에서 현재 TCP 위치 읽기
+        pose = self.robot.read_camera_pose()  # 또는 다른 포즈 읽기 함수
+        if pose is None:
+            self._log("현재 위치 읽기 실패")
+            return
+
+        x, y, z, rx, ry, rz = pose
+
+        # 파라미터 위젯에 값 설정
+        if 'x' in self.param_widgets:
+            self.param_widgets['x'].setValue(x)
+        if 'y' in self.param_widgets:
+            self.param_widgets['y'].setValue(y)
+        if 'z' in self.param_widgets:
+            self.param_widgets['z'].setValue(z)
+        if 'rx' in self.param_widgets:
+            self.param_widgets['rx'].setValue(rx)
+        if 'ry' in self.param_widgets:
+            self.param_widgets['ry'].setValue(ry)
+        if 'rz' in self.param_widgets:
+            self.param_widgets['rz'].setValue(rz)
+
+        self._log(f"현재 위치 읽기 완료: X={x:.2f}, Y={y:.2f}, Z={z:.2f}, Rx={rx:.2f}, Ry={ry:.2f}, Rz={rz:.2f}")
 
     def _clear_param_widgets(self):
         """파라미터 위젯 제거"""
@@ -471,12 +686,11 @@ class MainWindow(QMainWindow):
             elif isinstance(widget, QLineEdit):
                 task['params'][param_name] = widget.text()
 
-        # 이름이 변경되면 리스트 갱신
-        if name_changed:
-            self._refresh_task_list()
-            self.listTaskSequence.setCurrentRow(row)
+        # 파라미터 변경 시 항상 리스트 갱신 (표시 이름 업데이트)
+        self._refresh_task_list()
+        self.listTaskSequence.setCurrentRow(row)
 
-        self._log(f"파라미터 적용: {task['name']}")
+        self._log(f"파라미터 적용: {self._get_task_display_name(task)}")
 
     def _on_teach_position(self):
         """현재 위치 입력"""
@@ -488,13 +702,59 @@ class MainWindow(QMainWindow):
         for i, task in enumerate(self.task_sequence):
             task['id'] = i + 1
 
+    def _get_task_display_name(self, task: dict) -> str:
+        """파라미터 기반 태스크 표시 이름 생성"""
+        base_name = task.get('name', '')
+        task_type = task.get('type', '')
+        params = task.get('params', {})
+
+        # 그리퍼: action 값에 따라 이름 변경
+        if task_type == 'gripper':
+            action = params.get('action', '')
+            if action:
+                return f"{base_name} {action}"
+
+        # TCP Linear: 모드와 거리 표시
+        elif task_type.startswith('tcp_linear_'):
+            mode = params.get('mode', '상대')
+            if task_type == 'tcp_linear_xyz':
+                x = params.get('x', 0)
+                y = params.get('y', 0)
+                z = params.get('z', 0)
+                return f"{base_name} ({mode}) [{x},{y},{z}]"
+            else:
+                dist = params.get('distance', 0)
+                return f"{base_name} ({mode}) {dist}mm"
+
+        # TCP Rotate: 모드와 각도 표시
+        elif task_type.startswith('tcp_rotate_'):
+            mode = params.get('mode', '상대')
+            if task_type == 'tcp_rotate_rxryrz':
+                rx = params.get('rx', 0)
+                ry = params.get('ry', 0)
+                rz = params.get('rz', 0)
+                return f"{base_name} ({mode}) [{rx},{ry},{rz}]"
+            else:
+                angle = params.get('angle', 0)
+                return f"{base_name} ({mode}) {angle}°"
+
+        # 위치 이동: 좌표 표시
+        elif task_type == 'move_to_pose':
+            x = params.get('x', 0)
+            y = params.get('y', 0)
+            z = params.get('z', 0)
+            return f"{base_name} ({x:.1f},{y:.1f},{z:.1f})"
+
+        return base_name
+
     def _refresh_task_list(self):
         """태스크 리스트 갱신"""
         current_row = self.listTaskSequence.currentRow()
         self.listTaskSequence.clear()
 
         for task in self.task_sequence:
-            item = QListWidgetItem(f"{task['id']}. {task['name']}")
+            display_name = self._get_task_display_name(task)
+            item = QListWidgetItem(f"{task['id']}. {display_name}")
             item.setData(Qt.UserRole, task)
             self.listTaskSequence.addItem(item)
 
@@ -600,26 +860,625 @@ class MainWindow(QMainWindow):
 
     # ==================== 비전 ====================
 
+    def _init_camera(self):
+        """카메라 및 Aruco 초기화"""
+        # RealSense 카메라
+        self.rs_pipeline = None
+        self.rs_config = None
+        self.camera_running = False
+        self.camera_timer = None
+
+        # 카메라 intrinsics (캘리브레이션 후 설정)
+        self.camera_intrinsics = None
+
+        # Aruco 검출기 초기화
+        self.aruco_detector = ArucoCameraPoseEstimator(
+            marker_size_meters=0.02,  # 20mm 마커
+            dictionary_type=cv2.aruco.DICT_4X4_50
+        )
+
+        # 마지막 검출 결과
+        self.last_aruco_result = None
+
+        # 데이터 수집 관련
+        self.collecting_data = False
+        self.collected_data = []
+        self.collect_target_count = 100
+        self.collect_tag_id = 0
+
     def _on_start_camera(self):
         """카메라 시작"""
-        self._log("카메라 시작")
-        # TODO: RealSense 카메라 시작
+        if not REALSENSE_AVAILABLE:
+            self._log("RealSense 라이브러리가 설치되지 않았습니다.")
+            QMessageBox.warning(self, "경고", "pyrealsense2가 설치되지 않았습니다.")
+            return
+
+        if self.camera_running:
+            self._log("카메라가 이미 실행 중입니다.")
+            return
+
+        try:
+            self.rs_pipeline = rs.pipeline()
+            self.rs_config = rs.config()
+
+            # 해상도 설정 (640x480 @ 30fps)
+            self.rs_config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+            # 파이프라인 시작
+            profile = self.rs_pipeline.start(self.rs_config)
+
+            # intrinsics 가져오기
+            color_stream = profile.get_stream(rs.stream.color)
+            intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
+            self.camera_intrinsics = self._create_intrinsics_object(intrinsics)
+
+            # 카메라 안정화 대기
+            for _ in range(30):
+                self.rs_pipeline.wait_for_frames()
+
+            self.camera_running = True
+
+            # 카메라 타이머 시작 (30ms = ~33fps)
+            self.camera_timer = QTimer()
+            self.camera_timer.timeout.connect(self._update_camera_frame)
+            self.camera_timer.start(30)
+
+            self._log("카메라 시작됨")
+
+        except Exception as e:
+            self._log(f"카메라 시작 실패: {e}")
+            QMessageBox.critical(self, "오류", f"카메라 시작 실패: {e}")
+
+    def _create_intrinsics_object(self, rs_intrinsics):
+        """RealSense intrinsics를 ArucoCameraPoseEstimator용 객체로 변환"""
+        class Intrinsics:
+            def __init__(self, fx, fy, ppx, ppy, coeffs):
+                self.fx = fx
+                self.fy = fy
+                self.ppx = ppx
+                self.ppy = ppy
+                self.coeffs = coeffs
+
+        return Intrinsics(
+            fx=rs_intrinsics.fx,
+            fy=rs_intrinsics.fy,
+            ppx=rs_intrinsics.ppx,
+            ppy=rs_intrinsics.ppy,
+            coeffs=list(rs_intrinsics.coeffs)
+        )
 
     def _on_stop_camera(self):
         """카메라 정지"""
-        self._log("카메라 정지")
-        # TODO: 카메라 정지
+        if not self.camera_running:
+            return
+
+        try:
+            if self.camera_timer:
+                self.camera_timer.stop()
+                self.camera_timer = None
+
+            if self.rs_pipeline:
+                self.rs_pipeline.stop()
+                self.rs_pipeline = None
+
+            self.camera_running = False
+            self._log("카메라 정지됨")
+
+        except Exception as e:
+            self._log(f"카메라 정지 오류: {e}")
+
+    def _update_camera_frame(self):
+        """카메라 프레임 업데이트 및 Aruco 감지"""
+        if not self.camera_running or not self.rs_pipeline:
+            return
+
+        try:
+            frames = self.rs_pipeline.wait_for_frames()
+            color_frame = frames.get_color_frame()
+
+            if not color_frame:
+                return
+
+            # numpy 배열로 변환
+            frame = np.asanyarray(color_frame.get_data())
+
+            # Aruco 감지 (체크박스가 활성화된 경우)
+            if hasattr(self, 'checkArucoDetect') and self.checkArucoDetect.isChecked():
+                frame, self.last_aruco_result = self._detect_aruco_markers(frame)
+
+                # 데이터 수집 중이면 샘플 저장
+                if self.collecting_data and self.last_aruco_result:
+                    self._collect_sample()
+
+            # QLabel에 표시
+            self._display_frame(frame)
+
+        except Exception as e:
+            self._log(f"프레임 업데이트 오류: {e}")
+
+    def _detect_aruco_markers(self, frame):
+        """Aruco 마커 감지 및 시각화"""
+        if self.camera_intrinsics is None:
+            return frame, None
+
+        # Aruco 감지
+        marker_poses = self.aruco_detector.detect_and_estimate_pose(
+            frame, self.camera_intrinsics
+        )
+
+        if marker_poses:
+            # 시각화
+            vis_frame = self.aruco_detector.visualize_markers(
+                frame, self.camera_intrinsics, marker_poses
+            )
+            return vis_frame, marker_poses
+        else:
+            return frame, None
+
+    def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
+        """
+        특정 Aruco 태그 감지 (n번 측정 평균)
+
+        Args:
+            tag_id: 찾을 태그 ID
+            timeout: 타임아웃 (초)
+            num_samples: 평균을 낼 샘플 수 (기본값: 10)
+
+        Returns:
+            dict: 태그 정보 (평균값) 또는 None
+        """
+        if not self.camera_running:
+            self._log("카메라가 실행 중이 아닙니다.")
+            return None
+
+        import time
+        from PyQt5.QtWidgets import QApplication
+
+        start_time = time.time()
+        samples = []
+
+        self._log(f"Aruco Tag {tag_id} 감지 중... ({num_samples}회 측정)")
+
+        while time.time() - start_time < timeout:
+            if self.last_aruco_result:
+                for marker in self.last_aruco_result:
+                    if marker['id'] == tag_id:
+                        # 샘플 수집
+                        samples.append({
+                            'tvec': marker['tvec'].copy(),
+                            'rvec': marker['rvec'].copy(),
+                            'camera_rotation': marker['camera_rotation'].copy(),
+                            'camera_position': marker['camera_position'].copy(),
+                        })
+
+                        if len(samples) >= num_samples:
+                            # 평균 계산
+                            avg_marker = self._calculate_average_marker(marker, samples)
+                            self._log(f"Aruco Tag {tag_id} 감지 완료 ({len(samples)}회 평균)")
+                            return avg_marker
+
+            # UI 이벤트 처리
+            QApplication.processEvents()
+            time.sleep(0.05)  # 50ms 간격으로 샘플링
+
+        # 타임아웃 시 수집된 샘플이 있으면 평균 반환
+        if len(samples) > 0:
+            self._log(f"Aruco Tag {tag_id} 부분 감지 ({len(samples)}회 평균)")
+            # 마지막 marker 정보 사용
+            if self.last_aruco_result:
+                for marker in self.last_aruco_result:
+                    if marker['id'] == tag_id:
+                        return self._calculate_average_marker(marker, samples)
+
+        self._log(f"Aruco Tag {tag_id} 감지 실패 (타임아웃)")
+        return None
+
+    def _calculate_average_marker(self, base_marker: dict, samples: list) -> dict:
+        """
+        여러 샘플의 평균 마커 정보 계산
+
+        Args:
+            base_marker: 기본 마커 정보 (id, corners 등 포함)
+            samples: tvec, rvec 등이 담긴 샘플 리스트
+
+        Returns:
+            평균화된 마커 정보
+        """
+        n = len(samples)
+
+        # tvec 평균
+        avg_tvec = np.mean([s['tvec'] for s in samples], axis=0)
+
+        # rvec 평균
+        avg_rvec = np.mean([s['rvec'] for s in samples], axis=0)
+
+        # camera_rotation 평균
+        avg_camera_rotation = np.mean([s['camera_rotation'] for s in samples], axis=0)
+
+        # camera_position 평균
+        avg_camera_position = np.mean([s['camera_position'] for s in samples], axis=0)
+
+        # 표준편차 계산 (정밀도 확인용)
+        std_tvec = np.std([s['tvec'] for s in samples], axis=0)
+        self._log(f"  tvec 표준편차: X={std_tvec[0]*1000:.3f}mm, Y={std_tvec[1]*1000:.3f}mm, Z={std_tvec[2]*1000:.3f}mm")
+
+        # 평균 마커 생성
+        avg_marker = base_marker.copy()
+        avg_marker['tvec'] = avg_tvec
+        avg_marker['rvec'] = avg_rvec
+        avg_marker['camera_rotation'] = avg_camera_rotation
+        avg_marker['camera_position'] = avg_camera_position
+        avg_marker['num_samples'] = n
+        avg_marker['std_tvec'] = std_tvec
+
+        return avg_marker
+
+    def _display_frame(self, frame):
+        """프레임을 QLabel에 표시"""
+        if not hasattr(self, 'labelCameraView'):
+            return
+
+        # BGR -> RGB 변환
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_frame.shape
+        bytes_per_line = ch * w
+
+        # QImage로 변환
+        q_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+        # QLabel 크기에 맞게 스케일링
+        pixmap = QPixmap.fromImage(q_image)
+        scaled_pixmap = pixmap.scaled(
+            self.labelCameraView.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.labelCameraView.setPixmap(scaled_pixmap)
 
     def _on_snapshot(self):
         """스냅샷 저장"""
-        filename = f"snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        self._log(f"스냅샷 저장: {filename}")
-        # TODO: 이미지 저장
+        if not self.camera_running:
+            self._log("카메라가 실행 중이 아닙니다.")
+            return
+
+        try:
+            frames = self.rs_pipeline.wait_for_frames()
+            color_frame = frames.get_color_frame()
+
+            if color_frame:
+                frame = np.asanyarray(color_frame.get_data())
+                filename = f"snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+                # snapshots 폴더 생성
+                snapshot_dir = os.path.join(os.path.dirname(__file__), '..', 'snapshots')
+                os.makedirs(snapshot_dir, exist_ok=True)
+
+                filepath = os.path.join(snapshot_dir, filename)
+                cv2.imwrite(filepath, frame)
+                self._log(f"스냅샷 저장: {filepath}")
+
+        except Exception as e:
+            self._log(f"스냅샷 저장 실패: {e}")
 
     def _on_gamma_changed(self, value):
         """감마 값 변경"""
         gamma = value / 100.0
         self.labelGammaValue.setText(f"{gamma:.1f}")
+
+    # ==================== Aruco 정렬 테스트 ====================
+
+    def _get_num_samples(self) -> int:
+        """UI에서 샘플 수 가져오기"""
+        if hasattr(self, 'spinNumSamples'):
+            return self.spinNumSamples.value()
+        return 10  # 기본값
+
+    def _on_align_center(self):
+        """Aruco Tag 중심 정렬 테스트"""
+        tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
+        num_samples = self._get_num_samples()
+        self._log(f"Aruco Tag {tag_id} 중심 정렬 시작 ({num_samples}회 측정)")
+        self._update_align_status("중심 정렬 중...")
+
+        # 카메라 체크
+        if not self.camera_running:
+            self._update_align_status("카메라 미연결")
+            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
+            return
+
+        # 태그 감지 (n회 평균)
+        marker = self.detect_aruco_tag(tag_id, timeout=10.0, num_samples=num_samples)
+        if marker is None:
+            self._update_align_status("태그 감지 실패")
+            QMessageBox.warning(self, "경고", f"Tag ID {tag_id}를 찾을 수 없습니다.")
+            return
+
+        # 중심 오프셋 계산 (카메라 중심에서 태그까지)
+        # marker['tvec'] = [x, y, z] in camera frame (meters)
+        tvec = marker['tvec']
+        offset_x = tvec[0] * 1000  # m to mm
+        offset_y = tvec[1] * 1000  # m to mm
+
+        self._log(f"중심 오프셋: X={offset_x:.2f}mm, Y={offset_y:.2f}mm")
+
+        # 로봇 이동 (상대 이동)
+        if self.robot and self.robot.is_connected:
+            # TCP Linear XYZ 상대 이동으로 보정 (X, Y만 이동)
+            success, msg = self.robot.send_tcp_linear(
+                axis='xyz',
+                distance=(-offset_x, -offset_y, 0),
+                absolute=False,
+                wait=True
+            )
+            if success:
+                self._update_align_status(f"중심 정렬 완료 (X:{-offset_x:.1f}, Y:{-offset_y:.1f})")
+            else:
+                self._update_align_status(f"이동 실패: {msg}")
+        else:
+            self._update_align_status("로봇 미연결")
+            QMessageBox.warning(self, "경고", "로봇에 연결되어 있지 않습니다.")
+
+    def _on_align_pose(self):
+        """Aruco Tag 자세 정렬 테스트"""
+        tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
+        num_samples = self._get_num_samples()
+        self._log(f"Aruco Tag {tag_id} 자세 정렬 시작 ({num_samples}회 측정)")
+        self._update_align_status("자세 정렬 중...")
+
+        # 카메라 체크
+        if not self.camera_running:
+            self._update_align_status("카메라 미연결")
+            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
+            return
+
+        # 태그 감지 (n회 평균)
+        marker = self.detect_aruco_tag(tag_id, timeout=10.0, num_samples=num_samples)
+        if marker is None:
+            self._update_align_status("태그 감지 실패")
+            QMessageBox.warning(self, "경고", f"Tag ID {tag_id}를 찾을 수 없습니다.")
+            return
+
+        # 회전 오프셋 계산
+        # marker['camera_rotation'] = rotation matrix
+        euler_angles = self.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
+        rx, ry, rz = euler_angles
+
+        self._log(f"자세 오프셋: Rx={rx:.2f}°, Ry={ry:.2f}°, Rz={rz:.2f}°")
+
+        # 로봇 회전 (상대 이동)
+        if self.robot and self.robot.is_connected:
+            # TCP Rotate로 보정
+            success, msg = self.robot.send_tcp_rotate(
+                axis='rxryrz',
+                angle=(-rx, -ry, -rz),
+                absolute=False,
+                wait=True
+            )
+            if success:
+                self._update_align_status(f"자세 정렬 완료 (Rx:{-rx:.1f}, Ry:{-ry:.1f}, Rz:{-rz:.1f})")
+            else:
+                self._update_align_status(f"회전 실패: {msg}")
+        else:
+            self._update_align_status("로봇 미연결")
+            QMessageBox.warning(self, "경고", "로봇에 연결되어 있지 않습니다.")
+
+    def _on_align_full(self):
+        """Aruco Tag 전체 정렬 테스트 (중심 + 자세)"""
+        tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
+        num_samples = self._get_num_samples()
+        self._log(f"Aruco Tag {tag_id} 전체 정렬 시작 ({num_samples}회 측정)")
+        self._update_align_status("전체 정렬 중...")
+
+        # 카메라 체크
+        if not self.camera_running:
+            self._update_align_status("카메라 미연결")
+            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
+            return
+
+        # 로봇 체크
+        if not self.robot or not self.robot.is_connected:
+            self._update_align_status("로봇 미연결")
+            QMessageBox.warning(self, "경고", "로봇에 연결되어 있지 않습니다.")
+            return
+
+        # 태그 감지 (n회 평균)
+        marker = self.detect_aruco_tag(tag_id, timeout=10.0, num_samples=num_samples)
+        if marker is None:
+            self._update_align_status("태그 감지 실패")
+            QMessageBox.warning(self, "경고", f"Tag ID {tag_id}를 찾을 수 없습니다.")
+            return
+
+        # 중심 오프셋 계산
+        tvec = marker['tvec']
+        offset_x = tvec[0] * 1000  # m to mm
+        offset_y = tvec[1] * 1000  # m to mm
+
+        # 회전 오프셋 계산
+        euler_angles = self.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
+        rx, ry, rz = euler_angles
+
+        self._log(f"중심: X={offset_x:.2f}mm, Y={offset_y:.2f}mm")
+        self._log(f"자세: Rx={rx:.2f}°, Ry={ry:.2f}°, Rz={rz:.2f}°")
+
+        # 1. 먼저 자세 정렬
+        self._update_align_status("자세 정렬 중...")
+        success, msg = self.robot.send_tcp_rotate(
+            axis='rxryrz',
+            angle=(-rx, -ry, -rz),
+            absolute=False,
+            wait=True
+        )
+        if not success:
+            self._update_align_status(f"자세 정렬 실패: {msg}")
+            return
+        self._log("자세 정렬 완료")
+
+        # 2. 중심 정렬
+        self._update_align_status("중심 정렬 중...")
+        success, msg = self.robot.send_tcp_linear(
+            axis='xyz',
+            distance=(-offset_x, -offset_y, 0),
+            absolute=False,
+            wait=True
+        )
+        if not success:
+            self._update_align_status(f"중심 정렬 실패: {msg}")
+            return
+
+        self._update_align_status("전체 정렬 완료")
+        self._log("전체 정렬 완료")
+
+    def _update_align_status(self, status: str):
+        """정렬 상태 업데이트"""
+        if hasattr(self, 'labelAlignStatus'):
+            self.labelAlignStatus.setText(f"상태: {status}")
+        self._log(status)
+
+    # ==================== 데이터 수집 (노이즈 분석용) ====================
+
+    def _on_start_collect(self):
+        """데이터 수집 시작"""
+        if not self.camera_running:
+            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
+            return
+
+        # 설정 가져오기
+        self.collect_tag_id = self.spinCollectTagId.value() if hasattr(self, 'spinCollectTagId') else 0
+        self.collect_target_count = self.spinCollectCount.value() if hasattr(self, 'spinCollectCount') else 100
+
+        # 초기화
+        self.collected_data = []
+        self.collecting_data = True
+
+        # UI 업데이트
+        if hasattr(self, 'btnStartCollect'):
+            self.btnStartCollect.setEnabled(False)
+        if hasattr(self, 'btnStopCollect'):
+            self.btnStopCollect.setEnabled(True)
+        if hasattr(self, 'btnSaveCollect'):
+            self.btnSaveCollect.setEnabled(False)
+        if hasattr(self, 'progressCollect'):
+            self.progressCollect.setValue(0)
+
+        self._log(f"데이터 수집 시작: Tag ID={self.collect_tag_id}, 목표={self.collect_target_count}회")
+
+    def _on_stop_collect(self):
+        """데이터 수집 중지"""
+        self.collecting_data = False
+
+        # UI 업데이트
+        if hasattr(self, 'btnStartCollect'):
+            self.btnStartCollect.setEnabled(True)
+        if hasattr(self, 'btnStopCollect'):
+            self.btnStopCollect.setEnabled(False)
+        if hasattr(self, 'btnSaveCollect'):
+            self.btnSaveCollect.setEnabled(len(self.collected_data) > 0)
+
+        self._log(f"데이터 수집 중지: {len(self.collected_data)}개 수집됨")
+
+        # 간단한 통계 출력
+        if len(self.collected_data) > 0:
+            self._print_collect_statistics()
+
+    def _collect_sample(self):
+        """현재 프레임에서 샘플 수집"""
+        if not self.collecting_data or not self.last_aruco_result:
+            return
+
+        import time
+
+        # 타겟 태그 찾기
+        for marker in self.last_aruco_result:
+            if marker['id'] == self.collect_tag_id:
+                sample = {
+                    'timestamp': time.time(),
+                    'tag_id': marker['id'],
+                    'tvec_x': marker['tvec'][0],
+                    'tvec_y': marker['tvec'][1],
+                    'tvec_z': marker['tvec'][2],
+                    'rvec_x': marker['rvec'][0],
+                    'rvec_y': marker['rvec'][1],
+                    'rvec_z': marker['rvec'][2],
+                }
+
+                # 회전 행렬에서 오일러 각도 계산
+                euler = self.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
+                sample['euler_rx'] = euler[0]
+                sample['euler_ry'] = euler[1]
+                sample['euler_rz'] = euler[2]
+
+                self.collected_data.append(sample)
+
+                # UI 업데이트
+                count = len(self.collected_data)
+                if hasattr(self, 'labelCollectStatus'):
+                    self.labelCollectStatus.setText(f"수집: {count} / {self.collect_target_count}")
+                if hasattr(self, 'progressCollect'):
+                    progress = int(100 * count / self.collect_target_count)
+                    self.progressCollect.setValue(min(progress, 100))
+
+                # 목표 도달 시 자동 중지
+                if count >= self.collect_target_count:
+                    self._on_stop_collect()
+
+                break
+
+    def _print_collect_statistics(self):
+        """수집된 데이터의 통계 출력"""
+        if len(self.collected_data) == 0:
+            return
+
+        # numpy 배열로 변환
+        tvec_x = np.array([d['tvec_x'] for d in self.collected_data])
+        tvec_y = np.array([d['tvec_y'] for d in self.collected_data])
+        tvec_z = np.array([d['tvec_z'] for d in self.collected_data])
+        euler_rx = np.array([d['euler_rx'] for d in self.collected_data])
+        euler_ry = np.array([d['euler_ry'] for d in self.collected_data])
+        euler_rz = np.array([d['euler_rz'] for d in self.collected_data])
+
+        self._log("=" * 50)
+        self._log(f"수집 통계 (n={len(self.collected_data)})")
+        self._log("-" * 50)
+        self._log("위치 (mm):")
+        self._log(f"  X: 평균={tvec_x.mean()*1000:.3f}, 표준편차={tvec_x.std()*1000:.3f}")
+        self._log(f"  Y: 평균={tvec_y.mean()*1000:.3f}, 표준편차={tvec_y.std()*1000:.3f}")
+        self._log(f"  Z: 평균={tvec_z.mean()*1000:.3f}, 표준편차={tvec_z.std()*1000:.3f}")
+        self._log("-" * 50)
+        self._log("회전 (deg):")
+        self._log(f"  Rx: 평균={euler_rx.mean():.3f}, 표준편차={euler_rx.std():.3f}")
+        self._log(f"  Ry: 평균={euler_ry.mean():.3f}, 표준편차={euler_ry.std():.3f}")
+        self._log(f"  Rz: 평균={euler_rz.mean():.3f}, 표준편차={euler_rz.std():.3f}")
+        self._log("=" * 50)
+
+    def _on_save_collect(self):
+        """수집된 데이터를 CSV로 저장"""
+        if len(self.collected_data) == 0:
+            QMessageBox.warning(self, "경고", "저장할 데이터가 없습니다.")
+            return
+
+        # 파일 저장 다이얼로그
+        default_name = f"aruco_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "데이터 저장", default_name, "CSV Files (*.csv)"
+        )
+
+        if not filepath:
+            return
+
+        try:
+            import csv
+
+            with open(filepath, 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=self.collected_data[0].keys())
+                writer.writeheader()
+                writer.writerows(self.collected_data)
+
+            self._log(f"데이터 저장 완료: {filepath}")
+            QMessageBox.information(self, "완료", f"데이터가 저장되었습니다.\n{filepath}")
+
+        except Exception as e:
+            self._log(f"데이터 저장 실패: {e}")
+            QMessageBox.critical(self, "오류", f"저장 실패: {e}")
 
     # ==================== 실행 모니터 ====================
 
@@ -971,6 +1830,10 @@ class MainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
+            # 카메라 정지
+            if self.camera_running:
+                self._on_stop_camera()
+
             # 타이머 정지
             if hasattr(self, 'status_timer'):
                 self.status_timer.stop()

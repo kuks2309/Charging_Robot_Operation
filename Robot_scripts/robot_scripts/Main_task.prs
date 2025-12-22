@@ -1,0 +1,248 @@
+toolframe(3)
+modserv = modbus_server()
+
+-- 레지스터 주소 정의
+-- 301: command (명령 코드)
+-- 302: mode (0=상대, 1=절대)
+-- 303-304: X값 (float, 2 registers)
+-- 305-306: Y값 (float, 2 registers)
+-- 307-308: Z값 (float, 2 registers)
+-- 309-310: Rx값 (float, 2 registers)
+-- 311-312: Ry값 (float, 2 registers)
+-- 313-314: Rz값 (float, 2 registers)
+-- 315: status (0=Idle, 1=Running, 2=Done, 3=Error)
+
+-- 상태 코드 정의
+STATUS_IDLE = 0
+STATUS_RUNNING = 1
+STATUS_DONE = 2
+STATUS_ERROR = 3
+
+-- 초기 상태 설정
+modserv.write_register(315, STATUS_IDLE)
+
+while true do
+    command = modserv.read_register(301)
+
+    if command == 1 then
+        -- Go Home: 글로벌 위치형 변수 var.p(100)으로 이동
+        modserv.write_register(315, STATUS_RUNNING)
+        movep(var.p(100))
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 2 then
+        -- Set Home: 현재 위치를 var.p(100)에 저장
+        modserv.write_register(315, STATUS_RUNNING)
+        var.p(100) = here()
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 10 then
+        -- TCP Linear X
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        dist = modserv.read_float(303)
+        if mode == 0 then
+            movel(shift(here(), dist, 0, 0, 0, 0, 0))
+        else
+            cur = here()
+            cur.x = dist
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 11 then
+        -- TCP Linear Y
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        dist = modserv.read_float(303)
+        if mode == 0 then
+            movel(shift(here(), 0, dist, 0, 0, 0, 0))
+        else
+            cur = here()
+            cur.y = dist
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 12 then
+        -- TCP Linear Z
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        dist = modserv.read_float(303)
+        if mode == 0 then
+            movel(shift(here(), 0, 0, dist, 0, 0, 0))
+        else
+            cur = here()
+            cur.z = dist
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 13 then
+        -- TCP Linear XYZ
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        x = modserv.read_float(303)
+        y = modserv.read_float(305)
+        z = modserv.read_float(307)
+        if mode == 0 then
+            movel(shift(here(), x, y, z, 0, 0, 0))
+        else
+            cur = here()
+            cur.x = x
+            cur.y = y
+            cur.z = z
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 14 then
+        -- TCP Rotate Rx
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        angle = modserv.read_float(303)
+        if mode == 0 then
+            movel(shift(here(), 0, 0, 0, angle, 0, 0))
+        else
+            cur = here()
+            cur.rx = angle
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 15 then
+        -- TCP Rotate Ry
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        angle = modserv.read_float(303)
+        if mode == 0 then
+            movel(shift(here(), 0, 0, 0, 0, angle, 0))
+        else
+            cur = here()
+            cur.ry = angle
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 16 then
+        -- TCP Rotate Rz
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        angle = modserv.read_float(303)
+        if mode == 0 then
+            movel(shift(here(), 0, 0, 0, 0, 0, angle))
+        else
+            cur = here()
+            cur.rz = angle
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 17 then
+        -- TCP Rotate RxRyRz
+        modserv.write_register(315, STATUS_RUNNING)
+        mode = modserv.read_register(302)
+        rx = modserv.read_float(303)
+        ry = modserv.read_float(305)
+        rz = modserv.read_float(307)
+        if mode == 0 then
+            movel(shift(here(), 0, 0, 0, rx, ry, rz))
+        else
+            cur = here()
+            cur.rx = rx
+            cur.ry = ry
+            cur.rz = rz
+            movel(cur)
+        end
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 20 then
+        -- Move to Pose: 지정된 포즈로 이동 (X, Y, Z, Rx, Ry, Rz)
+        modserv.write_register(315, STATUS_RUNNING)
+        x = modserv.read_float(303)
+        y = modserv.read_float(305)
+        z = modserv.read_float(307)
+        rx = modserv.read_float(309)
+        ry = modserv.read_float(311)
+        rz = modserv.read_float(313)
+        target = pose(x, y, z, rx, ry, rz)
+        movel(target)
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 30 then
+        -- Gripper Open (KAIST Gripper_ungrip.prs 방식)
+        modserv.write_register(315, STATUS_RUNNING)
+        dio.set(10)
+        delay(2500)
+        dio.reset(10)
+        dio.reset(7)
+        dio.set(8)
+        dio.set(2)
+        delay(20)
+        dio.set(4)
+        delay(20)
+        dio.reset(4)
+        dio.reset(2)
+        dio.in_wait(2, 1)
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 31 then
+        -- Gripper Close (KAIST Gripper_grip.prs 방식)
+        modserv.write_register(315, STATUS_RUNNING)
+        dio.set(1)
+        delay(20)
+        dio.set(4)
+        delay(20)
+        dio.reset(1)
+        dio.reset(4)
+        dio.in_wait(1,1)
+        delay(2300)
+        dio.set(9)
+        delay(2500)
+        dio.reset(9)
+        dio.set(7)
+        dio.reset(8)
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+
+    elseif command == 32 then
+        -- Gripper Home (KAIST Gripper_home.prs 방식)
+        modserv.write_register(315, STATUS_RUNNING)
+        dio.pulse(5, 1, 30)
+        dio.in_wait(8,1)
+        dio.set(6)
+        delay(20)
+        dio.pulse(3, 1, 30)
+        delay(500)
+        dio.in_wait(5,1)
+        -- Gripper_ungrip 동작 포함
+        dio.set(10)
+        delay(2500)
+        dio.reset(10)
+        dio.reset(7)
+        dio.set(8)
+        dio.set(2)
+        delay(20)
+        dio.set(4)
+        delay(20)
+        dio.reset(4)
+        dio.reset(2)
+        dio.in_wait(2, 1)
+        modserv.write_register(315, STATUS_DONE)
+        modserv.write_register(301, 0)
+    end
+
+    delay(100)
+end
