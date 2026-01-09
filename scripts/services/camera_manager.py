@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-CameraManager - RealSense 카메라 관리 서비스
+CameraManager - RealSense D435 카메라 관리 서비스
 
 MainWindow에서 분리된 카메라 관련 로직:
 - 카메라 초기화/시작/정지
 - 프레임 캡처
 - 스냅샷 저장
+- 캘리브레이션 파일 지원
 """
 
 import os
+import yaml
 from datetime import datetime
 from typing import Optional, Tuple, Callable
 import numpy as np
@@ -23,15 +25,61 @@ try:
 except ImportError:
     REALSENSE_AVAILABLE = False
 
+# 기본 캘리브레이션 파일 경로
+DEFAULT_CALIBRATION_FILE = os.path.join(
+    os.path.dirname(__file__), '..', '..', 'config', 'ds435_calibration.yaml'
+)
+
 
 class Intrinsics:
     """카메라 내부 파라미터"""
-    def __init__(self, fx: float, fy: float, ppx: float, ppy: float, coeffs: list):
+    def __init__(self, fx: float, fy: float, ppx: float, ppy: float, coeffs: list,
+                 width: int = 640, height: int = 480):
         self.fx = fx
         self.fy = fy
         self.ppx = ppx
         self.ppy = ppy
         self.coeffs = coeffs
+        self.width = width
+        self.height = height
+
+    @classmethod
+    def from_yaml(cls, filepath: str) -> Optional['Intrinsics']:
+        """YAML 캘리브레이션 파일에서 로드"""
+        try:
+            with open(filepath, 'r') as f:
+                data = yaml.safe_load(f)
+
+            return cls(
+                fx=data['fx'],
+                fy=data['fy'],
+                ppx=data['cx'],
+                ppy=data['cy'],
+                coeffs=[
+                    data.get('k1', 0.0),
+                    data.get('k2', 0.0),
+                    data.get('p1', 0.0),
+                    data.get('p2', 0.0),
+                    data.get('k3', 0.0)
+                ],
+                width=data.get('image_width', 640),
+                height=data.get('image_height', 480)
+            )
+        except Exception as e:
+            print(f"Failed to load calibration: {e}")
+            return None
+
+    def to_matrix(self) -> np.ndarray:
+        """3x3 카메라 행렬 반환"""
+        return np.array([
+            [self.fx, 0, self.ppx],
+            [0, self.fy, self.ppy],
+            [0, 0, 1]
+        ], dtype=np.float32)
+
+    def to_dist_coeffs(self) -> np.ndarray:
+        """왜곡 계수 배열 반환"""
+        return np.array(self.coeffs, dtype=np.float32)
 
 
 class CameraManager(QObject):
@@ -43,11 +91,13 @@ class CameraManager(QObject):
     camera_stopped = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, resolution: Tuple[int, int] = (640, 480), fps: int = 30):
+    def __init__(self, resolution: Tuple[int, int] = (640, 480), fps: int = 30,
+                 calibration_file: str = None):
         """
         Args:
             resolution: 카메라 해상도 (width, height)
             fps: 프레임 레이트
+            calibration_file: 캘리브레이션 YAML 파일 경로 (None이면 기본값 사용)
         """
         super().__init__()
 
@@ -59,8 +109,16 @@ class CameraManager(QObject):
         self._config = None
         self._running = False
 
-        # 카메라 intrinsics
+        # 캘리브레이션 파일에서 intrinsics 로드
+        self._calibration_file = calibration_file or DEFAULT_CALIBRATION_FILE
         self._intrinsics: Optional[Intrinsics] = None
+        self._use_calibration_file = False
+
+        if os.path.exists(self._calibration_file):
+            self._intrinsics = Intrinsics.from_yaml(self._calibration_file)
+            if self._intrinsics:
+                self._use_calibration_file = True
+                print(f"[CameraManager] Calibration loaded: {self._calibration_file}")
 
         # 프레임 업데이트 타이머
         self._timer: Optional[QTimer] = None
@@ -130,16 +188,22 @@ class CameraManager(QObject):
             # 파이프라인 시작
             profile = self._pipeline.start(self._config)
 
-            # intrinsics 가져오기
-            color_stream = profile.get_stream(rs.stream.color)
-            rs_intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
-            self._intrinsics = Intrinsics(
-                fx=rs_intrinsics.fx,
-                fy=rs_intrinsics.fy,
-                ppx=rs_intrinsics.ppx,
-                ppy=rs_intrinsics.ppy,
-                coeffs=list(rs_intrinsics.coeffs)
-            )
+            # intrinsics: 캘리브레이션 파일이 없으면 런타임에서 가져오기
+            if not self._use_calibration_file:
+                color_stream = profile.get_stream(rs.stream.color)
+                rs_intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
+                self._intrinsics = Intrinsics(
+                    fx=rs_intrinsics.fx,
+                    fy=rs_intrinsics.fy,
+                    ppx=rs_intrinsics.ppx,
+                    ppy=rs_intrinsics.ppy,
+                    coeffs=list(rs_intrinsics.coeffs),
+                    width=rs_intrinsics.width,
+                    height=rs_intrinsics.height
+                )
+                self._log("런타임 intrinsics 사용")
+            else:
+                self._log(f"캘리브레이션 파일 intrinsics 사용: {self._calibration_file}")
 
             # 카메라 안정화 대기
             for _ in range(30):
