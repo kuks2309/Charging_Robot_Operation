@@ -7,6 +7,7 @@ from .camera_manager import CameraManager
 from .vision_manager import VisionManager
 from .alignment_service import AlignmentService, AlignmentResult, AlignmentStep
 from .data_collector import DataCollector, CollectStatistics
+from .pose_service import PoseService, PoseOperationResult
 
 __all__ = [
     'CameraManager',
@@ -16,4 +17,6 @@ __all__ = [
     'AlignmentStep',
     'DataCollector',
     'CollectStatistics',
+    'PoseService',
+    'PoseOperationResult',
 ]

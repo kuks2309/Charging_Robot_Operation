@@ -22,7 +22,7 @@ from PyQt5.QtGui import QPixmap, QImage
 
 from Robot import ModbusClient, RobotController, PoseManager, PoseType
 from Sensor import ArucoCameraPoseEstimator
-from services import CameraManager, VisionManager, AlignmentService, DataCollector
+from services import CameraManager, VisionManager, AlignmentService, DataCollector, PoseService
 
 # UI 파일 경로
 UI_FILE = os.path.join(os.path.dirname(__file__), '..', 'ui', 'main_window.ui')
@@ -256,6 +256,11 @@ class MainWindow(QMainWindow):
         self.data_collector.set_log_callback(self._log)
         self.data_collector.sample_collected.connect(self._on_sample_collected)
         self.data_collector.collection_completed.connect(self._on_collection_completed)
+
+        # 포즈 서비스 초기화
+        self.pose_service = PoseService(self.pose_manager)
+        self.pose_service.set_log_callback(self._log)
+        self.pose_service.pose_list_changed.connect(self._refresh_saved_poses_list)
 
         # 초기화
         self._init_available_tasks()
@@ -868,6 +873,9 @@ class MainWindow(QMainWindow):
             # AlignmentService에 로봇 설정
             self.alignment_service.set_robot(self.robot)
 
+            # PoseService에 로봇 설정
+            self.pose_service.set_robot(self.robot, self.robot_controller)
+
             # 상태 업데이트 타이머 시작
             self.status_timer.start(100)
 
@@ -891,6 +899,9 @@ class MainWindow(QMainWindow):
 
         # AlignmentService 로봇 해제
         self.alignment_service.set_robot(None)
+
+        # PoseService 로봇 해제
+        self.pose_service.set_robot(None, None)
 
         # 타이머 정지
         self.status_timer.stop()
@@ -1319,135 +1330,77 @@ class MainWindow(QMainWindow):
             "KAIST"
         )
 
-    # ==================== 포즈 저장/이동 ====================
+    # ==================== 포즈 저장/이동 (PoseService 위임) ====================
 
     def _on_save_current_pose(self):
-        """현재 위치 저장"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇에 연결되지 않았습니다.")
-            return
-
-        # 현재 카메라 포즈 읽기
-        cam_pose = self.robot.read_camera_pose()
-        if cam_pose is None:
-            QMessageBox.warning(self, "경고", "현재 위치를 읽을 수 없습니다.")
-            return
-
-        # 이름 입력 다이얼로그
+        """현재 위치 저장 (PoseService 위임)"""
         from PyQt5.QtWidgets import QInputDialog
+
         name, ok = QInputDialog.getText(self, "포즈 저장", "포즈 이름:")
         if not ok or not name.strip():
             return
 
-        name = name.strip()
-
-        # 타입 선택
-        pose_types = ["ar_tag", "home", "charging_gun", "charging_port", "approach", "custom"]
-        pose_type, ok = QInputDialog.getItem(
-            self, "포즈 타입", "타입 선택:", pose_types, 0, False
-        )
+        pose_types = PoseService.get_pose_types()
+        pose_type, ok = QInputDialog.getItem(self, "포즈 타입", "타입 선택:", pose_types, 0, False)
         if not ok:
             return
 
-        # 저장
-        success = self.pose_manager.save_pose_from_tuple(
-            name, cam_pose, pose_type,
-            description=f"X:{cam_pose[0]:.2f}, Y:{cam_pose[1]:.2f}, Z:{cam_pose[2]:.2f}"
-        )
-
-        if success:
-            self._log(f"포즈 저장: {name} ({pose_type})")
-            self._refresh_saved_poses_list()
-        else:
-            QMessageBox.warning(self, "오류", "포즈 저장에 실패했습니다.")
+        result = self.pose_service.save_current_pose(name.strip(), pose_type)
+        if not result.success:
+            QMessageBox.warning(self, "오류", result.message)
 
     def _on_delete_pose(self):
-        """저장된 포즈 삭제"""
+        """저장된 포즈 삭제 (PoseService 위임)"""
         if not hasattr(self, 'listSavedPoses'):
             return
-
         current_item = self.listSavedPoses.currentItem()
         if not current_item:
             QMessageBox.warning(self, "경고", "삭제할 포즈를 선택하세요.")
             return
 
         name = current_item.data(Qt.UserRole)
-
-        reply = QMessageBox.question(
-            self, "삭제 확인",
-            f"'{name}' 포즈를 삭제하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
+        reply = QMessageBox.question(self, "삭제 확인", f"'{name}' 포즈를 삭제하시겠습니까?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
-            if self.pose_manager.delete_pose(name):
-                self._log(f"포즈 삭제: {name}")
-                self._refresh_saved_poses_list()
-            else:
-                QMessageBox.warning(self, "오류", "포즈 삭제에 실패했습니다.")
+            result = self.pose_service.delete_pose(name)
+            if not result.success:
+                QMessageBox.warning(self, "오류", result.message)
 
     def _on_move_to_saved_pose(self):
-        """저장된 위치로 이동"""
-        if not self.robot_controller:
-            QMessageBox.warning(self, "경고", "로봇에 연결되지 않았습니다.")
-            return
-
+        """저장된 위치로 이동 (PoseService 위임)"""
         if not hasattr(self, 'listSavedPoses'):
             return
-
         current_item = self.listSavedPoses.currentItem()
         if not current_item:
             QMessageBox.warning(self, "경고", "이동할 포즈를 선택하세요.")
             return
 
         name = current_item.data(Qt.UserRole)
-
-        reply = QMessageBox.question(
-            self, "이동 확인",
-            f"'{name}' 위치로 이동하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-
+        reply = QMessageBox.question(self, "이동 확인", f"'{name}' 위치로 이동하시겠습니까?",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         if reply == QMessageBox.Yes:
-            result = self.robot_controller.move_to_saved_pose(name)
-            if result.success:
-                self._log(f"이동 명령: {result.message}")
-            else:
-                self._log(f"이동 실패: {result.message}")
+            result = self.pose_service.move_to_pose(name)
+            if not result.success:
                 QMessageBox.warning(self, "오류", result.message)
 
     def _on_approach_pose(self):
-        """저장된 위치의 어프로치 위치로 이동"""
-        if not self.robot_controller:
-            QMessageBox.warning(self, "경고", "로봇에 연결되지 않았습니다.")
-            return
+        """저장된 위치의 어프로치 위치로 이동 (PoseService 위임)"""
+        from PyQt5.QtWidgets import QInputDialog
 
         if not hasattr(self, 'listSavedPoses'):
             return
-
         current_item = self.listSavedPoses.currentItem()
         if not current_item:
             QMessageBox.warning(self, "경고", "이동할 포즈를 선택하세요.")
             return
 
         name = current_item.data(Qt.UserRole)
-
-        # 어프로치 거리 입력
-        from PyQt5.QtWidgets import QInputDialog
-        distance, ok = QInputDialog.getDouble(
-            self, "어프로치 거리", "거리 (meter):",
-            0.2, 0.01, 1.0, 2
-        )
+        distance, ok = QInputDialog.getDouble(self, "어프로치 거리", "거리 (meter):", 0.2, 0.01, 1.0, 2)
         if not ok:
             return
 
-        result = self.robot_controller.approach_pose(name, approach_distance=distance)
-        if result.success:
-            self._log(f"어프로치 이동: {result.message}")
-        else:
-            self._log(f"어프로치 실패: {result.message}")
+        result = self.pose_service.approach_pose(name, distance)
+        if not result.success:
             QMessageBox.warning(self, "오류", result.message)
 
     # ==================== 유틸리티 ====================
