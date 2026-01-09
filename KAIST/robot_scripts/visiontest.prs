@@ -1,0 +1,62 @@
+toolframe(1)
+
+modserv = modbus_server()
+x = modserv.read_register('x')
+y = modserv.read_register('y')
+z = modserv.read_register('z')
+Rx= modserv.read_register('Rx')
+Ry = modserv.read_register('Ry')
+Rz = modserv.read_register('Rz')
+x2 = modserv.read_register('x2')
+y2 = modserv.read_register('y2')
+z2 = modserv.read_register('z2')
+Rx2= modserv.read_register('Rx2')
+Ry2 = modserv.read_register('Ry2')
+Rz2 = modserv.read_register('Rz2')
+toolframe(2)
+if  x>32767  then
+    x= x-65537
+end
+if  x2>32767  then
+    x2= x2-65537
+end
+if  y>32767  then
+    y= y-65537
+end
+if  y2>32767  then
+    y2= y2-65537
+end
+if  z>32767  then
+    z = z-65537
+end
+if  z2>32767  then
+    z2 = z2-65537
+end
+if  Rx>32767  then
+    Rx= Rx-65537
+end
+if  Rx2>32767  then
+    Rx2= Rx2-65537
+end
+if Ry>32767  then
+    Ry= Ry-65537
+end
+if Ry2>32767  then
+    Ry2= Ry2-65537
+end
+if  Rz>32767  then
+    Rz = Rz-65537
+end
+if  Rz2>32767  then
+    Rz2 = Rz2-65537
+end
+--Rx = Rx * -1
+--z=z-200
+motion.speed = 10
+--tool.rot(Rx, Ry, Rz)
+--tool.trans(x,y,z-70)
+--tool.trans(0,0,40)
+--tool.trans(x2,y2,z2)
+--tool.rot(Rx2, Ry2, Rz2,'s100')
+p1 = pose (x-150,y,z,Rx,Ry,Rz)
+movel(p1)

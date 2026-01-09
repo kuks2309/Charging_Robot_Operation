@@ -1,0 +1,8 @@
+dio.pulse(5, 1, 30)
+dio.in_wait(8,1)
+dio.set(6)
+delay(20)
+dio.pulse(3, 1, 30)
+delay(500)
+dio.in_wait(5,1)
+call('Gripper_ungrip')

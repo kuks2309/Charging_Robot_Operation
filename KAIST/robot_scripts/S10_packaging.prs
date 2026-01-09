@@ -1,0 +1,5 @@
+motion.speed=100
+
+p1=joint(180,90,-156,-24,0,0)
+
+movep(p1)

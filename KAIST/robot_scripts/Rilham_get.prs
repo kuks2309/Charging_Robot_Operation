@@ -1,0 +1,10 @@
+toolframe(3)
+movep(lp3)
+movel(lp2)
+var.i(1, 1)
+var.i(2, 3)
+var.i(3, 1)
+call('Vision_task')
+toolframe(2)
+movel(lp5)
+

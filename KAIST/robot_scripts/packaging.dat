@@ -1,0 +1,9 @@
+--compiled
+motion.WorkFrame(0)
+motion.ToolFrame(0)
+lp1=joint(0,0,0,0,0,0)
+lp2=joint(0,0,0,0,0,0)
+lp3=joint(0,0,0,0,0,0)
+lp4=joint(0,0,0,0,0,0)
+lp5=joint(0,0,0,0,0,0)
+lp6=joint(0,0,0,0,0,0)

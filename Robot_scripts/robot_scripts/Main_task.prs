@@ -1,188 +1,113 @@
 toolframe(3)
 modserv = modbus_server()
 
--- 레지스터 주소 정의
--- 301: command (명령 코드)
--- 302: mode (0=상대, 1=절대)
--- 303-304: X값 (float, 2 registers)
--- 305-306: Y값 (float, 2 registers)
--- 307-308: Z값 (float, 2 registers)
--- 309-310: Rx값 (float, 2 registers)
--- 311-312: Ry값 (float, 2 registers)
--- 313-314: Rz값 (float, 2 registers)
--- 315: status (0=Idle, 1=Running, 2=Done, 3=Error)
+-- 기존 레지스터 그대로 사용:
+-- 'x' (301), 'y' (302), 'z' (303), 'Rx' (304), 'Ry' (305), 'Rz' (306)
+-- 'x2' (307), 'y2' (308), 'z2' (309), 'Rx2' (310), 'Ry2' (311), 'Rz2' (312)
+-- 'task_number' (351) -> command
+-- 'task_done' (352) -> status
+-- 상태 코드: 0=Idle, 1=Running, 2=Done, 3=Error
 
--- 상태 코드 정의
-STATUS_IDLE = 0
-STATUS_RUNNING = 1
-STATUS_DONE = 2
-STATUS_ERROR = 3
-
--- 초기 상태 설정
-modserv.write_register(315, STATUS_IDLE)
+modserv.write_register('task_done', 0)
 
 while true do
-    command = modserv.read_register(301)
+    command = modserv.read_register('task_number')
 
     if command == 1 then
-        -- Go Home: 글로벌 위치형 변수 var.p(100)으로 이동
-        modserv.write_register(315, STATUS_RUNNING)
+        modserv.write_register('task_done', 1)
         movep(var.p(100))
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 2 then
-        -- Set Home: 현재 위치를 var.p(100)에 저장
-        modserv.write_register(315, STATUS_RUNNING)
-        var.p(100) = here()
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        modserv.write_register('task_done', 1)
+        modserv.write_register('task_done', 3)
+        modserv.write_register('task_number', 0)
 
     elseif command == 10 then
-        -- TCP Linear X
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        dist = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), dist, 0, 0, 0, 0, 0))
-        else
-            cur = here()
-            cur.x = dist
-            movel(cur)
+        modserv.write_register('task_done', 1)
+        x = modserv.read_register('x')
+        if  x>32767  then
+            x= x-65537
         end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        tool.transx(x)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 11 then
-        -- TCP Linear Y
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        dist = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), 0, dist, 0, 0, 0, 0))
-        else
-            cur = here()
-            cur.y = dist
-            movel(cur)
+        modserv.write_register('task_done', 1)
+        y = modserv.read_register('y')
+        if  y>32767  then
+            y= y-65537
         end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        tool.transy(y)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 12 then
-        -- TCP Linear Z
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        dist = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), 0, 0, dist, 0, 0, 0))
-        else
-            cur = here()
-            cur.z = dist
-            movel(cur)
+        modserv.write_register('task_done', 1)
+        z = modserv.read_register('z')
+        if  z>32767  then
+            z= z-65537
         end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        tool.transz(z)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 13 then
-        -- TCP Linear XYZ
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        x = modserv.read_float(303)
-        y = modserv.read_float(305)
-        z = modserv.read_float(307)
-        if mode == 0 then
-            movel(shift(here(), x, y, z, 0, 0, 0))
-        else
-            cur = here()
-            cur.x = x
-            cur.y = y
-            cur.z = z
-            movel(cur)
+        modserv.write_register('task_done', 1)
+        x = modserv.read_register('x')
+        y = modserv.read_register('y')
+        z = modserv.read_register('z')
+        if  x>32767  then
+            x= x-65537
         end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        if  y>32767  then
+            y= y-65537
+        end
+        if  z>32767  then
+            z= z-65537
+        end
+        tool.trans(x, y, z)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
-    elseif command == 14 then
-        -- TCP Rotate Rx
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        angle = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), 0, 0, 0, angle, 0, 0))
-        else
-            cur = here()
-            cur.rx = angle
-            movel(cur)
-        end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
-
-    elseif command == 15 then
-        -- TCP Rotate Ry
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        angle = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), 0, 0, 0, 0, angle, 0))
-        else
-            cur = here()
-            cur.ry = angle
-            movel(cur)
-        end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
-
-    elseif command == 16 then
-        -- TCP Rotate Rz
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        angle = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), 0, 0, 0, 0, 0, angle))
-        else
-            cur = here()
-            cur.rz = angle
-            movel(cur)
-        end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
-
-    elseif command == 17 then
-        -- TCP Rotate RxRyRz
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        rx = modserv.read_float(303)
-        ry = modserv.read_float(305)
-        rz = modserv.read_float(307)
-        if mode == 0 then
-            movel(shift(here(), 0, 0, 0, rx, ry, rz))
-        else
-            cur = here()
-            cur.rx = rx
-            cur.ry = ry
-            cur.rz = rz
-            movel(cur)
-        end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+    -- command 14-17: 회전 명령 (tool.rot() 미지원으로 비활성화)
+    -- 회전이 필요한 경우 command 20 (절대 위치 이동) 사용
 
     elseif command == 20 then
-        -- Move to Pose: 지정된 포즈로 이동 (X, Y, Z, Rx, Ry, Rz)
-        modserv.write_register(315, STATUS_RUNNING)
-        x = modserv.read_float(303)
-        y = modserv.read_float(305)
-        z = modserv.read_float(307)
-        rx = modserv.read_float(309)
-        ry = modserv.read_float(311)
-        rz = modserv.read_float(313)
-        target = pose(x, y, z, rx, ry, rz)
-        movel(target)
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        modserv.write_register('task_done', 1)
+        x = modserv.read_register('x')
+        y = modserv.read_register('y')
+        z = modserv.read_register('z')
+        Rx = modserv.read_register('Rx')
+        Ry = modserv.read_register('Ry')
+        Rz = modserv.read_register('Rz')
+        if  x>32767  then
+            x= x-65537
+        end
+        if  y>32767  then
+            y= y-65537
+        end
+        if  z>32767  then
+            z= z-65537
+        end
+        if  Rx>32767  then
+            Rx= Rx-65537
+        end
+        if  Ry>32767  then
+            Ry= Ry-65537
+        end
+        if  Rz>32767  then
+            Rz= Rz-65537
+        end
+        p1 = pose(x/10, y/10, z/10, Rx/10, Ry/10, Rz/10)
+        movel(p1)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 30 then
-        -- Gripper Open (KAIST Gripper_ungrip.prs 방식)
-        modserv.write_register(315, STATUS_RUNNING)
+        modserv.write_register('task_done', 1)
         dio.set(10)
         delay(2500)
         dio.reset(10)
@@ -195,12 +120,11 @@ while true do
         dio.reset(4)
         dio.reset(2)
         dio.in_wait(2, 1)
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 31 then
-        -- Gripper Close (KAIST Gripper_grip.prs 방식)
-        modserv.write_register(315, STATUS_RUNNING)
+        modserv.write_register('task_done', 1)
         dio.set(1)
         delay(20)
         dio.set(4)
@@ -214,12 +138,11 @@ while true do
         dio.reset(9)
         dio.set(7)
         dio.reset(8)
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
 
     elseif command == 32 then
-        -- Gripper Home (KAIST Gripper_home.prs 방식)
-        modserv.write_register(315, STATUS_RUNNING)
+        modserv.write_register('task_done', 1)
         dio.pulse(5, 1, 30)
         dio.in_wait(8,1)
         dio.set(6)
@@ -227,7 +150,6 @@ while true do
         dio.pulse(3, 1, 30)
         delay(500)
         dio.in_wait(5,1)
-        -- Gripper_ungrip 동작 포함
         dio.set(10)
         delay(2500)
         dio.reset(10)
@@ -240,8 +162,33 @@ while true do
         dio.reset(4)
         dio.reset(2)
         dio.in_wait(2, 1)
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+
+    -- command 40-43: 툴프레임 변경
+    elseif command == 40 then
+        modserv.write_register('task_done', 1)
+        toolframe(0)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+
+    elseif command == 41 then
+        modserv.write_register('task_done', 1)
+        toolframe(1)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+
+    elseif command == 42 then
+        modserv.write_register('task_done', 1)
+        toolframe(2)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+
+    elseif command == 43 then
+        modserv.write_register('task_done', 1)
+        toolframe(3)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
     end
 
     delay(100)
