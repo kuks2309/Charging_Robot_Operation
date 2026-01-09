@@ -22,7 +22,7 @@ from PyQt5.QtGui import QPixmap, QImage
 
 from Robot import ModbusClient, RobotController, PoseManager, PoseType
 from Sensor import ArucoCameraPoseEstimator
-from services import CameraManager, VisionManager
+from services import CameraManager, VisionManager, AlignmentService, DataCollector
 
 # UI 파일 경로
 UI_FILE = os.path.join(os.path.dirname(__file__), '..', 'ui', 'main_window.ui')
@@ -246,8 +246,16 @@ class MainWindow(QMainWindow):
         self.vision_manager = VisionManager(self.camera_manager)
         self.vision_manager.set_log_callback(self._log)
 
-        # 데이터 수집 초기화
-        self._init_data_collect()
+        # 정렬 서비스 초기화
+        self.alignment_service = AlignmentService(self.vision_manager)
+        self.alignment_service.set_log_callback(self._log)
+        self.alignment_service.status_changed.connect(self._update_align_status)
+
+        # 데이터 수집 서비스 초기화
+        self.data_collector = DataCollector(self.vision_manager)
+        self.data_collector.set_log_callback(self._log)
+        self.data_collector.sample_collected.connect(self._on_sample_collected)
+        self.data_collector.collection_completed.connect(self._on_collection_completed)
 
         # 초기화
         self._init_available_tasks()
@@ -857,6 +865,9 @@ class MainWindow(QMainWindow):
             self.robot_controller = RobotController(self.robot, self.pose_manager)
             self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
 
+            # AlignmentService에 로봇 설정
+            self.alignment_service.set_robot(self.robot)
+
             # 상태 업데이트 타이머 시작
             self.status_timer.start(100)
 
@@ -877,6 +888,9 @@ class MainWindow(QMainWindow):
 
         # RobotController 해제
         self.robot_controller = None
+
+        # AlignmentService 로봇 해제
+        self.alignment_service.set_robot(None)
 
         # 타이머 정지
         self.status_timer.stop()
@@ -929,14 +943,6 @@ class MainWindow(QMainWindow):
 
     # ==================== 비전 ====================
 
-    def _init_data_collect(self):
-        """데이터 수집 초기화"""
-        # 데이터 수집 관련
-        self.collecting_data = False
-        self.collected_data = []
-        self.collect_target_count = 100
-        self.collect_tag_id = 0
-
     def _on_start_camera(self):
         """카메라 시작"""
         if not self.camera_manager.is_available:
@@ -958,9 +964,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'checkArucoDetect') and self.checkArucoDetect.isChecked():
             frame, _ = self.vision_manager.detect_markers(frame)
 
-            # 데이터 수집 중이면 샘플 저장
-            if self.collecting_data and self.vision_manager.last_result:
-                self._collect_sample()
+            # 데이터 수집 중이면 샘플 저장 (DataCollector에 위임)
+            if self.data_collector.is_collecting:
+                self.data_collector.collect_sample()
 
         # QLabel에 표시
         self._display_frame(frame)
@@ -1012,181 +1018,47 @@ class MainWindow(QMainWindow):
         return 10  # 기본값
 
     def _on_align_center(self):
-        """Aruco Tag 중심 정렬 테스트"""
+        """Aruco Tag 중심 정렬 테스트 (AlignmentService 위임)"""
         tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
         num_samples = self._get_num_samples()
-        self._log(f"Aruco Tag {tag_id} 중심 정렬 시작 ({num_samples}회 측정)")
-        self._update_align_status("중심 정렬 중...")
 
-        # 카메라 체크
-        if not self.camera_manager.is_running:
-            self._update_align_status("카메라 미연결")
-            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
-            return
-
-        # 태그 감지 (n회 평균)
-        marker = self.detect_aruco_tag(tag_id, timeout=10.0, num_samples=num_samples)
-        if marker is None:
-            self._update_align_status("태그 감지 실패")
-            QMessageBox.warning(self, "경고", f"Tag ID {tag_id}를 찾을 수 없습니다.")
-            return
-
-        # 중심 오프셋 계산 (카메라 중심에서 태그까지)
-        # marker['tvec'] = [x, y, z] in camera frame (meters)
-        tvec = marker['tvec']
-        offset_x = tvec[0] * 1000  # m to mm
-        offset_y = tvec[1] * 1000  # m to mm
-
-        self._log(f"중심 오프셋: X={offset_x:.2f}mm, Y={offset_y:.2f}mm")
-
-        # 로봇 이동 (상대 이동)
-        if self.robot and self.robot.is_connected:
-            # TCP Linear XYZ 상대 이동으로 보정 (X, Y만 이동)
-            success, msg = self.robot.send_tcp_linear(
-                axis='xyz',
-                distance=(-offset_x, -offset_y, 0),
-                absolute=False,
-                wait=True
-            )
-            if success:
-                self._update_align_status(f"중심 정렬 완료 (X:{-offset_x:.1f}, Y:{-offset_y:.1f})")
-            else:
-                self._update_align_status(f"이동 실패: {msg}")
-        else:
-            self._update_align_status("로봇 미연결")
-            QMessageBox.warning(self, "경고", "로봇에 연결되어 있지 않습니다.")
+        result = self.alignment_service.align_center(tag_id, num_samples)
+        if not result.success:
+            QMessageBox.warning(self, "경고", result.message)
 
     def _on_align_pose(self):
-        """Aruco Tag 자세 정렬 테스트"""
+        """Aruco Tag 자세 정렬 테스트 (AlignmentService 위임)"""
         tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
         num_samples = self._get_num_samples()
-        self._log(f"Aruco Tag {tag_id} 자세 정렬 시작 ({num_samples}회 측정)")
-        self._update_align_status("자세 정렬 중...")
 
-        # 카메라 체크
-        if not self.camera_manager.is_running:
-            self._update_align_status("카메라 미연결")
-            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
-            return
-
-        # 태그 감지 (n회 평균)
-        marker = self.detect_aruco_tag(tag_id, timeout=10.0, num_samples=num_samples)
-        if marker is None:
-            self._update_align_status("태그 감지 실패")
-            QMessageBox.warning(self, "경고", f"Tag ID {tag_id}를 찾을 수 없습니다.")
-            return
-
-        # 회전 오프셋 계산
-        # marker['camera_rotation'] = rotation matrix
-        euler_angles = self.vision_manager.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
-        rx, ry, rz = euler_angles
-
-        self._log(f"자세 오프셋: Rx={rx:.2f}°, Ry={ry:.2f}°, Rz={rz:.2f}°")
-
-        # 로봇 회전 (상대 이동)
-        if self.robot and self.robot.is_connected:
-            # TCP Rotate로 보정
-            success, msg = self.robot.send_tcp_rotate(
-                axis='rxryrz',
-                angle=(-rx, -ry, -rz),
-                absolute=False,
-                wait=True
-            )
-            if success:
-                self._update_align_status(f"자세 정렬 완료 (Rx:{-rx:.1f}, Ry:{-ry:.1f}, Rz:{-rz:.1f})")
-            else:
-                self._update_align_status(f"회전 실패: {msg}")
-        else:
-            self._update_align_status("로봇 미연결")
-            QMessageBox.warning(self, "경고", "로봇에 연결되어 있지 않습니다.")
+        result = self.alignment_service.align_pose(tag_id, num_samples)
+        if not result.success:
+            QMessageBox.warning(self, "경고", result.message)
 
     def _on_align_full(self):
-        """Aruco Tag 전체 정렬 테스트 (중심 + 자세)"""
+        """Aruco Tag 전체 정렬 테스트 (AlignmentService 위임)"""
         tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
         num_samples = self._get_num_samples()
-        self._log(f"Aruco Tag {tag_id} 전체 정렬 시작 ({num_samples}회 측정)")
-        self._update_align_status("전체 정렬 중...")
 
-        # 카메라 체크
-        if not self.camera_manager.is_running:
-            self._update_align_status("카메라 미연결")
-            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
-            return
-
-        # 로봇 체크
-        if not self.robot or not self.robot.is_connected:
-            self._update_align_status("로봇 미연결")
-            QMessageBox.warning(self, "경고", "로봇에 연결되어 있지 않습니다.")
-            return
-
-        # 태그 감지 (n회 평균)
-        marker = self.detect_aruco_tag(tag_id, timeout=10.0, num_samples=num_samples)
-        if marker is None:
-            self._update_align_status("태그 감지 실패")
-            QMessageBox.warning(self, "경고", f"Tag ID {tag_id}를 찾을 수 없습니다.")
-            return
-
-        # 중심 오프셋 계산
-        tvec = marker['tvec']
-        offset_x = tvec[0] * 1000  # m to mm
-        offset_y = tvec[1] * 1000  # m to mm
-
-        # 회전 오프셋 계산
-        euler_angles = self.vision_manager.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
-        rx, ry, rz = euler_angles
-
-        self._log(f"중심: X={offset_x:.2f}mm, Y={offset_y:.2f}mm")
-        self._log(f"자세: Rx={rx:.2f}°, Ry={ry:.2f}°, Rz={rz:.2f}°")
-
-        # 1. 먼저 자세 정렬
-        self._update_align_status("자세 정렬 중...")
-        success, msg = self.robot.send_tcp_rotate(
-            axis='rxryrz',
-            angle=(-rx, -ry, -rz),
-            absolute=False,
-            wait=True
-        )
-        if not success:
-            self._update_align_status(f"자세 정렬 실패: {msg}")
-            return
-        self._log("자세 정렬 완료")
-
-        # 2. 중심 정렬
-        self._update_align_status("중심 정렬 중...")
-        success, msg = self.robot.send_tcp_linear(
-            axis='xyz',
-            distance=(-offset_x, -offset_y, 0),
-            absolute=False,
-            wait=True
-        )
-        if not success:
-            self._update_align_status(f"중심 정렬 실패: {msg}")
-            return
-
-        self._update_align_status("전체 정렬 완료")
-        self._log("전체 정렬 완료")
+        result = self.alignment_service.align_full(tag_id, num_samples)
+        if not result.success:
+            QMessageBox.warning(self, "경고", result.message)
 
     def _update_align_status(self, status: str):
-        """정렬 상태 업데이트"""
+        """정렬 상태 업데이트 (AlignmentService signal 핸들러)"""
         if hasattr(self, 'labelAlignStatus'):
             self.labelAlignStatus.setText(f"상태: {status}")
-        self._log(status)
 
     # ==================== 데이터 수집 (노이즈 분석용) ====================
 
     def _on_start_collect(self):
-        """데이터 수집 시작"""
-        if not self.camera_manager.is_running:
+        """데이터 수집 시작 (DataCollector 위임)"""
+        tag_id = self.spinCollectTagId.value() if hasattr(self, 'spinCollectTagId') else 0
+        target_count = self.spinCollectCount.value() if hasattr(self, 'spinCollectCount') else 100
+
+        if not self.data_collector.start(tag_id, target_count):
             QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
             return
-
-        # 설정 가져오기
-        self.collect_tag_id = self.spinCollectTagId.value() if hasattr(self, 'spinCollectTagId') else 0
-        self.collect_target_count = self.spinCollectCount.value() if hasattr(self, 'spinCollectCount') else 100
-
-        # 초기화
-        self.collected_data = []
-        self.collecting_data = True
 
         # UI 업데이트
         if hasattr(self, 'btnStartCollect'):
@@ -1198,104 +1070,41 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'progressCollect'):
             self.progressCollect.setValue(0)
 
-        self._log(f"데이터 수집 시작: Tag ID={self.collect_tag_id}, 목표={self.collect_target_count}회")
-
     def _on_stop_collect(self):
-        """데이터 수집 중지"""
-        self.collecting_data = False
+        """데이터 수집 중지 (DataCollector 위임)"""
+        self.data_collector.stop()
 
+        # 통계 출력
+        stats_str = self.data_collector.print_statistics()
+        for line in stats_str.split('\n'):
+            self._log(line)
+
+    def _on_sample_collected(self, current: int, target: int):
+        """샘플 수집 시그널 핸들러 (DataCollector signal)"""
+        if hasattr(self, 'labelCollectStatus'):
+            self.labelCollectStatus.setText(f"수집: {current} / {target}")
+        if hasattr(self, 'progressCollect'):
+            progress = int(100 * current / target) if target > 0 else 0
+            self.progressCollect.setValue(min(progress, 100))
+
+    def _on_collection_completed(self, count: int):
+        """수집 완료 시그널 핸들러 (DataCollector signal)"""
         # UI 업데이트
         if hasattr(self, 'btnStartCollect'):
             self.btnStartCollect.setEnabled(True)
         if hasattr(self, 'btnStopCollect'):
             self.btnStopCollect.setEnabled(False)
         if hasattr(self, 'btnSaveCollect'):
-            self.btnSaveCollect.setEnabled(len(self.collected_data) > 0)
-
-        self._log(f"데이터 수집 중지: {len(self.collected_data)}개 수집됨")
-
-        # 간단한 통계 출력
-        if len(self.collected_data) > 0:
-            self._print_collect_statistics()
-
-    def _collect_sample(self):
-        """현재 프레임에서 샘플 수집"""
-        if not self.collecting_data or not self.vision_manager.last_result:
-            return
-
-        import time
-
-        # 타겟 태그 찾기
-        for marker in self.vision_manager.last_result:
-            if marker['id'] == self.collect_tag_id:
-                sample = {
-                    'timestamp': time.time(),
-                    'tag_id': marker['id'],
-                    'tvec_x': marker['tvec'][0],
-                    'tvec_y': marker['tvec'][1],
-                    'tvec_z': marker['tvec'][2],
-                    'rvec_x': marker['rvec'][0],
-                    'rvec_y': marker['rvec'][1],
-                    'rvec_z': marker['rvec'][2],
-                }
-
-                # 회전 행렬에서 오일러 각도 계산
-                euler = self.vision_manager.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
-                sample['euler_rx'] = euler[0]
-                sample['euler_ry'] = euler[1]
-                sample['euler_rz'] = euler[2]
-
-                self.collected_data.append(sample)
-
-                # UI 업데이트
-                count = len(self.collected_data)
-                if hasattr(self, 'labelCollectStatus'):
-                    self.labelCollectStatus.setText(f"수집: {count} / {self.collect_target_count}")
-                if hasattr(self, 'progressCollect'):
-                    progress = int(100 * count / self.collect_target_count)
-                    self.progressCollect.setValue(min(progress, 100))
-
-                # 목표 도달 시 자동 중지
-                if count >= self.collect_target_count:
-                    self._on_stop_collect()
-
-                break
-
-    def _print_collect_statistics(self):
-        """수집된 데이터의 통계 출력"""
-        if len(self.collected_data) == 0:
-            return
-
-        # numpy 배열로 변환
-        tvec_x = np.array([d['tvec_x'] for d in self.collected_data])
-        tvec_y = np.array([d['tvec_y'] for d in self.collected_data])
-        tvec_z = np.array([d['tvec_z'] for d in self.collected_data])
-        euler_rx = np.array([d['euler_rx'] for d in self.collected_data])
-        euler_ry = np.array([d['euler_ry'] for d in self.collected_data])
-        euler_rz = np.array([d['euler_rz'] for d in self.collected_data])
-
-        self._log("=" * 50)
-        self._log(f"수집 통계 (n={len(self.collected_data)})")
-        self._log("-" * 50)
-        self._log("위치 (mm):")
-        self._log(f"  X: 평균={tvec_x.mean()*1000:.3f}, 표준편차={tvec_x.std()*1000:.3f}")
-        self._log(f"  Y: 평균={tvec_y.mean()*1000:.3f}, 표준편차={tvec_y.std()*1000:.3f}")
-        self._log(f"  Z: 평균={tvec_z.mean()*1000:.3f}, 표준편차={tvec_z.std()*1000:.3f}")
-        self._log("-" * 50)
-        self._log("회전 (deg):")
-        self._log(f"  Rx: 평균={euler_rx.mean():.3f}, 표준편차={euler_rx.std():.3f}")
-        self._log(f"  Ry: 평균={euler_ry.mean():.3f}, 표준편차={euler_ry.std():.3f}")
-        self._log(f"  Rz: 평균={euler_rz.mean():.3f}, 표준편차={euler_rz.std():.3f}")
-        self._log("=" * 50)
+            self.btnSaveCollect.setEnabled(count > 0)
 
     def _on_save_collect(self):
-        """수집된 데이터를 CSV로 저장"""
-        if len(self.collected_data) == 0:
+        """수집된 데이터를 CSV로 저장 (DataCollector 위임)"""
+        if self.data_collector.collected_count == 0:
             QMessageBox.warning(self, "경고", "저장할 데이터가 없습니다.")
             return
 
         # 파일 저장 다이얼로그
-        default_name = f"aruco_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        default_name = self.data_collector.get_default_filename()
         filepath, _ = QFileDialog.getSaveFileName(
             self, "데이터 저장", default_name, "CSV Files (*.csv)"
         )
@@ -1303,20 +1112,10 @@ class MainWindow(QMainWindow):
         if not filepath:
             return
 
-        try:
-            import csv
-
-            with open(filepath, 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=self.collected_data[0].keys())
-                writer.writeheader()
-                writer.writerows(self.collected_data)
-
-            self._log(f"데이터 저장 완료: {filepath}")
+        if self.data_collector.save_to_csv(filepath):
             QMessageBox.information(self, "완료", f"데이터가 저장되었습니다.\n{filepath}")
-
-        except Exception as e:
-            self._log(f"데이터 저장 실패: {e}")
-            QMessageBox.critical(self, "오류", f"저장 실패: {e}")
+        else:
+            QMessageBox.critical(self, "오류", "저장 실패")
 
     # ==================== 실행 모니터 ====================
 
