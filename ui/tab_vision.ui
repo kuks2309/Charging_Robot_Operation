@@ -1,0 +1,639 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabVision</class>
+ <widget class="QWidget" name="TabVision">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutVision">
+
+   <!-- Left: Camera Stream -->
+   <item>
+    <widget class="QGroupBox" name="groupCameraStream">
+     <property name="title">
+      <string>Camera Stream</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutCamera">
+      <item>
+       <widget class="QLabel" name="labelCameraView">
+        <property name="minimumSize">
+         <size>
+          <width>640</width>
+          <height>480</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string>background-color: #333333; border: 1px solid #555555;</string>
+        </property>
+        <property name="text">
+         <string>카메라 미연결</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
+        <item>
+         <widget class="QPushButton" name="btnStartCamera">
+          <property name="text">
+           <string>카메라 시작</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnStopCamera">
+          <property name="text">
+           <string>카메라 정지</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSnapshot">
+          <property name="text">
+           <string>스냅샷 저장</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutGamma">
+        <item>
+         <widget class="QLabel" name="labelGamma">
+          <property name="text">
+           <string>감마 보정:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSlider" name="sliderGamma">
+          <property name="minimum">
+           <number>50</number>
+          </property>
+          <property name="maximum">
+           <number>200</number>
+          </property>
+          <property name="value">
+           <number>100</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelGammaValue">
+          <property name="text">
+           <string>1.0</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>40</width>
+            <height>0</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutOverlay">
+        <item>
+         <widget class="QCheckBox" name="checkShowPoseAxes">
+          <property name="text">
+           <string>포즈 축 표시</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkShowBoundingBox">
+          <property name="text">
+           <string>바운딩 박스</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkShowKeypoints">
+          <property name="text">
+           <string>키포인트</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Right: Detection Info -->
+   <item>
+    <widget class="QGroupBox" name="groupDetectionInfo">
+     <property name="title">
+      <string>Detection Info</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>350</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutDetection">
+      <!-- Vision Processor Selection -->
+      <item>
+       <widget class="QGroupBox" name="groupVisionProcessor">
+        <property name="title">
+         <string>Vision Processor</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutVP">
+         <item>
+          <widget class="QRadioButton" name="radioProcessorGun">
+           <property name="text">
+            <string>Gun (충전건)</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="radioProcessorPort">
+           <property name="text">
+            <string>Port (충전 포트)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="radioProcessorStandard">
+           <property name="text">
+            <string>Standard (차량 충전포트)</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Detection Result -->
+      <item>
+       <widget class="QGroupBox" name="groupDetectionResult">
+        <property name="title">
+         <string>감지 결과</string>
+        </property>
+        <layout class="QFormLayout" name="formLayoutDetection">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelArUcoID">
+           <property name="text">
+            <string>ArUco ID:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="labelArUcoIDValue">
+           <property name="text">
+            <string>-</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelConfidence">
+           <property name="text">
+            <string>신뢰도:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QProgressBar" name="progressConfidence">
+           <property name="value">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelConvergence">
+           <property name="text">
+            <string>수렴률:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QProgressBar" name="progressConvergence">
+           <property name="value">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Pose in Camera -->
+      <item>
+       <widget class="QGroupBox" name="groupPoseCamera">
+        <property name="title">
+         <string>Pose (Camera 좌표)</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutPoseCamera">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelCamX">
+           <property name="text">
+            <string>X:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="editCamX">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="labelCamRx">
+           <property name="text">
+            <string>Rx:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLineEdit" name="editCamRx">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelCamY">
+           <property name="text">
+            <string>Y:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="editCamY">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="labelCamRy">
+           <property name="text">
+            <string>Ry:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLineEdit" name="editCamRy">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelCamZ">
+           <property name="text">
+            <string>Z:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="editCamZ">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="labelCamRz">
+           <property name="text">
+            <string>Rz:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QLineEdit" name="editCamRz">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Pose in World -->
+      <item>
+       <widget class="QGroupBox" name="groupPoseWorld">
+        <property name="title">
+         <string>Pose (World 좌표)</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutPoseWorld">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelWorldX">
+           <property name="text">
+            <string>X:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="editWorldX">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="labelWorldRx">
+           <property name="text">
+            <string>Rx:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLineEdit" name="editWorldRx">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelWorldY">
+           <property name="text">
+            <string>Y:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="editWorldY">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="labelWorldRy">
+           <property name="text">
+            <string>Ry:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLineEdit" name="editWorldRy">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelWorldZ">
+           <property name="text">
+            <string>Z:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="editWorldZ">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="labelWorldRz">
+           <property name="text">
+            <string>Rz:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QLineEdit" name="editWorldRz">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Aruco 정렬 테스트 -->
+      <item>
+       <widget class="QGroupBox" name="groupArucoAlignment">
+        <property name="title">
+         <string>Aruco 정렬 테스트</string>
+        </property>
+        <layout class="QVBoxLayout" name="layoutArucoAlignment">
+         <item>
+          <layout class="QHBoxLayout">
+           <item>
+            <widget class="QLabel" name="labelTargetTagId">
+             <property name="text">
+              <string>Tag ID:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="spinTargetTagId">
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>255</number>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelNumSamples">
+             <property name="text">
+              <string>샘플 수:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="spinNumSamples">
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>100</number>
+             </property>
+             <property name="value">
+              <number>10</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout">
+           <item>
+            <widget class="QPushButton" name="btnAlignCenter">
+             <property name="text">
+              <string>중심 정렬</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnAlignPose">
+             <property name="text">
+              <string>자세 정렬</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnAlignFull">
+             <property name="text">
+              <string>전체 정렬</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout">
+           <item>
+            <widget class="QLabel" name="labelAlignStatus">
+             <property name="text">
+              <string>상태: 대기</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 데이터 수집 -->
+      <item>
+       <widget class="QGroupBox" name="groupDataCollection">
+        <property name="title">
+         <string>데이터 수집 (노이즈 분석용)</string>
+        </property>
+        <layout class="QVBoxLayout" name="layoutDataCollection">
+         <item>
+          <layout class="QHBoxLayout">
+           <item>
+            <widget class="QLabel" name="labelCollectTagId">
+             <property name="text">
+              <string>Tag ID:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="spinCollectTagId">
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>255</number>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelCollectCount">
+             <property name="text">
+              <string>수집 횟수:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="spinCollectCount">
+             <property name="minimum">
+              <number>10</number>
+             </property>
+             <property name="maximum">
+              <number>1000</number>
+             </property>
+             <property name="value">
+              <number>100</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout">
+           <item>
+            <widget class="QPushButton" name="btnStartCollect">
+             <property name="text">
+              <string>수집 시작</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStopCollect">
+             <property name="text">
+              <string>수집 중지</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnSaveCollect">
+             <property name="text">
+              <string>CSV 저장</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout">
+           <item>
+            <widget class="QLabel" name="labelCollectStatus">
+             <property name="text">
+              <string>수집: 0 / 100</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QProgressBar" name="progressCollect">
+             <property name="value">
+              <number>0</number>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="verticalSpacerVision">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,632 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabCalibration</class>
+ <widget class="QWidget" name="TabCalibration">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutCalibration">
+   <!-- Left: Camera Stream + Sub Tabs -->
+   <item>
+    <widget class="QWidget" name="widgetLeft">
+     <layout class="QVBoxLayout" name="verticalLayoutLeft">
+      <!-- Camera View -->
+      <item>
+       <widget class="QGroupBox" name="groupCalibCameraStream">
+        <property name="title">
+         <string>Camera Stream</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutCalibCamera">
+         <item>
+          <widget class="QLabel" name="labelCalibCameraView">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>640</width>
+             <height>480</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string>background-color: #333333; border: 1px solid #555555;</string>
+           </property>
+           <property name="text">
+            <string>카메라 미연결</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutCalibCameraButtons">
+           <item>
+            <widget class="QPushButton" name="btnCalibStartCamera">
+             <property name="text">
+              <string>카메라 시작</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnCalibStopCamera">
+             <property name="text">
+              <string>카메라 정지</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnCalibSnapshot">
+             <property name="text">
+              <string>스냅샷 저장</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <!-- Sub Tab Widget -->
+      <item>
+       <widget class="QTabWidget" name="tabWidgetCalibSub">
+        <property name="currentIndex">
+         <number>0</number>
+        </property>
+        <!-- Chessboard Tab -->
+        <widget class="QWidget" name="tabChessboard">
+         <attribute name="title">
+          <string>Chessboard</string>
+         </attribute>
+         <layout class="QVBoxLayout" name="verticalLayoutChessboardTab">
+          <!-- Chessboard Settings -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutChessboardSettings">
+            <item>
+             <widget class="QCheckBox" name="checkChessboardDetect">
+              <property name="text">
+               <string>감지</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardCols">
+              <property name="text">
+               <string>가로:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinChessboardCols">
+              <property name="minimum">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardRows">
+              <property name="text">
+               <string>세로:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinChessboardRows">
+              <property name="minimum">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="value">
+               <number>7</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelSquareSize">
+              <property name="text">
+               <string>크기(mm):</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="spinSquareSize">
+              <property name="minimum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>100.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.500000000000000</double>
+              </property>
+              <property name="value">
+               <double>25.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerChessboard">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnFindChessboardPose">
+              <property name="text">
+               <string>Find Pose</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Chessboard Pose Result -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutChessboardPose">
+            <item>
+             <widget class="QLabel" name="labelChessboardCenter">
+              <property name="text">
+               <string>중심:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardCenterValue">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardAngle">
+              <property name="text">
+               <string>각도:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardAngleValue">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerPose">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Calibration Image Capture -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutCalibCapture">
+            <item>
+             <widget class="QLabel" name="labelCapturedImages">
+              <property name="text">
+               <string>캡처된 이미지:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCapturedCount">
+              <property name="text">
+               <string>0</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold; color: #0066cc;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerCaptureCount">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCaptureCalibImage">
+              <property name="text">
+               <string>이미지 캡처</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnClearCalibImages">
+              <property name="text">
+               <string>초기화</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRunCalibration">
+              <property name="text">
+               <string>캘리브레이션 실행</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Chessboard Robot Align -->
+          <item>
+           <widget class="QGroupBox" name="groupChessboardAlign">
+            <property name="title">
+             <string>Chessboard Robot Align</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayoutChessboardAlign">
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayoutAlignButtons">
+               <item>
+                <widget class="QPushButton" name="btnAlignCenter">
+                 <property name="text">
+                  <string>중심 정렬</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnAlignAngle">
+                 <property name="text">
+                  <string>각도 정렬</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnAlignBoth">
+                 <property name="text">
+                  <string>전체 정렬</string>
+                 </property>
+                 <property name="styleSheet">
+                  <string>background-color: #9C27B0; color: white;</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacerAlign">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <!-- Auto Calibration Tab -->
+        <widget class="QWidget" name="tabAutoCalib">
+         <attribute name="title">
+          <string>자동 캘리브레이션</string>
+         </attribute>
+         <layout class="QHBoxLayout" name="horizontalLayoutAutoCalibTab">
+          <item>
+           <widget class="QLabel" name="labelNumPositions">
+            <property name="text">
+             <string>위치 수:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSpinBox" name="spinNumPositions">
+            <property name="minimum">
+             <number>5</number>
+            </property>
+            <property name="maximum">
+             <number>30</number>
+            </property>
+            <property name="value">
+             <number>10</number>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnStartAutoCalib">
+            <property name="text">
+             <string>시작</string>
+            </property>
+            <property name="styleSheet">
+             <string>background-color: #2196F3; color: white;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnStopAutoCalib">
+            <property name="text">
+             <string>중지</string>
+            </property>
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelAutoCalibStatus">
+            <property name="text">
+             <string>상태: 대기</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerAutoCalib">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- Right: Robot Position + Calibration Result -->
+   <item>
+    <widget class="QGroupBox" name="groupCalibControls">
+     <property name="title">
+      <string>캘리브레이션</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>300</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutCalibControls">
+      <!-- Robot Position -->
+      <item>
+       <widget class="QGroupBox" name="groupRobotPosition">
+        <property name="title">
+         <string>로봇 좌표</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutRobotPos">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelCalibX">
+           <property name="text">
+            <string>X:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="editCalibX">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight</set>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="labelCalibRx">
+           <property name="text">
+            <string>Rx:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLineEdit" name="editCalibRx">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight</set>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelCalibY">
+           <property name="text">
+            <string>Y:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="editCalibY">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight</set>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="labelCalibRy">
+           <property name="text">
+            <string>Ry:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLineEdit" name="editCalibRy">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight</set>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelCalibZ">
+           <property name="text">
+            <string>Z:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="editCalibZ">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight</set>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="labelCalibRz">
+           <property name="text">
+            <string>Rz:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QLineEdit" name="editCalibRz">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <!-- Calibration Result -->
+      <item>
+       <widget class="QGroupBox" name="groupCalibResult">
+        <property name="title">
+         <string>캘리브레이션 결과</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutCalibResult">
+         <item>
+          <layout class="QFormLayout" name="formLayoutCalibResult">
+           <item row="0" column="0">
+            <widget class="QLabel" name="labelRMSError">
+             <property name="text">
+              <string>RMS 오차:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="labelRMSErrorValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="labelFx">
+             <property name="text">
+              <string>fx:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLabel" name="labelFxValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="labelFy">
+             <property name="text">
+              <string>fy:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLabel" name="labelFyValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="labelCx">
+             <property name="text">
+              <string>cx:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLabel" name="labelCxValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="labelCy">
+             <property name="text">
+              <string>cy:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLabel" name="labelCyValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnSaveCalibration">
+           <property name="text">
+            <string>캘리브레이션 저장</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnLoadCalibration">
+           <property name="text">
+            <string>캘리브레이션 로드</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacerCalib">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

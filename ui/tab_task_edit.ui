@@ -1,0 +1,644 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabTaskEdit</class>
+ <widget class="QWidget" name="TabTaskEdit">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutTask">
+
+   <!-- Column 1: Task Sequence -->
+   <item>
+    <widget class="QGroupBox" name="groupTaskSequence">
+     <property name="title">
+      <string>Task Sequence</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>280</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutSequence">
+      <item>
+       <widget class="QListWidget" name="listTaskSequence">
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutSeqButtons">
+        <item>
+         <widget class="QPushButton" name="btnMoveUp">
+          <property name="text">
+           <string>▲</string>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>40</width>
+            <height>16777215</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnMoveDown">
+          <property name="text">
+           <string>▼</string>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>40</width>
+            <height>16777215</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnDeleteTask">
+          <property name="text">
+           <string>삭제</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Column 2: Available Tasks -->
+   <item>
+    <widget class="QGroupBox" name="groupAvailableTasks">
+     <property name="title">
+      <string>Available Tasks</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>280</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutAvailable">
+      <item>
+       <widget class="QTreeWidget" name="treeAvailableTasks">
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <column>
+         <property name="text">
+          <string>Task</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnAddTask">
+        <property name="text">
+         <string>← Sequence에 추가</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Column 3: Task Parameters -->
+   <item>
+    <widget class="QGroupBox" name="groupTaskParams">
+     <property name="title">
+      <string>Task Parameters</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>300</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutParams">
+      <item>
+       <widget class="QLabel" name="labelSelectedTask">
+        <property name="text">
+         <string>선택된 Task 없음</string>
+        </property>
+        <property name="font">
+         <font>
+          <weight>75</weight>
+          <bold>true</bold>
+         </font>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelTaskType">
+        <property name="text">
+         <string></string>
+        </property>
+        <property name="styleSheet">
+         <string>color: gray;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="line">
+        <property name="frameShape">
+         <enum>QFrame::HLine</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Sunken</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QScrollArea" name="scrollAreaParams">
+        <property name="widgetResizable">
+         <bool>true</bool>
+        </property>
+        <widget class="QWidget" name="scrollAreaWidgetContents">
+         <property name="geometry">
+          <rect>
+           <x>0</x>
+           <y>0</y>
+           <width>278</width>
+           <height>400</height>
+          </rect>
+         </property>
+         <layout class="QFormLayout" name="formLayoutParams">
+         </layout>
+        </widget>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutParamButtons">
+        <item>
+         <widget class="QPushButton" name="btnApplyParams">
+          <property name="text">
+           <string>파라미터 적용</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnTeachPosition">
+          <property name="text">
+           <string>현재위치 입력</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Column 4: Robot Status -->
+   <item>
+    <widget class="QGroupBox" name="groupRobotStatus">
+     <property name="title">
+      <string>Robot Status</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>280</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutRobot">
+      <!-- Network Info -->
+      <item>
+       <widget class="QGroupBox" name="groupNetwork">
+        <property name="title">
+         <string>Network</string>
+        </property>
+        <layout class="QFormLayout" name="formLayoutNetwork">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelPCIP">
+           <property name="text">
+            <string>PC IP:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QComboBox" name="comboPCIP">
+           <property name="minimumSize">
+            <size>
+             <width>150</width>
+             <height>0</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelRobotIP">
+           <property name="text">
+            <string>Robot IP:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <layout class="QHBoxLayout" name="horizontalLayoutIP">
+           <item>
+            <widget class="QLineEdit" name="editRobotIP">
+             <property name="text">
+              <string>192.168.0.29</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnConnect">
+             <property name="text">
+              <string>연결</string>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>60</width>
+               <height>16777215</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelModbusPort">
+           <property name="text">
+            <string>Port:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QSpinBox" name="spinModbusPort">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+           <property name="value">
+            <number>1502</number>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="labelConnectionStatus">
+           <property name="text">
+            <string>상태:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLabel" name="labelConnectionStatusValue">
+           <property name="text">
+            <string>연결 안됨</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: red;</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Joint Position -->
+      <item>
+       <widget class="QGroupBox" name="groupJointPosition">
+        <property name="title">
+         <string>Joint Position (deg)</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutJoint">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelJ1">
+           <property name="text">
+            <string>J1:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="editJ1">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="labelJ2">
+           <property name="text">
+            <string>J2:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLineEdit" name="editJ2">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelJ3">
+           <property name="text">
+            <string>J3:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="editJ3">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="labelJ4">
+           <property name="text">
+            <string>J4:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLineEdit" name="editJ4">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelJ5">
+           <property name="text">
+            <string>J5:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="editJ5">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="labelJ6">
+           <property name="text">
+            <string>J6:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QLineEdit" name="editJ6">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- TCP Position -->
+      <item>
+       <widget class="QGroupBox" name="groupTCPPosition">
+        <property name="title">
+         <string>TCP Position</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutTCP">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelX">
+           <property name="text">
+            <string>X:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="editX">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="labelUnitX">
+           <property name="text">
+            <string>mm</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLabel" name="labelRx">
+           <property name="text">
+            <string>Rx:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="4">
+          <widget class="QLineEdit" name="editRx">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="5">
+          <widget class="QLabel" name="labelUnitRx">
+           <property name="text">
+            <string>°</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelY">
+           <property name="text">
+            <string>Y:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="editY">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="labelUnitY">
+           <property name="text">
+            <string>mm</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLabel" name="labelRy">
+           <property name="text">
+            <string>Ry:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="4">
+          <widget class="QLineEdit" name="editRy">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="5">
+          <widget class="QLabel" name="labelUnitRy">
+           <property name="text">
+            <string>°</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelZ">
+           <property name="text">
+            <string>Z:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="editZ">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="labelUnitZ">
+           <property name="text">
+            <string>mm</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QLabel" name="labelRz">
+           <property name="text">
+            <string>Rz:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="4">
+          <widget class="QLineEdit" name="editRz">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="5">
+          <widget class="QLabel" name="labelUnitRz">
+           <property name="text">
+            <string>°</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Control Buttons -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutHomeButtons">
+        <item>
+         <widget class="QPushButton" name="btnGoHome">
+          <property name="text">
+           <string>HOME 이동</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSetHome">
+          <property name="text">
+           <string>현재위치→HOME</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Saved Poses -->
+      <item>
+       <widget class="QGroupBox" name="groupSavedPoses">
+        <property name="title">
+         <string>Saved Poses</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutSavedPoses">
+         <item>
+          <widget class="QListWidget" name="listSavedPoses">
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>150</height>
+            </size>
+           </property>
+           <property name="alternatingRowColors">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QGridLayout" name="gridLayoutPoseButtons">
+           <item row="0" column="0">
+            <widget class="QPushButton" name="btnSavePose">
+             <property name="text">
+              <string>현재위치 저장</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QPushButton" name="btnDeletePose">
+             <property name="text">
+              <string>삭제</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QPushButton" name="btnMoveToPose">
+             <property name="text">
+              <string>선택위치 이동</string>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: #4CAF50; color: white;</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QPushButton" name="btnApproachPose">
+             <property name="text">
+              <string>어프로치</string>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: #2196F3; color: white;</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="verticalSpacerRobot">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

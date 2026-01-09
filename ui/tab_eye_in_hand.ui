@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabEyeInHand</class>
+ <widget class="QWidget" name="TabEyeInHand">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutEyeInHand">
+   <!-- Left: Camera Stream -->
+   <item>
+    <widget class="QGroupBox" name="groupEyeInHandCameraStream">
+     <property name="title">
+      <string>Camera Stream</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutEyeInHandCamera">
+      <item>
+       <widget class="QLabel" name="labelEyeInHandCameraView">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>640</width>
+          <height>480</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string>background-color: #333333; border: 1px solid #555555;</string>
+        </property>
+        <property name="text">
+         <string>카메라 미연결</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutEyeInHandCameraButtons">
+        <item>
+         <widget class="QPushButton" name="btnEyeInHandStartCamera">
+          <property name="text">
+           <string>카메라 시작</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnEyeInHandStopCamera">
+          <property name="text">
+           <string>카메라 정지</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnEyeInHandSnapshot">
+          <property name="text">
+           <string>스냅샷 저장</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- Right: Eye in Hand Controls -->
+   <item>
+    <widget class="QGroupBox" name="groupEyeInHandControls">
+     <property name="title">
+      <string>Eye in Hand 컨트롤</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>350</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutEyeInHandControls">
+      <item>
+       <widget class="QLabel" name="labelEyeInHandPlaceholder">
+        <property name="text">
+         <string>Eye in Hand 컨트롤 (추후 구현 예정)</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacerEyeInHand">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

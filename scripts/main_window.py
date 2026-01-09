@@ -4,29 +4,22 @@ Charging Robot Task Manager - Main Window
 """
 
 import os
-import sys
-import socket
-import netifaces
 from datetime import datetime
 import numpy as np
-import cv2
 from PyQt5 import uic
 from PyQt5.QtWidgets import (
-    QMainWindow, QMessageBox, QFileDialog, QTreeWidgetItem,
-    QListWidgetItem, QDoubleSpinBox, QSpinBox, QCheckBox,
-    QLineEdit, QComboBox, QLabel, QFormLayout, QWidget,
-    QTableWidgetItem
+    QMainWindow, QMessageBox, QFileDialog, QTableWidgetItem
 )
-from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtCore import QTimer
 
-from Robot import ModbusClient, RobotController, PoseManager, PoseType
-from Sensor import ArucoCameraPoseEstimator
+from Robot import ModbusClient, RobotController, PoseManager
 from services import CameraManager, VisionManager, AlignmentService, DataCollector, PoseService
 from job_types import JOB_TYPES
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabEyeInHand
 
 # UI 파일 경로
-UI_FILE = os.path.join(os.path.dirname(__file__), '..', 'ui', 'main_window.ui')
+UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
+UI_FILE = os.path.join(UI_DIR, 'main_window.ui')
 
 
 class MainWindow(QMainWindow):
@@ -44,7 +37,7 @@ class MainWindow(QMainWindow):
         # 로봇 Modbus 클라이언트
         self.robot: ModbusClient = None
 
-        # 로봇 컨트롤러 및 포즈 매니저
+        # 로봇 컨트롤러 및 포즈 매니저 (탭 로드 전에 초기화)
         self.pose_manager = PoseManager()
         self.robot_controller: RobotController = None
 
@@ -52,8 +45,8 @@ class MainWindow(QMainWindow):
         self.task_sequence = []
         self.current_task_index = -1
 
-        # 파라미터 위젯 저장
-        self.param_widgets = {}
+        # 분리된 탭 클래스 로드 및 추가
+        self._load_separated_tabs()
 
         # 카메라 매니저 초기화
         self.camera_manager = CameraManager()
@@ -81,104 +74,18 @@ class MainWindow(QMainWindow):
         self.pose_service.pose_list_changed.connect(self._refresh_saved_poses_list)
 
         # 초기화
-        self._init_available_tasks()
-        self._init_saved_poses_list()
         self._connect_signals()
         self._init_status()
 
         # 타이머 설정
         self._setup_timers()
 
-    def _init_available_tasks(self):
-        """Available Tasks 트리 초기화"""
-        self.treeAvailableTasks.clear()
-
-        # 카테고리별로 그룹화
-        categories = {}
-        for job_type, info in self.JOB_TYPES.items():
-            category = info['category']
-            if category not in categories:
-                categories[category] = []
-            categories[category].append((job_type, info['name']))
-
-        # 트리에 추가
-        for category, jobs in categories.items():
-            category_item = QTreeWidgetItem([category])
-            category_item.setFlags(category_item.flags() & ~Qt.ItemIsSelectable)
-
-            for job_type, job_name in jobs:
-                job_item = QTreeWidgetItem([job_name])
-                job_item.setData(0, Qt.UserRole, job_type)
-                category_item.addChild(job_item)
-
-            self.treeAvailableTasks.addTopLevelItem(category_item)
-
-        # 모든 카테고리 펼치기
-        self.treeAvailableTasks.expandAll()
-
-    def _init_saved_poses_list(self):
-        """저장된 포즈 리스트 초기화"""
-        self._refresh_saved_poses_list()
-
     def _refresh_saved_poses_list(self):
-        """저장된 포즈 리스트 갱신"""
-        if not hasattr(self, 'listSavedPoses'):
-            return
-
-        self.listSavedPoses.clear()
-        for name in self.pose_manager.get_all_names():
-            saved_pose = self.pose_manager.get_pose(name)
-            if saved_pose:
-                pose = saved_pose.pose
-                item_text = f"{name} ({saved_pose.pose_type})"
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.UserRole, name)
-                item.setToolTip(
-                    f"X: {pose.x:.2f}, Y: {pose.y:.2f}, Z: {pose.z:.2f}\n"
-                    f"Rx: {pose.rx:.2f}, Ry: {pose.ry:.2f}, Rz: {pose.rz:.2f}\n"
-                    f"{saved_pose.description}"
-                )
-                self.listSavedPoses.addItem(item)
+        """저장된 포즈 리스트 갱신 (PoseService 시그널 핸들러)"""
+        self.tabTaskEdit.refresh_poses()
 
     def _connect_signals(self):
-        """시그널-슬롯 연결"""
-        # Task 편집 탭
-        self.btnAddTask.clicked.connect(self._on_add_task)
-        self.btnDeleteTask.clicked.connect(self._on_delete_task)
-        self.btnMoveUp.clicked.connect(self._on_move_up)
-        self.btnMoveDown.clicked.connect(self._on_move_down)
-        self.listTaskSequence.currentRowChanged.connect(self._on_task_selected)
-        self.treeAvailableTasks.itemDoubleClicked.connect(self._on_add_task)
-        self.btnApplyParams.clicked.connect(self._on_apply_params)
-        self.btnTeachPosition.clicked.connect(self._on_teach_position)
-
-        # 로봇 연결
-        self.btnConnect.clicked.connect(self._on_connect)
-        self.btnGoHome.clicked.connect(self._on_go_home)
-        self.btnSetHome.clicked.connect(self._on_set_home)
-
-        # 비전 탭
-        self.btnStartCamera.clicked.connect(self._on_start_camera)
-        self.btnStopCamera.clicked.connect(self._on_stop_camera)
-        self.btnSnapshot.clicked.connect(self._on_snapshot)
-        self.sliderGamma.valueChanged.connect(self._on_gamma_changed)
-
-        # Aruco 정렬 테스트 버튼
-        if hasattr(self, 'btnAlignCenter'):
-            self.btnAlignCenter.clicked.connect(self._on_align_center)
-        if hasattr(self, 'btnAlignPose'):
-            self.btnAlignPose.clicked.connect(self._on_align_pose)
-        if hasattr(self, 'btnAlignFull'):
-            self.btnAlignFull.clicked.connect(self._on_align_full)
-
-        # 데이터 수집 버튼
-        if hasattr(self, 'btnStartCollect'):
-            self.btnStartCollect.clicked.connect(self._on_start_collect)
-        if hasattr(self, 'btnStopCollect'):
-            self.btnStopCollect.clicked.connect(self._on_stop_collect)
-        if hasattr(self, 'btnSaveCollect'):
-            self.btnSaveCollect.clicked.connect(self._on_save_collect)
-
+        """시그널-슬롯 연결 (메인윈도우 UI 위젯들만)"""
         # 실행 모니터 탭
         self.btnRun.clicked.connect(self._on_run)
         self.btnPause.clicked.connect(self._on_pause)
@@ -201,18 +108,6 @@ class MainWindow(QMainWindow):
         self.btnNewCalib.clicked.connect(self._on_new_calibration)
         self.btnClearDebugLog.clicked.connect(self._on_clear_debug_log)
 
-        # 포즈 저장/이동 (Task 편집 탭)
-        if hasattr(self, 'btnSavePose'):
-            self.btnSavePose.clicked.connect(self._on_save_current_pose)
-        if hasattr(self, 'btnDeletePose'):
-            self.btnDeletePose.clicked.connect(self._on_delete_pose)
-        if hasattr(self, 'btnMoveToPose'):
-            self.btnMoveToPose.clicked.connect(self._on_move_to_saved_pose)
-        if hasattr(self, 'btnApproachPose'):
-            self.btnApproachPose.clicked.connect(self._on_approach_pose)
-        if hasattr(self, 'listSavedPoses'):
-            self.listSavedPoses.itemDoubleClicked.connect(self._on_move_to_saved_pose)
-
         # 메뉴 액션
         self.actionNew.triggered.connect(self._on_new_recipe)
         self.actionOpen.triggered.connect(self._on_open_recipe)
@@ -227,84 +122,69 @@ class MainWindow(QMainWindow):
         self.actionEmergencyStop.triggered.connect(self._on_emergency_stop)
         self.actionAbout.triggered.connect(self._on_about)
 
+    def _load_separated_tabs(self):
+        """분리된 탭 클래스들을 인스턴스화하여 탭위젯에 추가"""
+        # Task 편집 탭 (인덱스 0에 삽입)
+        self.tabTaskEdit = TabTaskEdit(JOB_TYPES, self.pose_manager, self)
+        self.tabWidget.insertTab(0, self.tabTaskEdit, "Task 편집")
+
+        # 비전 탭 (인덱스 1에 삽입)
+        self.tabVision = TabVision(self)
+        self.tabWidget.insertTab(1, self.tabVision, "비전")
+
+        # 카메라 캘리브레이션 탭 (인덱스 2에 삽입)
+        self.tabCalibration = TabCalibration(self)
+        self.tabWidget.insertTab(2, self.tabCalibration, "카메라 캘리브레이션")
+
+        # Eye in Hand 탭 (인덱스 3에 삽입)
+        self.tabEyeInHand = TabEyeInHand(self)
+        self.tabWidget.insertTab(3, self.tabEyeInHand, "Eye in Hand")
+
+        # 탭 시그널 연결
+        self._connect_tab_signals()
+
+        # 첫 번째 탭 선택
+        self.tabWidget.setCurrentIndex(0)
+
+    def _connect_tab_signals(self):
+        """탭 클래스들의 시그널을 메인윈도우 슬롯에 연결"""
+        # Task 편집 탭 시그널
+        self.tabTaskEdit.log_message.connect(self._log)
+        self.tabTaskEdit.connect_requested.connect(self._on_connect_from_tab)
+        self.tabTaskEdit.go_home_requested.connect(self._on_go_home)
+        self.tabTaskEdit.set_home_requested.connect(self._on_set_home)
+        self.tabTaskEdit.save_pose_requested.connect(self._on_save_pose_from_tab)
+        self.tabTaskEdit.delete_pose_requested.connect(self._on_delete_pose_from_tab)
+        self.tabTaskEdit.move_to_pose_requested.connect(self._on_move_to_pose_from_tab)
+        self.tabTaskEdit.approach_pose_requested.connect(self._on_approach_pose_from_tab)
+        self.tabTaskEdit.task_sequence_changed.connect(self._on_task_sequence_changed)
+
+        # 비전 탭 시그널
+        self.tabVision.log_message.connect(self._log)
+        self.tabVision.camera_start_requested.connect(self._on_start_camera)
+        self.tabVision.camera_stop_requested.connect(self._on_stop_camera)
+        self.tabVision.gamma_changed.connect(self._on_gamma_changed_from_tab)
+        self.tabVision.align_center_requested.connect(self._on_align_center_from_tab)
+        self.tabVision.align_pose_requested.connect(self._on_align_pose_from_tab)
+        self.tabVision.align_full_requested.connect(self._on_align_full_from_tab)
+        self.tabVision.collect_start_requested.connect(self._on_start_collect_from_tab)
+        self.tabVision.collect_stop_requested.connect(self._on_stop_collect)
+        self.tabVision.collect_save_requested.connect(self._on_save_collect)
+
+        # 캘리브레이션 탭 시그널
+        self.tabCalibration.log_message.connect(self._log)
+        self.tabCalibration.camera_start_requested.connect(self._on_start_camera)
+        self.tabCalibration.camera_stop_requested.connect(self._on_stop_camera)
+
+        # Eye in Hand 탭 시그널
+        self.tabEyeInHand.log_message.connect(self._log)
+        self.tabEyeInHand.camera_start_requested.connect(self._on_start_camera)
+        self.tabEyeInHand.camera_stop_requested.connect(self._on_stop_camera)
+
     def _init_status(self):
         """상태 초기화"""
         self.statusbar.showMessage("준비됨")
         self._log("Charging Robot Task Manager 시작")
-
-        # PC IP 콤보박스 초기화
-        self._init_pc_ip_combo()
-
-    def _init_pc_ip_combo(self):
-        """PC 네트워크 인터페이스 목록으로 콤보박스 초기화"""
-        if not hasattr(self, 'comboPCIP'):
-            return
-
-        self.comboPCIP.clear()
-        interfaces = self._get_network_interfaces()
-
-        for iface_name, ip_addr in interfaces:
-            self.comboPCIP.addItem(f"{ip_addr} ({iface_name})", ip_addr)
-
-        # 192.168.0.x 대역 자동 선택
-        for i in range(self.comboPCIP.count()):
-            ip = self.comboPCIP.itemData(i)
-            if ip and ip.startswith("192.168.0."):
-                self.comboPCIP.setCurrentIndex(i)
-                break
-
-        selected_ip = self.comboPCIP.currentData() or "Unknown"
-        self._log(f"PC IP: {selected_ip}")
-
-        # 설정 탭의 레이블도 업데이트
-        if hasattr(self, 'labelPCIPValue'):
-            self.labelPCIPValue.setText(selected_ip)
-
-        # 콤보박스 변경 시 설정 탭 레이블 동기화
-        self.comboPCIP.currentIndexChanged.connect(self._on_pc_ip_changed)
-
-    def _on_pc_ip_changed(self, index):
-        """PC IP 콤보박스 변경 시"""
-        ip = self.comboPCIP.currentData()
-        if hasattr(self, 'labelPCIPValue') and ip:
-            self.labelPCIPValue.setText(ip)
-        self._log(f"PC IP 변경: {ip}")
-
-    def _get_network_interfaces(self) -> list:
-        """모든 네트워크 인터페이스와 IP 주소 목록 반환"""
-        result = []
-        try:
-            for iface in netifaces.interfaces():
-                addrs = netifaces.ifaddresses(iface)
-                if netifaces.AF_INET in addrs:
-                    for addr_info in addrs[netifaces.AF_INET]:
-                        ip = addr_info.get('addr')
-                        if ip and ip != '127.0.0.1':
-                            result.append((iface, ip))
-        except Exception as e:
-            self._log(f"네트워크 인터페이스 조회 실패: {e}")
-
-        # 결과가 없으면 기본 방식으로 시도
-        if not result:
-            ip = self._get_pc_ip_fallback()
-            if ip != "Unknown":
-                result.append(("default", ip))
-
-        return result
-
-    def _get_pc_ip_fallback(self) -> str:
-        """PC의 IP 주소 가져오기 (fallback)"""
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            try:
-                return socket.gethostbyname(socket.gethostname())
-            except Exception:
-                return "Unknown"
 
     def _setup_timers(self):
         """타이머 설정"""
@@ -313,365 +193,19 @@ class MainWindow(QMainWindow):
         self.status_timer.timeout.connect(self._update_robot_status)
         # 연결 후 시작됨
 
-    # ==================== Task 편집 ====================
+    # ==================== 탭 시그널 핸들러 ====================
 
-    def _on_add_task(self):
-        """태스크 추가"""
-        current_item = self.treeAvailableTasks.currentItem()
-        if not current_item or not current_item.parent():
-            return
+    def _on_task_sequence_changed(self, sequence: list):
+        """태스크 시퀀스 변경 시 (TabTaskEdit 시그널 핸들러)"""
+        self.task_sequence = sequence
 
-        job_type = current_item.data(0, Qt.UserRole)
-        if job_type not in self.JOB_TYPES:
-            return
-
-        job_info = self.JOB_TYPES[job_type]
-
-        # 기본 파라미터로 태스크 생성
-        task = {
-            'id': len(self.task_sequence) + 1,
-            'type': job_type,
-            'name': job_info['name'],
-            'params': {k: v['default'] for k, v in job_info.get('params', {}).items()}
-        }
-
-        self.task_sequence.append(task)
-        self._refresh_task_list()
-        self._log(f"태스크 추가: {task['name']}")
-
-    def _on_delete_task(self):
-        """태스크 삭제"""
-        row = self.listTaskSequence.currentRow()
-        if row < 0:
-            return
-
-        task = self.task_sequence[row]
-        del self.task_sequence[row]
-        self._update_task_ids()
-        self._refresh_task_list()
-        self._log(f"태스크 삭제: {task['name']}")
-
-    def _on_move_up(self):
-        """태스크 위로 이동"""
-        row = self.listTaskSequence.currentRow()
-        if row <= 0:
-            return
-
-        self.task_sequence[row], self.task_sequence[row-1] = \
-            self.task_sequence[row-1], self.task_sequence[row]
-        self._update_task_ids()
-        self._refresh_task_list()
-        self.listTaskSequence.setCurrentRow(row - 1)
-
-    def _on_move_down(self):
-        """태스크 아래로 이동"""
-        row = self.listTaskSequence.currentRow()
-        if row < 0 or row >= len(self.task_sequence) - 1:
-            return
-
-        self.task_sequence[row], self.task_sequence[row+1] = \
-            self.task_sequence[row+1], self.task_sequence[row]
-        self._update_task_ids()
-        self._refresh_task_list()
-        self.listTaskSequence.setCurrentRow(row + 1)
-
-    def _on_task_selected(self, row):
-        """태스크 선택 시"""
-        if row < 0 or row >= len(self.task_sequence):
-            self.labelSelectedTask.setText("선택된 Task 없음")
-            self.labelTaskType.setText("")
-            self._clear_param_widgets()
-            return
-
-        task = self.task_sequence[row]
-        self.labelSelectedTask.setText(f"{task['id']}. {task['name']}")
-        self.labelTaskType.setText(f"Type: {task['type']}")
-
-        # 파라미터 위젯 생성
-        self._create_param_widgets(task)
-
-    def _create_param_widgets(self, task):
-        """파라미터 편집 위젯 생성"""
-        self._clear_param_widgets()
-
-        job_type = task['type']
-        if job_type not in self.JOB_TYPES:
-            return
-
-        job_info = self.JOB_TYPES[job_type]
-        params_def = job_info.get('params', {})
-
-        layout = self.formLayoutParams
-
-        # Task 이름 편집 필드 (맨 위에 추가)
-        name_label = QLabel("이름")
-        name_label.setStyleSheet("font-weight: bold;")
-        name_edit = QLineEdit()
-        name_edit.setText(task.get('name', ''))
-        name_edit.setPlaceholderText("Task 이름을 입력하세요")
-        layout.addRow(name_label, name_edit)
-        self.param_widgets['_task_name'] = name_edit
-
-        # 라벨 저장용 딕셔너리 (모드 변경 시 라벨 업데이트용)
-        self.param_labels = {}
-
-        # 현재 모드 확인 (절대/상대)
-        current_mode = task['params'].get('mode', '상대')
-
-        # 파라미터 위젯들
-        for param_name, param_info in params_def.items():
-            param_type = param_info['type']
-            default = param_info.get('default')
-            current_value = task['params'].get(param_name, default)
-            unit = param_info.get('unit', '')
-
-            # 모드에 따라 description 선택
-            if current_mode == '절대' and 'description_absolute' in param_info:
-                description = param_info.get('description_absolute', param_name)
-            else:
-                description = param_info.get('description', param_name)
-
-            label_text = description if description else param_name
-            if unit:
-                label_text += f" ({unit})"
-
-            label = QLabel(label_text)
-            self.param_labels[param_name] = (label, param_info)  # 라벨과 정보 저장
-
-            # 타입별 위젯 생성
-            if param_type == 'float':
-                widget = QDoubleSpinBox()
-                widget.setRange(-10000, 10000)
-                widget.setDecimals(2)
-                widget.setValue(current_value if current_value else 0.0)
-            elif param_type == 'int':
-                widget = QSpinBox()
-                min_val = param_info.get('min', -10000)
-                max_val = param_info.get('max', 10000)
-                step_val = param_info.get('step', 1)
-                widget.setRange(min_val, max_val)
-                widget.setSingleStep(step_val)
-                widget.setValue(current_value if current_value else param_info.get('default', 0))
-            elif param_type == 'bool':
-                widget = QCheckBox()
-                widget.setChecked(current_value if current_value else False)
-            elif param_type == 'pose_select':
-                # 저장된 포즈 선택 콤보박스
-                widget = QComboBox()
-                widget.addItem("(선택 안함)", "")
-                for pose_name in self.pose_manager.get_all_names():
-                    saved_pose = self.pose_manager.get_pose(pose_name)
-                    if saved_pose:
-                        widget.addItem(f"{pose_name} ({saved_pose.pose_type})", pose_name)
-                # 현재 값 선택
-                if current_value:
-                    idx = widget.findData(current_value)
-                    if idx >= 0:
-                        widget.setCurrentIndex(idx)
-            elif param_type == 'str' and 'options' in param_info:
-                widget = QComboBox()
-                widget.addItems(param_info['options'])
-                if current_value in param_info['options']:
-                    widget.setCurrentText(current_value)
-                # 모드 콤보박스인 경우 변경 시 라벨 업데이트 연결
-                if param_name == 'mode':
-                    widget.currentTextChanged.connect(self._on_mode_changed)
-            else:
-                widget = QLineEdit()
-                widget.setText(str(current_value) if current_value else '')
-
-            layout.addRow(label, widget)
-            self.param_widgets[param_name] = widget
-
-        # "현재 위치 읽기" 버튼 추가 (has_read_position 플래그가 있는 경우)
-        if job_info.get('has_read_position', False):
-            from PyQt5.QtWidgets import QPushButton
-            read_btn = QPushButton("현재 위치 읽기")
-            read_btn.clicked.connect(self._on_read_current_position)
-            layout.addRow("", read_btn)
-
-    def _on_mode_changed(self, mode: str):
-        """모드 변경 시 라벨 텍스트 업데이트"""
-        if not hasattr(self, 'param_labels'):
-            return
-
-        for param_name, (label, param_info) in self.param_labels.items():
-            if param_name == 'mode':
-                continue
-
-            unit = param_info.get('unit', '')
-
-            # 모드에 따라 description 선택
-            if mode == '절대' and 'description_absolute' in param_info:
-                description = param_info.get('description_absolute', param_name)
-            else:
-                description = param_info.get('description', param_name)
-
-            label_text = description if description else param_name
-            if unit:
-                label_text += f" ({unit})"
-
-            label.setText(label_text)
-
-    def _on_read_current_position(self):
-        """로봇의 현재 위치를 읽어서 파라미터에 입력"""
-        if not self.robot or not self.robot.is_connected:
-            self._log("로봇이 연결되지 않았습니다")
-            return
-
-        # 로봇에서 현재 TCP 위치 읽기
-        pose = self.robot.read_camera_pose()  # 또는 다른 포즈 읽기 함수
-        if pose is None:
-            self._log("현재 위치 읽기 실패")
-            return
-
-        x, y, z, rx, ry, rz = pose
-
-        # 파라미터 위젯에 값 설정
-        if 'x' in self.param_widgets:
-            self.param_widgets['x'].setValue(x)
-        if 'y' in self.param_widgets:
-            self.param_widgets['y'].setValue(y)
-        if 'z' in self.param_widgets:
-            self.param_widgets['z'].setValue(z)
-        if 'rx' in self.param_widgets:
-            self.param_widgets['rx'].setValue(rx)
-        if 'ry' in self.param_widgets:
-            self.param_widgets['ry'].setValue(ry)
-        if 'rz' in self.param_widgets:
-            self.param_widgets['rz'].setValue(rz)
-
-        self._log(f"현재 위치 읽기 완료: X={x:.2f}, Y={y:.2f}, Z={z:.2f}, Rx={rx:.2f}, Ry={ry:.2f}, Rz={rz:.2f}")
-
-    def _clear_param_widgets(self):
-        """파라미터 위젯 제거"""
-        while self.formLayoutParams.count():
-            item = self.formLayoutParams.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self.param_widgets.clear()
-
-    def _on_apply_params(self):
-        """파라미터 적용"""
-        row = self.listTaskSequence.currentRow()
-        if row < 0:
-            return
-
-        task = self.task_sequence[row]
-        name_changed = False
-
-        for param_name, widget in self.param_widgets.items():
-            # Task 이름 필드 처리
-            if param_name == '_task_name':
-                new_name = widget.text().strip()
-                if new_name and new_name != task.get('name', ''):
-                    task['name'] = new_name
-                    name_changed = True
-                continue
-
-            # 일반 파라미터 처리
-            if isinstance(widget, QDoubleSpinBox):
-                task['params'][param_name] = widget.value()
-            elif isinstance(widget, QSpinBox):
-                task['params'][param_name] = widget.value()
-            elif isinstance(widget, QCheckBox):
-                task['params'][param_name] = widget.isChecked()
-            elif isinstance(widget, QComboBox):
-                # pose_select 등 data가 있는 콤보박스는 data 사용
-                data = widget.currentData()
-                if data is not None:
-                    task['params'][param_name] = data
-                else:
-                    task['params'][param_name] = widget.currentText()
-            elif isinstance(widget, QLineEdit):
-                task['params'][param_name] = widget.text()
-
-        # 파라미터 변경 시 항상 리스트 갱신 (표시 이름 업데이트)
-        self._refresh_task_list()
-        self.listTaskSequence.setCurrentRow(row)
-
-        self._log(f"파라미터 적용: {self._get_task_display_name(task)}")
-
-    def _on_teach_position(self):
-        """현재 위치 입력"""
-        # TODO: 로봇에서 현재 위치 읽어서 파라미터에 입력
-        self._log("현재 위치 입력 (미구현)")
-
-    def _update_task_ids(self):
-        """태스크 ID 재정렬"""
-        for i, task in enumerate(self.task_sequence):
-            task['id'] = i + 1
-
-    def _get_task_display_name(self, task: dict) -> str:
-        """파라미터 기반 태스크 표시 이름 생성"""
-        base_name = task.get('name', '')
-        task_type = task.get('type', '')
-        params = task.get('params', {})
-
-        # 그리퍼: action 값에 따라 이름 변경
-        if task_type == 'gripper':
-            action = params.get('action', '')
-            if action:
-                return f"{base_name} {action}"
-
-        # TCP Linear: 모드와 거리 표시
-        elif task_type.startswith('tcp_linear_'):
-            mode = params.get('mode', '상대')
-            if task_type == 'tcp_linear_xyz':
-                x = params.get('x', 0)
-                y = params.get('y', 0)
-                z = params.get('z', 0)
-                return f"{base_name} ({mode}) [{x},{y},{z}]"
-            else:
-                dist = params.get('distance', 0)
-                return f"{base_name} ({mode}) {dist}mm"
-
-        # TCP Rotate: 모드와 각도 표시
-        elif task_type.startswith('tcp_rotate_'):
-            mode = params.get('mode', '상대')
-            if task_type == 'tcp_rotate_rxryrz':
-                rx = params.get('rx', 0)
-                ry = params.get('ry', 0)
-                rz = params.get('rz', 0)
-                return f"{base_name} ({mode}) [{rx},{ry},{rz}]"
-            else:
-                angle = params.get('angle', 0)
-                return f"{base_name} ({mode}) {angle}°"
-
-        # 위치 이동: 좌표 표시
-        elif task_type == 'move_to_pose':
-            x = params.get('x', 0)
-            y = params.get('y', 0)
-            z = params.get('z', 0)
-            return f"{base_name} ({x:.1f},{y:.1f},{z:.1f})"
-
-        return base_name
-
-    def _refresh_task_list(self):
-        """태스크 리스트 갱신"""
-        current_row = self.listTaskSequence.currentRow()
-        self.listTaskSequence.clear()
-
-        for task in self.task_sequence:
-            display_name = self._get_task_display_name(task)
-            item = QListWidgetItem(f"{task['id']}. {display_name}")
-            item.setData(Qt.UserRole, task)
-            self.listTaskSequence.addItem(item)
-
-        if current_row >= 0 and current_row < len(self.task_sequence):
-            self.listTaskSequence.setCurrentRow(current_row)
-
-    # ==================== 로봇 연결 ====================
-
-    def _on_connect(self):
-        """로봇 연결 토글"""
+    def _on_connect_from_tab(self, ip: str, port: int):
+        """로봇 연결 요청 (TabTaskEdit 시그널 핸들러)"""
         # 이미 연결된 경우 연결 해제
         if self.robot and self.robot.is_connected:
             self._on_disconnect()
             return
 
-        ip = self.editRobotIP.text()
-        port = self.spinModbusPort.value()
         self._log(f"연결 시도: {ip}:{port}")
 
         # 새 연결
@@ -679,8 +213,7 @@ class MainWindow(QMainWindow):
         success, message = self.robot.connect()
 
         if success:
-            self.labelConnectionStatusValue.setText("연결됨")
-            self.labelConnectionStatusValue.setStyleSheet("color: green;")
+            self.tabTaskEdit.update_connection_status(True)
             self.statusbar.showMessage(message)
             self._log(message)
 
@@ -694,14 +227,118 @@ class MainWindow(QMainWindow):
             # PoseService에 로봇 설정
             self.pose_service.set_robot(self.robot, self.robot_controller)
 
+            # Eye in Hand 탭에 로봇 설정
+            self.tabEyeInHand.set_robot(self.robot)
+
             # 상태 업데이트 타이머 시작
             self.status_timer.start(100)
-
-            # 연결 버튼 텍스트 변경
-            self.btnConnect.setText("연결 해제")
         else:
-            self.labelConnectionStatusValue.setText("연결 실패")
-            self.labelConnectionStatusValue.setStyleSheet("color: red;")
+            self.tabTaskEdit.update_connection_status(False)
+            self.statusbar.showMessage(message)
+            self._log(message)
+            QMessageBox.warning(self, "연결 실패", message)
+
+    def _on_save_pose_from_tab(self, name: str, pose_type: str):
+        """포즈 저장 요청 (TabTaskEdit 시그널 핸들러)"""
+        result = self.pose_service.save_current_pose(name, pose_type)
+        if not result.success:
+            QMessageBox.warning(self, "오류", result.message)
+        else:
+            self.tabTaskEdit.refresh_poses()
+
+    def _on_delete_pose_from_tab(self, name: str):
+        """포즈 삭제 요청 (TabTaskEdit 시그널 핸들러)"""
+        result = self.pose_service.delete_pose(name)
+        if not result.success:
+            QMessageBox.warning(self, "오류", result.message)
+        else:
+            self.tabTaskEdit.refresh_poses()
+
+    def _on_move_to_pose_from_tab(self, name: str):
+        """포즈로 이동 요청 (TabTaskEdit 시그널 핸들러)"""
+        result = self.pose_service.move_to_pose(name)
+        if not result.success:
+            QMessageBox.warning(self, "오류", result.message)
+
+    def _on_approach_pose_from_tab(self, name: str, distance: float):
+        """어프로치 위치로 이동 요청 (TabTaskEdit 시그널 핸들러)"""
+        result = self.pose_service.approach_pose(name, distance)
+        if not result.success:
+            QMessageBox.warning(self, "오류", result.message)
+
+    def _on_gamma_changed_from_tab(self, gamma: float):
+        """감마 값 변경 (TabVision 시그널 핸들러)"""
+        self.camera_manager.set_gamma(gamma)
+
+    def _on_align_center_from_tab(self, tag_id: int, num_samples: int):
+        """중심 정렬 요청 (TabVision 시그널 핸들러)"""
+        result = self.alignment_service.align_center(tag_id, num_samples)
+        if not result.success:
+            QMessageBox.warning(self, "경고", result.message)
+
+    def _on_align_pose_from_tab(self, tag_id: int, num_samples: int):
+        """자세 정렬 요청 (TabVision 시그널 핸들러)"""
+        result = self.alignment_service.align_pose(tag_id, num_samples)
+        if not result.success:
+            QMessageBox.warning(self, "경고", result.message)
+
+    def _on_align_full_from_tab(self, tag_id: int, num_samples: int):
+        """전체 정렬 요청 (TabVision 시그널 핸들러)"""
+        result = self.alignment_service.align_full(tag_id, num_samples)
+        if not result.success:
+            QMessageBox.warning(self, "경고", result.message)
+
+    def _on_start_collect_from_tab(self, tag_id: int, target_count: int):
+        """데이터 수집 시작 요청 (TabVision 시그널 핸들러)"""
+        if not self.data_collector.start(tag_id, target_count):
+            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
+            return
+
+        self.tabVision.set_collect_buttons_enabled(True)
+
+    # ==================== 로봇 연결 ====================
+
+    def _on_connect(self):
+        """로봇 연결 토글 (메뉴/설정 탭에서 호출)"""
+        # 이미 연결된 경우 연결 해제
+        if self.robot and self.robot.is_connected:
+            self._on_disconnect()
+            return
+
+        # 설정 탭에서 IP/Port 가져오기
+        ip = self.editSettingsRobotIP.text() if hasattr(self, 'editSettingsRobotIP') else "192.168.1.150"
+        port = self.spinSettingsPort.value() if hasattr(self, 'spinSettingsPort') else 502
+        self._log(f"연결 시도: {ip}:{port}")
+
+        # 새 연결
+        self.robot = ModbusClient(ip=ip, port=port, timeout=1.0)
+        success, message = self.robot.connect()
+
+        if success:
+            self.tabTaskEdit.update_connection_status(True)
+            self.statusbar.showMessage(message)
+            self._log(message)
+
+            # RobotController 초기화
+            self.robot_controller = RobotController(self.robot, self.pose_manager)
+            self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
+
+            # AlignmentService에 로봇 설정
+            self.alignment_service.set_robot(self.robot)
+
+            # PoseService에 로봇 설정
+            self.pose_service.set_robot(self.robot, self.robot_controller)
+
+            # Eye in Hand 탭에 로봇 설정
+            self.tabEyeInHand.set_robot(self.robot)
+
+            # Calibration 탭에 로봇 설정
+            self.tabCalibration.set_robot(self.robot)
+
+            # 상태 업데이트 타이머 시작
+            self.status_timer.start(100)
+        else:
+            self.tabTaskEdit.update_connection_status(False)
             self.statusbar.showMessage(message)
             self._log(message)
             QMessageBox.warning(self, "연결 실패", message)
@@ -721,13 +358,18 @@ class MainWindow(QMainWindow):
         # PoseService 로봇 해제
         self.pose_service.set_robot(None, None)
 
+        # Eye in Hand 탭 로봇 해제
+        self.tabEyeInHand.set_robot(None)
+
+        # Calibration 탭 로봇 해제
+        self.tabCalibration.set_robot(None)
+
         # 타이머 정지
         self.status_timer.stop()
 
-        self.labelConnectionStatusValue.setText("연결 안됨")
-        self.labelConnectionStatusValue.setStyleSheet("color: red;")
+        # TabTaskEdit 연결 상태 업데이트
+        self.tabTaskEdit.update_connection_status(False)
         self.statusbar.showMessage("연결 해제됨")
-        self.btnConnect.setText("연결")
 
     def _on_go_home(self):
         """HOME 이동"""
@@ -748,12 +390,10 @@ class MainWindow(QMainWindow):
         cam_pose = self.robot.read_camera_pose()
         if cam_pose:
             x, y, z, rx, ry, rz = cam_pose
-            self.editX.setText(f"{x:.2f}")
-            self.editY.setText(f"{y:.2f}")
-            self.editZ.setText(f"{z:.2f}")
-            self.editRx.setText(f"{rx:.2f}")
-            self.editRy.setText(f"{ry:.2f}")
-            self.editRz.setText(f"{rz:.2f}")
+            # TabTaskEdit에 TCP 위치 업데이트
+            self.tabTaskEdit.update_tcp_position(x, y, z, rx, ry, rz)
+            # TabCalibration에 로봇 좌표 업데이트
+            self.tabCalibration.update_robot_position(x, y, z, rx, ry, rz)
 
         # 커맨드/응답 레지스터 읽기
         cmd = self.robot.read_command()
@@ -789,115 +429,45 @@ class MainWindow(QMainWindow):
 
     def _on_camera_frame(self, frame: np.ndarray):
         """카메라 프레임 수신 시 호출 (CameraManager signal)"""
-        # Aruco 감지 (체크박스가 활성화된 경우)
-        if hasattr(self, 'checkArucoDetect') and self.checkArucoDetect.isChecked():
-            frame, _ = self.vision_manager.detect_markers(frame)
+        # 현재 활성 탭 인덱스
+        current_tab = self.tabWidget.currentIndex()
 
-            # 데이터 수집 중이면 샘플 저장 (DataCollector에 위임)
+        # 비전 탭이 활성화된 경우
+        if current_tab == 1:  # 비전 탭
+            # 비전 프로세싱
+            processed_frame = frame.copy()
+
+            # Aruco 감지
+            processed_frame, markers = self.vision_manager.detect_markers(processed_frame)
+
+            # 데이터 수집 중이면 샘플 저장
             if self.data_collector.is_collecting:
                 self.data_collector.collect_sample()
 
-        # QLabel에 표시
-        self._display_frame(frame)
+            # 탭에 프레임 전달
+            self.tabVision.set_current_frame(frame)
+            self.tabVision.display_frame(processed_frame)
+
+        # 캘리브레이션 탭이 활성화된 경우
+        elif current_tab == 2:  # 카메라 캘리브레이션 탭
+            processed_frame = self.tabCalibration.process_frame(frame)
+            self.tabCalibration.set_current_frame(frame)
+            self.tabCalibration.display_frame(processed_frame)
+
+        # Eye in Hand 탭이 활성화된 경우
+        elif current_tab == 3:  # Eye in Hand 탭
+            self.tabEyeInHand.set_current_frame(frame)
+            self.tabEyeInHand.display_frame(frame)
 
     def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
         """특정 Aruco 태그 감지 (VisionManager 위임)"""
         return self.vision_manager.detect_tag(tag_id, timeout, num_samples)
 
-    def _display_frame(self, frame):
-        """프레임을 QLabel에 표시"""
-        if not hasattr(self, 'labelCameraView'):
-            return
-
-        # BGR -> RGB 변환
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_frame.shape
-        bytes_per_line = ch * w
-
-        # QImage로 변환
-        q_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
-
-        # QLabel 크기에 맞게 스케일링
-        pixmap = QPixmap.fromImage(q_image)
-        scaled_pixmap = pixmap.scaled(
-            self.labelCameraView.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-        self.labelCameraView.setPixmap(scaled_pixmap)
-
-    def _on_snapshot(self):
-        """스냅샷 저장"""
-        filepath = self.camera_manager.snapshot()
-        if filepath is None:
-            QMessageBox.warning(self, "경고", "스냅샷 저장에 실패했습니다.")
-
-    def _on_gamma_changed(self, value):
-        """감마 값 변경"""
-        gamma = value / 100.0
-        self.labelGammaValue.setText(f"{gamma:.1f}")
-        self.camera_manager.set_gamma(gamma)
-
-    # ==================== Aruco 정렬 테스트 ====================
-
-    def _get_num_samples(self) -> int:
-        """UI에서 샘플 수 가져오기"""
-        if hasattr(self, 'spinNumSamples'):
-            return self.spinNumSamples.value()
-        return 10  # 기본값
-
-    def _on_align_center(self):
-        """Aruco Tag 중심 정렬 테스트 (AlignmentService 위임)"""
-        tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
-        num_samples = self._get_num_samples()
-
-        result = self.alignment_service.align_center(tag_id, num_samples)
-        if not result.success:
-            QMessageBox.warning(self, "경고", result.message)
-
-    def _on_align_pose(self):
-        """Aruco Tag 자세 정렬 테스트 (AlignmentService 위임)"""
-        tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
-        num_samples = self._get_num_samples()
-
-        result = self.alignment_service.align_pose(tag_id, num_samples)
-        if not result.success:
-            QMessageBox.warning(self, "경고", result.message)
-
-    def _on_align_full(self):
-        """Aruco Tag 전체 정렬 테스트 (AlignmentService 위임)"""
-        tag_id = self.spinTargetTagId.value() if hasattr(self, 'spinTargetTagId') else 0
-        num_samples = self._get_num_samples()
-
-        result = self.alignment_service.align_full(tag_id, num_samples)
-        if not result.success:
-            QMessageBox.warning(self, "경고", result.message)
-
     def _update_align_status(self, status: str):
         """정렬 상태 업데이트 (AlignmentService signal 핸들러)"""
-        if hasattr(self, 'labelAlignStatus'):
-            self.labelAlignStatus.setText(f"상태: {status}")
+        self.tabVision.update_align_status(status)
 
     # ==================== 데이터 수집 (노이즈 분석용) ====================
-
-    def _on_start_collect(self):
-        """데이터 수집 시작 (DataCollector 위임)"""
-        tag_id = self.spinCollectTagId.value() if hasattr(self, 'spinCollectTagId') else 0
-        target_count = self.spinCollectCount.value() if hasattr(self, 'spinCollectCount') else 100
-
-        if not self.data_collector.start(tag_id, target_count):
-            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
-            return
-
-        # UI 업데이트
-        if hasattr(self, 'btnStartCollect'):
-            self.btnStartCollect.setEnabled(False)
-        if hasattr(self, 'btnStopCollect'):
-            self.btnStopCollect.setEnabled(True)
-        if hasattr(self, 'btnSaveCollect'):
-            self.btnSaveCollect.setEnabled(False)
-        if hasattr(self, 'progressCollect'):
-            self.progressCollect.setValue(0)
 
     def _on_stop_collect(self):
         """데이터 수집 중지 (DataCollector 위임)"""
@@ -910,21 +480,12 @@ class MainWindow(QMainWindow):
 
     def _on_sample_collected(self, current: int, target: int):
         """샘플 수집 시그널 핸들러 (DataCollector signal)"""
-        if hasattr(self, 'labelCollectStatus'):
-            self.labelCollectStatus.setText(f"수집: {current} / {target}")
-        if hasattr(self, 'progressCollect'):
-            progress = int(100 * current / target) if target > 0 else 0
-            self.progressCollect.setValue(min(progress, 100))
+        self.tabVision.update_collect_status(current, target)
 
     def _on_collection_completed(self, count: int):
         """수집 완료 시그널 핸들러 (DataCollector signal)"""
-        # UI 업데이트
-        if hasattr(self, 'btnStartCollect'):
-            self.btnStartCollect.setEnabled(True)
-        if hasattr(self, 'btnStopCollect'):
-            self.btnStopCollect.setEnabled(False)
-        if hasattr(self, 'btnSaveCollect'):
-            self.btnSaveCollect.setEnabled(count > 0)
+        self.tabVision.set_collect_buttons_enabled(False)
+        self.tabVision.set_save_button_enabled(count > 0)
 
     def _on_save_collect(self):
         """수집된 데이터를 CSV로 저장 (DataCollector 위임)"""
@@ -1037,12 +598,24 @@ class MainWindow(QMainWindow):
             self.labelSettingsConnStatus.setStyleSheet("color: green; font-weight: bold;")
             self._debug(f"연결 성공: {message}")
 
-            # Task 편집 탭의 연결 상태도 업데이트
-            self.labelConnectionStatusValue.setText("연결됨")
-            self.labelConnectionStatusValue.setStyleSheet("color: green;")
-            self.editRobotIP.setText(ip)
-            self.spinModbusPort.setValue(port)
-            self.btnConnect.setText("연결 해제")
+            # RobotController 초기화
+            self.robot_controller = RobotController(self.robot, self.pose_manager)
+            self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
+
+            # AlignmentService에 로봇 설정
+            self.alignment_service.set_robot(self.robot)
+
+            # PoseService에 로봇 설정
+            self.pose_service.set_robot(self.robot, self.robot_controller)
+
+            # Eye in Hand 탭에 로봇 설정
+            self.tabEyeInHand.set_robot(self.robot)
+
+            # Calibration 탭에 로봇 설정
+            self.tabCalibration.set_robot(self.robot)
+
+            # Task 편집 탭의 연결 상태 업데이트
+            self.tabTaskEdit.update_connection_status(True)
 
             # 상태 업데이트 타이머 시작
             self.status_timer.start(100)
