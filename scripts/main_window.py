@@ -6,6 +6,7 @@ Charging Robot Task Manager - Main Window
 import os
 import sys
 import socket
+import netifaces
 from datetime import datetime
 import numpy as np
 import cv2
@@ -21,14 +22,7 @@ from PyQt5.QtGui import QPixmap, QImage
 
 from Robot import ModbusClient, RobotController, PoseManager, PoseType
 from Sensor import ArucoCameraPoseEstimator
-
-# RealSense 카메라 (선택적 import)
-try:
-    import pyrealsense2 as rs
-    REALSENSE_AVAILABLE = True
-except ImportError:
-    REALSENSE_AVAILABLE = False
-    print("Warning: pyrealsense2 not available. Camera features will be disabled.")
+from services import CameraManager, VisionManager
 
 # UI 파일 경로
 UI_FILE = os.path.join(os.path.dirname(__file__), '..', 'ui', 'main_window.ui')
@@ -207,6 +201,20 @@ class MainWindow(QMainWindow):
                 'duration': {'type': 'int', 'default': 500, 'unit': 'msec', 'min': 10, 'max': 10000, 'step': 10},
             }
         },
+
+        # Frame
+        'toolframe': {
+            'name': '툴프레임 변경',
+            'category': 'Frame',
+            'params': {
+                'frame': {'type': 'int', 'default': 0, 'min': 0, 'max': 3, 'description': '툴프레임 번호 (0-3)'},
+            }
+        },
+        'base': {
+            'name': '베이스프레임 초기화',
+            'category': 'Frame',
+            'params': {}
+        },
     }
 
     def __init__(self):
@@ -229,8 +237,17 @@ class MainWindow(QMainWindow):
         # 파라미터 위젯 저장
         self.param_widgets = {}
 
-        # 카메라 및 Aruco 초기화
-        self._init_camera()
+        # 카메라 매니저 초기화
+        self.camera_manager = CameraManager()
+        self.camera_manager.set_log_callback(self._log)
+        self.camera_manager.frame_ready.connect(self._on_camera_frame)
+
+        # Vision 매니저 초기화
+        self.vision_manager = VisionManager(self.camera_manager)
+        self.vision_manager.set_log_callback(self._log)
+
+        # 데이터 수집 초기화
+        self._init_data_collect()
 
         # 초기화
         self._init_available_tasks()
@@ -384,16 +401,69 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage("준비됨")
         self._log("Charging Robot Task Manager 시작")
 
-        # PC IP 표시
-        pc_ip = self._get_pc_ip()
-        if hasattr(self, 'labelPCIPValue'):
-            self.labelPCIPValue.setText(pc_ip)
-        self._log(f"PC IP: {pc_ip}")
+        # PC IP 콤보박스 초기화
+        self._init_pc_ip_combo()
 
-    def _get_pc_ip(self) -> str:
-        """PC의 IP 주소 가져오기"""
+    def _init_pc_ip_combo(self):
+        """PC 네트워크 인터페이스 목록으로 콤보박스 초기화"""
+        if not hasattr(self, 'comboPCIP'):
+            return
+
+        self.comboPCIP.clear()
+        interfaces = self._get_network_interfaces()
+
+        for iface_name, ip_addr in interfaces:
+            self.comboPCIP.addItem(f"{ip_addr} ({iface_name})", ip_addr)
+
+        # 192.168.0.x 대역 자동 선택
+        for i in range(self.comboPCIP.count()):
+            ip = self.comboPCIP.itemData(i)
+            if ip and ip.startswith("192.168.0."):
+                self.comboPCIP.setCurrentIndex(i)
+                break
+
+        selected_ip = self.comboPCIP.currentData() or "Unknown"
+        self._log(f"PC IP: {selected_ip}")
+
+        # 설정 탭의 레이블도 업데이트
+        if hasattr(self, 'labelPCIPValue'):
+            self.labelPCIPValue.setText(selected_ip)
+
+        # 콤보박스 변경 시 설정 탭 레이블 동기화
+        self.comboPCIP.currentIndexChanged.connect(self._on_pc_ip_changed)
+
+    def _on_pc_ip_changed(self, index):
+        """PC IP 콤보박스 변경 시"""
+        ip = self.comboPCIP.currentData()
+        if hasattr(self, 'labelPCIPValue') and ip:
+            self.labelPCIPValue.setText(ip)
+        self._log(f"PC IP 변경: {ip}")
+
+    def _get_network_interfaces(self) -> list:
+        """모든 네트워크 인터페이스와 IP 주소 목록 반환"""
+        result = []
         try:
-            # 외부 연결용 소켓으로 로컬 IP 확인
+            for iface in netifaces.interfaces():
+                addrs = netifaces.ifaddresses(iface)
+                if netifaces.AF_INET in addrs:
+                    for addr_info in addrs[netifaces.AF_INET]:
+                        ip = addr_info.get('addr')
+                        if ip and ip != '127.0.0.1':
+                            result.append((iface, ip))
+        except Exception as e:
+            self._log(f"네트워크 인터페이스 조회 실패: {e}")
+
+        # 결과가 없으면 기본 방식으로 시도
+        if not result:
+            ip = self._get_pc_ip_fallback()
+            if ip != "Unknown":
+                result.append(("default", ip))
+
+        return result
+
+    def _get_pc_ip_fallback(self) -> str:
+        """PC의 IP 주소 가져오기 (fallback)"""
+        try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
@@ -401,7 +471,6 @@ class MainWindow(QMainWindow):
             return ip
         except Exception:
             try:
-                # 대체: hostname으로 IP 가져오기
                 return socket.gethostbyname(socket.gethostname())
             except Exception:
                 return "Unknown"
@@ -860,26 +929,8 @@ class MainWindow(QMainWindow):
 
     # ==================== 비전 ====================
 
-    def _init_camera(self):
-        """카메라 및 Aruco 초기화"""
-        # RealSense 카메라
-        self.rs_pipeline = None
-        self.rs_config = None
-        self.camera_running = False
-        self.camera_timer = None
-
-        # 카메라 intrinsics (캘리브레이션 후 설정)
-        self.camera_intrinsics = None
-
-        # Aruco 검출기 초기화
-        self.aruco_detector = ArucoCameraPoseEstimator(
-            marker_size_meters=0.02,  # 20mm 마커
-            dictionary_type=cv2.aruco.DICT_4X4_50
-        )
-
-        # 마지막 검출 결과
-        self.last_aruco_result = None
-
+    def _init_data_collect(self):
+        """데이터 수집 초기화"""
         # 데이터 수집 관련
         self.collecting_data = False
         self.collected_data = []
@@ -888,230 +939,35 @@ class MainWindow(QMainWindow):
 
     def _on_start_camera(self):
         """카메라 시작"""
-        if not REALSENSE_AVAILABLE:
+        if not self.camera_manager.is_available:
             self._log("RealSense 라이브러리가 설치되지 않았습니다.")
             QMessageBox.warning(self, "경고", "pyrealsense2가 설치되지 않았습니다.")
             return
 
-        if self.camera_running:
-            self._log("카메라가 이미 실행 중입니다.")
-            return
-
-        try:
-            self.rs_pipeline = rs.pipeline()
-            self.rs_config = rs.config()
-
-            # 해상도 설정 (640x480 @ 30fps)
-            self.rs_config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-
-            # 파이프라인 시작
-            profile = self.rs_pipeline.start(self.rs_config)
-
-            # intrinsics 가져오기
-            color_stream = profile.get_stream(rs.stream.color)
-            intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
-            self.camera_intrinsics = self._create_intrinsics_object(intrinsics)
-
-            # 카메라 안정화 대기
-            for _ in range(30):
-                self.rs_pipeline.wait_for_frames()
-
-            self.camera_running = True
-
-            # 카메라 타이머 시작 (30ms = ~33fps)
-            self.camera_timer = QTimer()
-            self.camera_timer.timeout.connect(self._update_camera_frame)
-            self.camera_timer.start(30)
-
-            self._log("카메라 시작됨")
-
-        except Exception as e:
-            self._log(f"카메라 시작 실패: {e}")
-            QMessageBox.critical(self, "오류", f"카메라 시작 실패: {e}")
-
-    def _create_intrinsics_object(self, rs_intrinsics):
-        """RealSense intrinsics를 ArucoCameraPoseEstimator용 객체로 변환"""
-        class Intrinsics:
-            def __init__(self, fx, fy, ppx, ppy, coeffs):
-                self.fx = fx
-                self.fy = fy
-                self.ppx = ppx
-                self.ppy = ppy
-                self.coeffs = coeffs
-
-        return Intrinsics(
-            fx=rs_intrinsics.fx,
-            fy=rs_intrinsics.fy,
-            ppx=rs_intrinsics.ppx,
-            ppy=rs_intrinsics.ppy,
-            coeffs=list(rs_intrinsics.coeffs)
-        )
+        success, msg = self.camera_manager.start()
+        if not success:
+            QMessageBox.critical(self, "오류", msg)
 
     def _on_stop_camera(self):
         """카메라 정지"""
-        if not self.camera_running:
-            return
+        self.camera_manager.stop()
 
-        try:
-            if self.camera_timer:
-                self.camera_timer.stop()
-                self.camera_timer = None
+    def _on_camera_frame(self, frame: np.ndarray):
+        """카메라 프레임 수신 시 호출 (CameraManager signal)"""
+        # Aruco 감지 (체크박스가 활성화된 경우)
+        if hasattr(self, 'checkArucoDetect') and self.checkArucoDetect.isChecked():
+            frame, _ = self.vision_manager.detect_markers(frame)
 
-            if self.rs_pipeline:
-                self.rs_pipeline.stop()
-                self.rs_pipeline = None
+            # 데이터 수집 중이면 샘플 저장
+            if self.collecting_data and self.vision_manager.last_result:
+                self._collect_sample()
 
-            self.camera_running = False
-            self._log("카메라 정지됨")
-
-        except Exception as e:
-            self._log(f"카메라 정지 오류: {e}")
-
-    def _update_camera_frame(self):
-        """카메라 프레임 업데이트 및 Aruco 감지"""
-        if not self.camera_running or not self.rs_pipeline:
-            return
-
-        try:
-            frames = self.rs_pipeline.wait_for_frames()
-            color_frame = frames.get_color_frame()
-
-            if not color_frame:
-                return
-
-            # numpy 배열로 변환
-            frame = np.asanyarray(color_frame.get_data())
-
-            # Aruco 감지 (체크박스가 활성화된 경우)
-            if hasattr(self, 'checkArucoDetect') and self.checkArucoDetect.isChecked():
-                frame, self.last_aruco_result = self._detect_aruco_markers(frame)
-
-                # 데이터 수집 중이면 샘플 저장
-                if self.collecting_data and self.last_aruco_result:
-                    self._collect_sample()
-
-            # QLabel에 표시
-            self._display_frame(frame)
-
-        except Exception as e:
-            self._log(f"프레임 업데이트 오류: {e}")
-
-    def _detect_aruco_markers(self, frame):
-        """Aruco 마커 감지 및 시각화"""
-        if self.camera_intrinsics is None:
-            return frame, None
-
-        # Aruco 감지
-        marker_poses = self.aruco_detector.detect_and_estimate_pose(
-            frame, self.camera_intrinsics
-        )
-
-        if marker_poses:
-            # 시각화
-            vis_frame = self.aruco_detector.visualize_markers(
-                frame, self.camera_intrinsics, marker_poses
-            )
-            return vis_frame, marker_poses
-        else:
-            return frame, None
+        # QLabel에 표시
+        self._display_frame(frame)
 
     def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
-        """
-        특정 Aruco 태그 감지 (n번 측정 평균)
-
-        Args:
-            tag_id: 찾을 태그 ID
-            timeout: 타임아웃 (초)
-            num_samples: 평균을 낼 샘플 수 (기본값: 10)
-
-        Returns:
-            dict: 태그 정보 (평균값) 또는 None
-        """
-        if not self.camera_running:
-            self._log("카메라가 실행 중이 아닙니다.")
-            return None
-
-        import time
-        from PyQt5.QtWidgets import QApplication
-
-        start_time = time.time()
-        samples = []
-
-        self._log(f"Aruco Tag {tag_id} 감지 중... ({num_samples}회 측정)")
-
-        while time.time() - start_time < timeout:
-            if self.last_aruco_result:
-                for marker in self.last_aruco_result:
-                    if marker['id'] == tag_id:
-                        # 샘플 수집
-                        samples.append({
-                            'tvec': marker['tvec'].copy(),
-                            'rvec': marker['rvec'].copy(),
-                            'camera_rotation': marker['camera_rotation'].copy(),
-                            'camera_position': marker['camera_position'].copy(),
-                        })
-
-                        if len(samples) >= num_samples:
-                            # 평균 계산
-                            avg_marker = self._calculate_average_marker(marker, samples)
-                            self._log(f"Aruco Tag {tag_id} 감지 완료 ({len(samples)}회 평균)")
-                            return avg_marker
-
-            # UI 이벤트 처리
-            QApplication.processEvents()
-            time.sleep(0.05)  # 50ms 간격으로 샘플링
-
-        # 타임아웃 시 수집된 샘플이 있으면 평균 반환
-        if len(samples) > 0:
-            self._log(f"Aruco Tag {tag_id} 부분 감지 ({len(samples)}회 평균)")
-            # 마지막 marker 정보 사용
-            if self.last_aruco_result:
-                for marker in self.last_aruco_result:
-                    if marker['id'] == tag_id:
-                        return self._calculate_average_marker(marker, samples)
-
-        self._log(f"Aruco Tag {tag_id} 감지 실패 (타임아웃)")
-        return None
-
-    def _calculate_average_marker(self, base_marker: dict, samples: list) -> dict:
-        """
-        여러 샘플의 평균 마커 정보 계산
-
-        Args:
-            base_marker: 기본 마커 정보 (id, corners 등 포함)
-            samples: tvec, rvec 등이 담긴 샘플 리스트
-
-        Returns:
-            평균화된 마커 정보
-        """
-        n = len(samples)
-
-        # tvec 평균
-        avg_tvec = np.mean([s['tvec'] for s in samples], axis=0)
-
-        # rvec 평균
-        avg_rvec = np.mean([s['rvec'] for s in samples], axis=0)
-
-        # camera_rotation 평균
-        avg_camera_rotation = np.mean([s['camera_rotation'] for s in samples], axis=0)
-
-        # camera_position 평균
-        avg_camera_position = np.mean([s['camera_position'] for s in samples], axis=0)
-
-        # 표준편차 계산 (정밀도 확인용)
-        std_tvec = np.std([s['tvec'] for s in samples], axis=0)
-        self._log(f"  tvec 표준편차: X={std_tvec[0]*1000:.3f}mm, Y={std_tvec[1]*1000:.3f}mm, Z={std_tvec[2]*1000:.3f}mm")
-
-        # 평균 마커 생성
-        avg_marker = base_marker.copy()
-        avg_marker['tvec'] = avg_tvec
-        avg_marker['rvec'] = avg_rvec
-        avg_marker['camera_rotation'] = avg_camera_rotation
-        avg_marker['camera_position'] = avg_camera_position
-        avg_marker['num_samples'] = n
-        avg_marker['std_tvec'] = std_tvec
-
-        return avg_marker
+        """특정 Aruco 태그 감지 (VisionManager 위임)"""
+        return self.vision_manager.detect_tag(tag_id, timeout, num_samples)
 
     def _display_frame(self, frame):
         """프레임을 QLabel에 표시"""
@@ -1137,33 +993,15 @@ class MainWindow(QMainWindow):
 
     def _on_snapshot(self):
         """스냅샷 저장"""
-        if not self.camera_running:
-            self._log("카메라가 실행 중이 아닙니다.")
-            return
-
-        try:
-            frames = self.rs_pipeline.wait_for_frames()
-            color_frame = frames.get_color_frame()
-
-            if color_frame:
-                frame = np.asanyarray(color_frame.get_data())
-                filename = f"snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-
-                # snapshots 폴더 생성
-                snapshot_dir = os.path.join(os.path.dirname(__file__), '..', 'snapshots')
-                os.makedirs(snapshot_dir, exist_ok=True)
-
-                filepath = os.path.join(snapshot_dir, filename)
-                cv2.imwrite(filepath, frame)
-                self._log(f"스냅샷 저장: {filepath}")
-
-        except Exception as e:
-            self._log(f"스냅샷 저장 실패: {e}")
+        filepath = self.camera_manager.snapshot()
+        if filepath is None:
+            QMessageBox.warning(self, "경고", "스냅샷 저장에 실패했습니다.")
 
     def _on_gamma_changed(self, value):
         """감마 값 변경"""
         gamma = value / 100.0
         self.labelGammaValue.setText(f"{gamma:.1f}")
+        self.camera_manager.set_gamma(gamma)
 
     # ==================== Aruco 정렬 테스트 ====================
 
@@ -1181,7 +1019,7 @@ class MainWindow(QMainWindow):
         self._update_align_status("중심 정렬 중...")
 
         # 카메라 체크
-        if not self.camera_running:
+        if not self.camera_manager.is_running:
             self._update_align_status("카메라 미연결")
             QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
             return
@@ -1226,7 +1064,7 @@ class MainWindow(QMainWindow):
         self._update_align_status("자세 정렬 중...")
 
         # 카메라 체크
-        if not self.camera_running:
+        if not self.camera_manager.is_running:
             self._update_align_status("카메라 미연결")
             QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
             return
@@ -1240,7 +1078,7 @@ class MainWindow(QMainWindow):
 
         # 회전 오프셋 계산
         # marker['camera_rotation'] = rotation matrix
-        euler_angles = self.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
+        euler_angles = self.vision_manager.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
         rx, ry, rz = euler_angles
 
         self._log(f"자세 오프셋: Rx={rx:.2f}°, Ry={ry:.2f}°, Rz={rz:.2f}°")
@@ -1270,7 +1108,7 @@ class MainWindow(QMainWindow):
         self._update_align_status("전체 정렬 중...")
 
         # 카메라 체크
-        if not self.camera_running:
+        if not self.camera_manager.is_running:
             self._update_align_status("카메라 미연결")
             QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
             return
@@ -1294,7 +1132,7 @@ class MainWindow(QMainWindow):
         offset_y = tvec[1] * 1000  # m to mm
 
         # 회전 오프셋 계산
-        euler_angles = self.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
+        euler_angles = self.vision_manager.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
         rx, ry, rz = euler_angles
 
         self._log(f"중심: X={offset_x:.2f}mm, Y={offset_y:.2f}mm")
@@ -1338,7 +1176,7 @@ class MainWindow(QMainWindow):
 
     def _on_start_collect(self):
         """데이터 수집 시작"""
-        if not self.camera_running:
+        if not self.camera_manager.is_running:
             QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
             return
 
@@ -1382,13 +1220,13 @@ class MainWindow(QMainWindow):
 
     def _collect_sample(self):
         """현재 프레임에서 샘플 수집"""
-        if not self.collecting_data or not self.last_aruco_result:
+        if not self.collecting_data or not self.vision_manager.last_result:
             return
 
         import time
 
         # 타겟 태그 찾기
-        for marker in self.last_aruco_result:
+        for marker in self.vision_manager.last_result:
             if marker['id'] == self.collect_tag_id:
                 sample = {
                     'timestamp': time.time(),
@@ -1402,7 +1240,7 @@ class MainWindow(QMainWindow):
                 }
 
                 # 회전 행렬에서 오일러 각도 계산
-                euler = self.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
+                euler = self.vision_manager.aruco_detector._rotation_matrix_to_euler(marker['camera_rotation'])
                 sample['euler_rx'] = euler[0]
                 sample['euler_ry'] = euler[1]
                 sample['euler_rz'] = euler[2]
@@ -1831,8 +1669,8 @@ class MainWindow(QMainWindow):
 
         if reply == QMessageBox.Yes:
             # 카메라 정지
-            if self.camera_running:
-                self._on_stop_camera()
+            if self.camera_manager.is_running:
+                self.camera_manager.stop()
 
             # 타이머 정지
             if hasattr(self, 'status_timer'):

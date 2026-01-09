@@ -189,6 +189,13 @@ while true do
         toolframe(3)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+
+    -- command 44: 베이스프레임(워크프레임) 0으로 변경
+    elseif command == 44 then
+        modserv.write_register('task_done', 1)
+        base(0)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
     end
 
     delay(100)

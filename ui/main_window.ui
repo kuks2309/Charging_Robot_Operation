@@ -240,13 +240,30 @@
              </property>
              <layout class="QFormLayout" name="formLayoutNetwork">
               <item row="0" column="0">
+               <widget class="QLabel" name="labelPCIP">
+                <property name="text">
+                 <string>PC IP:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="comboPCIP">
+                <property name="minimumSize">
+                 <size>
+                  <width>150</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
                <widget class="QLabel" name="labelRobotIP">
                 <property name="text">
                  <string>Robot IP:</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="1">
+              <item row="1" column="1">
                <layout class="QHBoxLayout" name="horizontalLayoutIP">
                 <item>
                  <widget class="QLineEdit" name="editRobotIP">
@@ -270,14 +287,14 @@
                 </item>
                </layout>
               </item>
-              <item row="1" column="0">
+              <item row="2" column="0">
                <widget class="QLabel" name="labelModbusPort">
                 <property name="text">
                  <string>Port:</string>
                 </property>
                </widget>
               </item>
-              <item row="1" column="1">
+              <item row="2" column="1">
                <widget class="QSpinBox" name="spinModbusPort">
                 <property name="minimum">
                  <number>1</number>
@@ -290,14 +307,14 @@
                 </property>
                </widget>
               </item>
-              <item row="2" column="0">
+              <item row="3" column="0">
                <widget class="QLabel" name="labelConnectionStatus">
                 <property name="text">
                  <string>상태:</string>
                 </property>
                </widget>
               </item>
-              <item row="2" column="1">
+              <item row="3" column="1">
                <widget class="QLabel" name="labelConnectionStatusValue">
                 <property name="text">
                  <string>연결 안됨</string>
