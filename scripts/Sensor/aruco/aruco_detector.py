@@ -137,14 +137,30 @@ class ArucoCameraPoseEstimator:
             # Skip refineDetectedMarkers as it requires a Board object
             # Individual markers work fine without refinement
 
-            # Estimate pose for each detected marker
-            rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(
-                corners, self.marker_size, camera_matrix, dist_coeffs
-            )
-            
+            # Define 3D points for marker corners (marker coordinate frame)
+            half_size = self.marker_size / 2.0
+            obj_points = np.array([
+                [-half_size,  half_size, 0],
+                [ half_size,  half_size, 0],
+                [ half_size, -half_size, 0],
+                [-half_size, -half_size, 0]
+            ], dtype=np.float32)
+
             for i, marker_id in enumerate(ids.flatten()):
-                rvec = rvecs[i][0]
-                tvec = tvecs[i][0]
+                # Use solvePnP for each marker (estimatePoseSingleMarkers deprecated in OpenCV 4.8+)
+                success, rvec, tvec = cv2.solvePnP(
+                    obj_points,
+                    corners[i].reshape(-1, 2),
+                    camera_matrix,
+                    dist_coeffs,
+                    flags=cv2.SOLVEPNP_IPPE_SQUARE
+                )
+
+                if not success:
+                    continue
+
+                rvec = rvec.flatten()
+                tvec = tvec.flatten()
                 
                 # Convert rotation vector to rotation matrix
                 rotation_matrix, _ = cv2.Rodrigues(rvec)
@@ -167,10 +183,6 @@ class ArucoCameraPoseEstimator:
                 
                 marker_poses.append(marker_info)
                 
-                print(f"Marker {marker_id}:")
-                print(f"  Distance: {np.linalg.norm(tvec):.3f}m")
-                print(f"  Camera position in marker frame: {camera_position_in_marker}")
-                print(f"  Camera rotation angles: {self._rotation_matrix_to_euler(camera_rotation_in_marker)}")
         
         return marker_poses
 
@@ -244,17 +256,7 @@ class ArucoCameraPoseEstimator:
                 distance = np.linalg.norm(tvec)
                 euler_angles = self._rotation_matrix_to_euler(camera_rotation_in_board)
 
-                print(f"Chessboard Detected:")
-                print(f"  Size: {chessboard_size[0]}x{chessboard_size[1]} corners")
-                print(f"  Distance: {distance:.3f}m")
-                print(f"  Camera position in board frame: {camera_position_in_board}")
-                print(f"  Camera rotation angles: {euler_angles}")
-
                 return board_info
-            else:
-                print("Could not estimate chessboard pose")
-        else:
-            print(f"Chessboard corners not found (looking for {chessboard_size[0]}x{chessboard_size[1]})")
 
         return None
 
@@ -360,22 +362,8 @@ class ArucoCameraPoseEstimator:
                         'aruco_ids': ids
                     }
                     
-                    distance = np.linalg.norm(tvec)
-                    euler_angles = self._rotation_matrix_to_euler(camera_rotation_in_board)
-                    
-                    print(f"ChArUco Board Pose:")
-                    print(f"  Distance: {distance:.3f}m")
-                    print(f"  Camera position in board frame: {camera_position_in_board}")
-                    print(f"  Camera rotation angles: {euler_angles}")
-                    
                     return board_info
-                else:
-                    print("Could not estimate ChArUco board pose")
-            else:
-                print(f"Not enough ChArUco corners detected ({charuco_retval}/4 minimum)")
-        else:
-            print("No ArUco markers found - cannot detect ChArUco board")
-        
+
         return None
 
     def visualize_chessboard(self, image, intrinsics, board_pose, chessboard_size=(10, 7), square_size=0.05,
@@ -582,23 +570,33 @@ class ArucoCameraPoseEstimator:
         
         return vis_image
 
-    def _draw_text_with_background(self, image, text_lines, pos):
-        """Helper function to draw text with background"""
+    def _draw_text_with_background(self, image, text_lines, pos, alpha=0.5):
+        """Helper function to draw text with semi-transparent background"""
         text_height = 20
-        max_text_width = max([cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0][0] 
+        max_text_width = max([cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0][0]
                             for line in text_lines])
-        
-        # Background rectangle
+
+        # Background rectangle with transparency
         bg_top_left = (pos[0] - 5, pos[1] - 15)
-        bg_bottom_right = (pos[0] + max_text_width + 10, 
+        bg_bottom_right = (pos[0] + max_text_width + 10,
                          pos[1] + len(text_lines) * text_height + 5)
-        cv2.rectangle(image, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
+
+        # Create overlay for semi-transparent background
+        overlay = image.copy()
+        cv2.rectangle(overlay, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
+        cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
+
+        # Border
         cv2.rectangle(image, bg_top_left, bg_bottom_right, (255, 255, 255), 1)
-        
-        # Text lines
+
+        # Text lines with outline for better visibility
         for j, line in enumerate(text_lines):
             line_pos = (pos[0], pos[1] + j * text_height)
-            cv2.putText(image, line, line_pos, cv2.FONT_HERSHEY_SIMPLEX, 
+            # Black outline
+            cv2.putText(image, line, line_pos, cv2.FONT_HERSHEY_SIMPLEX,
+                      0.4, (0, 0, 0), 2)
+            # White text
+            cv2.putText(image, line, line_pos, cv2.FONT_HERSHEY_SIMPLEX,
                       0.4, (255, 255, 255), 1)
 
     def _rotation_matrix_to_euler(self, R):
