@@ -15,7 +15,7 @@ from PyQt5.QtCore import QTimer
 from Robot import ModbusClient, RobotController, PoseManager
 from services import CameraManager, VisionManager, AlignmentService, DataCollector, PoseService
 from job_types import JOB_TYPES
-from tabs import TabTaskEdit, TabVision, TabCalibration, TabEyeInHand
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabEyeInHand, TabMotionTest
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
@@ -140,6 +140,10 @@ class MainWindow(QMainWindow):
         self.tabEyeInHand = TabEyeInHand(self)
         self.tabWidget.insertTab(3, self.tabEyeInHand, "Eye in Hand")
 
+        # Motion Test 탭 (인덱스 4에 삽입)
+        self.tabMotionTest = TabMotionTest(self)
+        self.tabWidget.insertTab(4, self.tabMotionTest, "모션 테스트")
+
         # 탭 시그널 연결
         self._connect_tab_signals()
 
@@ -180,6 +184,9 @@ class MainWindow(QMainWindow):
         self.tabEyeInHand.log_message.connect(self._log)
         self.tabEyeInHand.camera_start_requested.connect(self._on_start_camera)
         self.tabEyeInHand.camera_stop_requested.connect(self._on_stop_camera)
+
+        # Motion Test 탭 시그널
+        self.tabMotionTest.log_message.connect(self._log)
 
     def _init_status(self):
         """상태 초기화"""
@@ -229,6 +236,9 @@ class MainWindow(QMainWindow):
 
             # Eye in Hand 탭에 로봇 설정
             self.tabEyeInHand.set_robot(self.robot)
+
+            # Motion Test 탭에 로봇 설정
+            self.tabMotionTest.set_robot(self.robot)
 
             # 상태 업데이트 타이머 시작
             self.status_timer.start(100)
@@ -335,6 +345,9 @@ class MainWindow(QMainWindow):
             # Calibration 탭에 로봇 설정
             self.tabCalibration.set_robot(self.robot)
 
+            # Motion Test 탭에 로봇 설정
+            self.tabMotionTest.set_robot(self.robot)
+
             # 상태 업데이트 타이머 시작
             self.status_timer.start(100)
         else:
@@ -363,6 +376,9 @@ class MainWindow(QMainWindow):
 
         # Calibration 탭 로봇 해제
         self.tabCalibration.set_robot(None)
+
+        # Motion Test 탭 로봇 해제
+        self.tabMotionTest.set_robot(None)
 
         # 타이머 정지
         self.status_timer.stop()
@@ -394,6 +410,14 @@ class MainWindow(QMainWindow):
             self.tabTaskEdit.update_tcp_position(x, y, z, rx, ry, rz)
             # TabCalibration에 로봇 좌표 업데이트
             self.tabCalibration.update_robot_position(x, y, z, rx, ry, rz)
+            # TabMotionTest에 로봇 좌표 업데이트
+            self.tabMotionTest.update_robot_position(x, y, z, rx, ry, rz)
+
+        # 현재 툴프레임 읽기 (레지스터 219)
+        toolframe = self.robot.read_current_toolframe()
+        if toolframe is not None:
+            self.tabMotionTest.update_current_toolframe(toolframe)
+            self.tabTaskEdit.update_current_toolframe(toolframe)
 
         # 커맨드/응답 레지스터 읽기
         cmd = self.robot.read_command()
@@ -614,6 +638,9 @@ class MainWindow(QMainWindow):
             # Calibration 탭에 로봇 설정
             self.tabCalibration.set_robot(self.robot)
 
+            # Motion Test 탭에 로봇 설정
+            self.tabMotionTest.set_robot(self.robot)
+
             # Task 편집 탭의 연결 상태 업데이트
             self.tabTaskEdit.update_connection_status(True)
 
@@ -826,3 +853,13 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+
+if __name__ == '__main__':
+    import sys
+    from PyQt5.QtWidgets import QApplication
+
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
