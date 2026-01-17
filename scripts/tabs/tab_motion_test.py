@@ -161,18 +161,50 @@ class TabMotionTest(QWidget):
         self._draw_coordinate_frame([0, 0, 0], [0, 0, 0], scale=100, alpha=0.6)
 
     def _draw_coordinate_frame(self, position, rotation, scale=100, alpha=1.0):
-        """좌표 프레임 그리기 (RGB = XYZ)"""
+        """좌표 프레임 그리기 (RGB = XYZ), 회전 적용"""
         x, y, z = position
+        rx, ry, rz = rotation  # degrees
 
-        # 회전 변환 (간단히 rotation을 무시하고 XYZ 축만 표시)
+        # 회전 행렬 계산 (Rx * Ry * Rz 순서)
+        rx_rad = np.radians(rx)
+        ry_rad = np.radians(ry)
+        rz_rad = np.radians(rz)
+
+        # Rotation matrix around X axis
+        Rx = np.array([
+            [1, 0, 0],
+            [0, np.cos(rx_rad), -np.sin(rx_rad)],
+            [0, np.sin(rx_rad), np.cos(rx_rad)]
+        ])
+        # Rotation matrix around Y axis
+        Ry = np.array([
+            [np.cos(ry_rad), 0, np.sin(ry_rad)],
+            [0, 1, 0],
+            [-np.sin(ry_rad), 0, np.cos(ry_rad)]
+        ])
+        # Rotation matrix around Z axis
+        Rz = np.array([
+            [np.cos(rz_rad), -np.sin(rz_rad), 0],
+            [np.sin(rz_rad), np.cos(rz_rad), 0],
+            [0, 0, 1]
+        ])
+
+        # Combined rotation matrix (Rz * Ry * Rx)
+        R = Rz @ Ry @ Rx
+
+        # 기본 축 벡터
+        x_axis = R @ np.array([scale, 0, 0])
+        y_axis = R @ np.array([0, scale, 0])
+        z_axis = R @ np.array([0, 0, scale])
+
         # X축 (빨강)
-        self.ax.quiver(x, y, z, scale, 0, 0,
+        self.ax.quiver(x, y, z, x_axis[0], x_axis[1], x_axis[2],
                       color='red', arrow_length_ratio=0.2, alpha=alpha, linewidth=2)
         # Y축 (초록)
-        self.ax.quiver(x, y, z, 0, scale, 0,
+        self.ax.quiver(x, y, z, y_axis[0], y_axis[1], y_axis[2],
                       color='green', arrow_length_ratio=0.2, alpha=alpha, linewidth=2)
         # Z축 (파랑)
-        self.ax.quiver(x, y, z, 0, 0, scale,
+        self.ax.quiver(x, y, z, z_axis[0], z_axis[1], z_axis[2],
                       color='blue', arrow_length_ratio=0.2, alpha=alpha, linewidth=2)
 
     def _update_3d_plot(self):
@@ -263,7 +295,7 @@ class TabMotionTest(QWidget):
         self._log(f"툴 좌표계 {axis.upper()} {'+' if direction > 0 else ''}{step}mm 이동 중...")
 
         try:
-            success, msg = self.robot.send_tcp_linear(axis, step, absolute=False, wait=wait)
+            success, msg = self.robot.send_tcp_linear(axis, step, wait=wait)
             if success:
                 self._log(f"이동 명령 전송 완료")
                 self._update_position_display()
@@ -286,7 +318,7 @@ class TabMotionTest(QWidget):
         self._log(f"툴 좌표계 {axis.upper()} {'+' if direction > 0 else ''}{step}deg 회전 중...")
 
         try:
-            success, msg = self.robot.send_tcp_rotate(axis, step, absolute=False, wait=wait)
+            success, msg = self.robot.send_tcp_rotate(axis, step, wait=wait)
             if success:
                 self._log(f"회전 명령 전송 완료")
                 self._update_position_display()
@@ -311,7 +343,7 @@ class TabMotionTest(QWidget):
         self._log(f"베이스 좌표계 {axis.upper()} {'+' if direction > 0 else ''}{step}mm 이동 중...")
 
         try:
-            success, msg = self.robot.send_base_linear(axis, step, absolute=False, wait=wait)
+            success, msg = self.robot.send_base_linear(axis, step, wait=wait)
             if success:
                 self._log(f"이동 명령 전송 완료")
                 self._update_position_display()
@@ -334,7 +366,7 @@ class TabMotionTest(QWidget):
         self._log(f"베이스 좌표계 {axis.upper()} {'+' if direction > 0 else ''}{step}deg 회전 중...")
 
         try:
-            success, msg = self.robot.send_base_rotate(axis, step, absolute=False, wait=wait)
+            success, msg = self.robot.send_base_rotate(axis, step, wait=wait)
             if success:
                 self._log(f"회전 명령 전송 완료")
                 self._update_position_display()

@@ -18,11 +18,13 @@ while true do
         movep(var.p(100))
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 2 then
         modserv.write_register('task_done', 1)
         modserv.write_register('task_done', 3)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 10 then
         modserv.write_register('task_done', 1)
@@ -33,6 +35,7 @@ while true do
         tool.transx(x)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 11 then
         modserv.write_register('task_done', 1)
@@ -43,6 +46,7 @@ while true do
         tool.transy(y)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 12 then
         modserv.write_register('task_done', 1)
@@ -53,6 +57,7 @@ while true do
         tool.transz(z)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 13 then
         modserv.write_register('task_done', 1)
@@ -71,6 +76,7 @@ while true do
         tool.trans(x, y, z)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     -- command 14-17: 회전 명령 (tool.rot() 미지원으로 비활성화)
     -- 회전이 필요한 경우 command 20 (절대 위치 이동) 사용
@@ -105,6 +111,7 @@ while true do
         movel(p1)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 30 then
         modserv.write_register('task_done', 1)
@@ -122,6 +129,7 @@ while true do
         dio.in_wait(2, 1)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 31 then
         modserv.write_register('task_done', 1)
@@ -140,6 +148,7 @@ while true do
         dio.reset(8)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 32 then
         modserv.write_register('task_done', 1)
@@ -164,6 +173,7 @@ while true do
         dio.in_wait(2, 1)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     -- command 40-43: 툴프레임 변경
     elseif command == 40 then
@@ -171,32 +181,124 @@ while true do
         toolframe(0)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 41 then
         modserv.write_register('task_done', 1)
         toolframe(1)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 42 then
         modserv.write_register('task_done', 1)
         toolframe(2)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 43 then
         modserv.write_register('task_done', 1)
         toolframe(3)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
-    -- command 44: 베이스프레임(워크프레임) 0으로 변경
+    -- command 44: 워크프레임 0으로 변경
     elseif command == 44 then
         modserv.write_register('task_done', 1)
-        base(0)
+        workframe(0)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    -- command 50-53: 베이스 좌표계 이동 (transx, transy, transz, trans)
+    elseif command == 50 then
+        modserv.write_register('task_done', 1)
+        x = modserv.read_register('x')
+        if x > 32767 then
+            x = x - 65537
+        end
+        transx(x)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 51 then
+        modserv.write_register('task_done', 1)
+        y = modserv.read_register('y')
+        if y > 32767 then
+            y = y - 65537
+        end
+        transy(y)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 52 then
+        modserv.write_register('task_done', 1)
+        z = modserv.read_register('z')
+        if z > 32767 then
+            z = z - 65537
+        end
+        transz(z)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 53 then
+        modserv.write_register('task_done', 1)
+        x = modserv.read_register('x')
+        y = modserv.read_register('y')
+        z = modserv.read_register('z')
+        if x > 32767 then
+            x = x - 65537
+        end
+        if y > 32767 then
+            y = y - 65537
+        end
+        if z > 32767 then
+            z = z - 65537
+        end
+        trans(x, y, z)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    -- command 54-56: 베이스 좌표계 회전 (rotx, roty, rotz)
+    elseif command == 54 then
+        modserv.write_register('task_done', 1)
+        Rx = modserv.read_register('Rx')
+        if Rx > 32767 then
+            Rx = Rx - 65537
+        end
+        rotx(Rx)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 55 then
+        modserv.write_register('task_done', 1)
+        Ry = modserv.read_register('Ry')
+        if Ry > 32767 then
+            Ry = Ry - 65537
+        end
+        roty(Ry)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 56 then
+        modserv.write_register('task_done', 1)
+        Rz = modserv.read_register('Rz')
+        if Rz > 32767 then
+            Rz = Rz - 65537
+        end
+        rotz(Rz)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
     end
 
-    delay(100)
+    delay(50)
 end
