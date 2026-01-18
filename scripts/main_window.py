@@ -53,6 +53,9 @@ class MainWindow(QMainWindow):
         self.camera_manager.set_log_callback(self._log)
         self.camera_manager.frame_ready.connect(self._on_camera_frame)
 
+        # 탭에 카메라 매니저 전달
+        self.tabCalibration.set_camera_manager(self.camera_manager)
+
         # Vision 매니저 초기화
         self.vision_manager = VisionManager(self.camera_manager)
         self.vision_manager.set_log_callback(self._log)
@@ -121,6 +124,9 @@ class MainWindow(QMainWindow):
         self.actionStopCamera.triggered.connect(self._on_stop_camera)
         self.actionEmergencyStop.triggered.connect(self._on_emergency_stop)
         self.actionAbout.triggered.connect(self._on_about)
+
+        # 탭 변경 시그널
+        self.tabWidget.currentChanged.connect(self._on_tab_changed)
 
     def _load_separated_tabs(self):
         """분리된 탭 클래스들을 인스턴스화하여 탭위젯에 추가"""
@@ -208,45 +214,7 @@ class MainWindow(QMainWindow):
 
     def _on_connect_from_tab(self, ip: str, port: int):
         """로봇 연결 요청 (TabTaskEdit 시그널 핸들러)"""
-        # 이미 연결된 경우 연결 해제
-        if self.robot and self.robot.is_connected:
-            self._on_disconnect()
-            return
-
-        self._log(f"연결 시도: {ip}:{port}")
-
-        # 새 연결
-        self.robot = ModbusClient(ip=ip, port=port, timeout=1.0)
-        success, message = self.robot.connect()
-
-        if success:
-            self.tabTaskEdit.update_connection_status(True)
-            self.statusbar.showMessage(message)
-            self._log(message)
-
-            # RobotController 초기화
-            self.robot_controller = RobotController(self.robot, self.pose_manager)
-            self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
-
-            # AlignmentService에 로봇 설정
-            self.alignment_service.set_robot(self.robot)
-
-            # PoseService에 로봇 설정
-            self.pose_service.set_robot(self.robot, self.robot_controller)
-
-            # Eye in Hand 탭에 로봇 설정
-            self.tabEyeInHand.set_robot(self.robot)
-
-            # Motion Test 탭에 로봇 설정
-            self.tabMotionTest.set_robot(self.robot)
-
-            # 상태 업데이트 타이머 시작
-            self.status_timer.start(100)
-        else:
-            self.tabTaskEdit.update_connection_status(False)
-            self.statusbar.showMessage(message)
-            self._log(message)
-            QMessageBox.warning(self, "연결 실패", message)
+        self._connect_robot(ip, port)
 
     def _on_save_pose_from_tab(self, name: str, pose_type: str):
         """포즈 저장 요청 (TabTaskEdit 시그널 핸들러)"""
@@ -310,14 +278,18 @@ class MainWindow(QMainWindow):
 
     def _on_connect(self):
         """로봇 연결 토글 (메뉴/설정 탭에서 호출)"""
+        # 설정 탭에서 IP/Port 가져오기
+        ip = self.editSettingsRobotIP.text() if hasattr(self, 'editSettingsRobotIP') else "192.168.1.150"
+        port = self.spinSettingsPort.value() if hasattr(self, 'spinSettingsPort') else 502
+        self._connect_robot(ip, port)
+
+    def _connect_robot(self, ip: str, port: int):
+        """로봇 연결 공통 로직"""
         # 이미 연결된 경우 연결 해제
         if self.robot and self.robot.is_connected:
             self._on_disconnect()
             return
 
-        # 설정 탭에서 IP/Port 가져오기
-        ip = self.editSettingsRobotIP.text() if hasattr(self, 'editSettingsRobotIP') else "192.168.1.150"
-        port = self.spinSettingsPort.value() if hasattr(self, 'spinSettingsPort') else 502
         self._log(f"연결 시도: {ip}:{port}")
 
         # 새 연결
@@ -325,36 +297,59 @@ class MainWindow(QMainWindow):
         success, message = self.robot.connect()
 
         if success:
-            self.tabTaskEdit.update_connection_status(True)
             self.statusbar.showMessage(message)
             self._log(message)
 
-            # RobotController 초기화
-            self.robot_controller = RobotController(self.robot, self.pose_manager)
-            self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
-
-            # AlignmentService에 로봇 설정
-            self.alignment_service.set_robot(self.robot)
-
-            # PoseService에 로봇 설정
-            self.pose_service.set_robot(self.robot, self.robot_controller)
-
-            # Eye in Hand 탭에 로봇 설정
-            self.tabEyeInHand.set_robot(self.robot)
-
-            # Calibration 탭에 로봇 설정
-            self.tabCalibration.set_robot(self.robot)
-
-            # Motion Test 탭에 로봇 설정
-            self.tabMotionTest.set_robot(self.robot)
-
-            # 상태 업데이트 타이머 시작
-            self.status_timer.start(100)
+            # 공통 연결 설정
+            self._setup_robot_connection()
         else:
             self.tabTaskEdit.update_connection_status(False)
             self.statusbar.showMessage(message)
             self._log(message)
             QMessageBox.warning(self, "연결 실패", message)
+
+    def _setup_robot_connection(self):
+        """로봇 연결 후 공통 설정"""
+        # RobotController 초기화
+        self.robot_controller = RobotController(self.robot, self.pose_manager)
+        self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
+
+        # AlignmentService에 로봇 설정
+        self.alignment_service.set_robot(self.robot)
+
+        # PoseService에 로봇 설정
+        self.pose_service.set_robot(self.robot, self.robot_controller)
+
+        # Eye in Hand 탭에 로봇 설정
+        self.tabEyeInHand.set_robot(self.robot)
+
+        # Calibration 탭에 로봇 설정
+        self.tabCalibration.set_robot(self.robot)
+
+        # Motion Test 탭에 로봇 설정
+        self.tabMotionTest.set_robot(self.robot)
+
+        # Task 편집 탭의 연결 상태 업데이트
+        self.tabTaskEdit.update_connection_status(True)
+
+        # 상태 업데이트 타이머 시작
+        self.status_timer.start(100)
+
+        # 현재 탭이 비전/캘리브레이션 탭이면 Tool Frame 1로 설정
+        current_tab = self.tabWidget.currentIndex()
+        if current_tab in [1, 2]:
+            try:
+                success, msg = self.robot.send_set_toolframe(1, wait=True)
+                tab_name = "Vision" if current_tab == 1 else "캘리브레이션"
+                if success:
+                    self._log(f"{tab_name} 탭: Tool Frame 1 (비전)으로 설정 완료")
+                    # 캘리브레이션 탭 UI 업데이트
+                    if current_tab == 2:
+                        self.tabCalibration.update_current_toolframe(1)
+                else:
+                    self._log(f"Tool Frame 설정 실패: {msg}")
+            except Exception as e:
+                self._log(f"Tool Frame 설정 오류: {e}")
 
     def _on_disconnect(self):
         """로봇 연결 해제"""
@@ -418,6 +413,7 @@ class MainWindow(QMainWindow):
         if toolframe is not None:
             self.tabMotionTest.update_current_toolframe(toolframe)
             self.tabTaskEdit.update_current_toolframe(toolframe)
+            self.tabCalibration.update_current_toolframe(toolframe)
 
         # 커맨드/응답 레지스터 읽기
         cmd = self.robot.read_command()
@@ -461,8 +457,42 @@ class MainWindow(QMainWindow):
             # 비전 프로세싱
             processed_frame = frame.copy()
 
-            # Aruco 감지
-            processed_frame, markers = self.vision_manager.detect_markers(processed_frame)
+            # Aruco 감지 (체크박스 활성화 시에만)
+            if self.tabVision.is_aruco_detect_enabled():
+                processed_frame, markers = self.vision_manager.detect_markers(processed_frame)
+
+                # AR 태그 포즈를 UI에 표시
+                if markers and len(markers) > 0:
+                    marker = markers[0]  # 첫 번째 마커
+
+                    # 1. Camera 좌표: 카메라 기준 마커 위치 (tvec)
+                    tvec = marker['tvec']
+                    tvec_euler = self._rotation_matrix_to_euler(marker['rotation_matrix'])
+                    self.tabVision.update_pose_camera(
+                        tvec[0] * 1000,  # m -> mm
+                        tvec[1] * 1000,
+                        tvec[2] * 1000,
+                        tvec_euler[0], tvec_euler[1], tvec_euler[2]
+                    )
+
+                    # 2. World 좌표: Tool Frame 1 기준 로봇 포즈 표시
+                    if self.robot and self.robot.is_connected:
+                        try:
+                            robot_pose = self.robot.read_current_pose()
+                            if robot_pose:
+                                # Tool Frame 1 (카메라) 기준 로봇 TCP 포즈 표시
+                                self.tabVision.update_pose_world(
+                                    robot_pose[0], robot_pose[1], robot_pose[2],
+                                    robot_pose[3], robot_pose[4], robot_pose[5]
+                                )
+                        except Exception as e:
+                            print(f"[Vision] 로봇 포즈 읽기 오류: {e}")
+
+                    # ArUco ID 업데이트
+                    self.tabVision.update_detection_result(tag_id=marker['id'])
+                else:
+                    self.tabVision.clear_pose_display()
+                    self.tabVision.update_detection_result()
 
             # 데이터 수집 중이면 샘플 저장
             if self.data_collector.is_collecting:
@@ -474,9 +504,15 @@ class MainWindow(QMainWindow):
 
         # 캘리브레이션 탭이 활성화된 경우
         elif current_tab == 2:  # 카메라 캘리브레이션 탭
-            processed_frame = self.tabCalibration.process_frame(frame)
             self.tabCalibration.set_current_frame(frame)
-            self.tabCalibration.display_frame(processed_frame)
+            # Depth 모드이면 depth 프레임 표시
+            if self.tabCalibration.is_depth_mode():
+                depth_frame = self.tabCalibration.current_depth_frame
+                if depth_frame is not None:
+                    self.tabCalibration.display_frame(depth_frame)
+            else:
+                processed_frame = self.tabCalibration.process_frame(frame)
+                self.tabCalibration.display_frame(processed_frame)
 
         # Eye in Hand 탭이 활성화된 경우
         elif current_tab == 3:  # Eye in Hand 탭
@@ -622,30 +658,9 @@ class MainWindow(QMainWindow):
             self.labelSettingsConnStatus.setStyleSheet("color: green; font-weight: bold;")
             self._debug(f"연결 성공: {message}")
 
-            # RobotController 초기화
-            self.robot_controller = RobotController(self.robot, self.pose_manager)
-            self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
+            # 공통 연결 설정
+            self._setup_robot_connection()
 
-            # AlignmentService에 로봇 설정
-            self.alignment_service.set_robot(self.robot)
-
-            # PoseService에 로봇 설정
-            self.pose_service.set_robot(self.robot, self.robot_controller)
-
-            # Eye in Hand 탭에 로봇 설정
-            self.tabEyeInHand.set_robot(self.robot)
-
-            # Calibration 탭에 로봇 설정
-            self.tabCalibration.set_robot(self.robot)
-
-            # Motion Test 탭에 로봇 설정
-            self.tabMotionTest.set_robot(self.robot)
-
-            # Task 편집 탭의 연결 상태 업데이트
-            self.tabTaskEdit.update_connection_status(True)
-
-            # 상태 업데이트 타이머 시작
-            self.status_timer.start(100)
             self._debug("상태 업데이트 타이머 시작 (100ms)")
 
             # 테스트 읽기
@@ -821,7 +836,45 @@ class MainWindow(QMainWindow):
         if not result.success:
             QMessageBox.warning(self, "오류", result.message)
 
+    # ==================== 탭 변경 핸들러 ====================
+
+    def _on_tab_changed(self, index: int):
+        """탭 변경 시 호출"""
+        # Vision 탭 (인덱스 1) 또는 캘리브레이션 탭 (인덱스 2)이 선택되면 Tool Frame 1로 설정
+        if index in [1, 2]:
+            if self.robot and self.robot.is_connected:
+                try:
+                    success, msg = self.robot.send_set_toolframe(1, wait=True)
+                    tab_name = "Vision" if index == 1 else "캘리브레이션"
+                    if success:
+                        self._log(f"{tab_name} 탭 선택: Tool Frame 1 (비전)으로 설정 완료")
+                        # 캘리브레이션 탭 UI 업데이트
+                        if index == 2:
+                            self.tabCalibration.update_current_toolframe(1)
+                        # 상태바에 TF 표시
+                        self.statusBar().showMessage(f"연결됨: {self.robot.ip}:{self.robot.port} | TF1")
+                    else:
+                        self._log(f"Tool Frame 설정 실패: {msg}")
+                except Exception as e:
+                    self._log(f"Tool Frame 설정 오류: {e}")
+
     # ==================== 유틸리티 ====================
+
+    def _rotation_matrix_to_euler(self, R):
+        """회전 행렬을 오일러 각도 (roll, pitch, yaw)로 변환 (도 단위)"""
+        sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+        singular = sy < 1e-6
+
+        if not singular:
+            x = np.arctan2(R[2, 1], R[2, 2])  # roll
+            y = np.arctan2(-R[2, 0], sy)       # pitch
+            z = np.arctan2(R[1, 0], R[0, 0])   # yaw
+        else:
+            x = np.arctan2(-R[1, 2], R[1, 1])  # roll
+            y = np.arctan2(-R[2, 0], sy)       # pitch
+            z = 0                              # yaw
+
+        return np.degrees([x, y, z])
 
     def _log(self, message):
         """로그 메시지 추가"""

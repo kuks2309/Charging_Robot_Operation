@@ -629,6 +629,10 @@ class TabTaskEdit(QWidget):
         self.editJ5.setText(f"{j5:.2f}")
         self.editJ6.setText(f"{j6:.2f}")
 
+    def update_current_toolframe(self, toolframe: int):
+        """현재 툴프레임 업데이트 (placeholder)"""
+        pass
+
     def get_task_sequence(self) -> list:
         """태스크 시퀀스 반환"""
         return self.task_sequence

@@ -15,6 +15,12 @@
    <!-- 좌측: 컨트롤 패널 -->
    <item>
     <widget class="QWidget" name="widgetControlPanel">
+     <property name="maximumSize">
+      <size>
+       <width>410</width>
+       <height>16777215</height>
+      </size>
+     </property>
      <layout class="QVBoxLayout" name="verticalLayoutControls">
 
    <!-- 프레임 설정 -->
@@ -183,9 +189,23 @@
          </widget>
         </item>
         <item>
+         <widget class="QRadioButton" name="radioStep01">
+          <property name="text">
+           <string>0.1</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radioStep05">
+          <property name="text">
+           <string>0.5</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QRadioButton" name="radioStep1">
           <property name="text">
-           <string>1mm/deg</string>
+           <string>1</string>
           </property>
           <property name="checked">
            <bool>true</bool>
@@ -195,21 +215,28 @@
         <item>
          <widget class="QRadioButton" name="radioStep5">
           <property name="text">
-           <string>5mm/deg</string>
+           <string>5</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QRadioButton" name="radioStep10">
           <property name="text">
-           <string>10mm/deg</string>
+           <string>10</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QRadioButton" name="radioStep50">
           <property name="text">
-           <string>50mm/deg</string>
+           <string>50</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelStepUnit">
+          <property name="text">
+           <string>mm, deg</string>
           </property>
          </widget>
         </item>
@@ -267,31 +294,243 @@
       <string>툴 좌표계 이동</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayoutToolMotion">
-      <!-- 현재 위치 (툴 좌표계 기준) -->
+      <!-- 현재 위치 (툴 좌표계 기준) - 2줄 표시 -->
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayoutToolStatus">
+       <layout class="QVBoxLayout" name="verticalLayoutToolStatus">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <!-- 위치 (X, Y, Z) -->
         <item>
-         <widget class="QLabel" name="labelToolCurrentPos">
+         <layout class="QHBoxLayout" name="horizontalLayoutToolPosLine">
+          <item>
+           <widget class="QLabel" name="labelToolCurrentPos">
+            <property name="text">
+             <string>위치:</string>
+            </property>
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #006400;</string>
+            </property>
+            <property name="minimumSize">
+             <size><width>36</width><height>0</height></size>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelToolCurrentPosValue">
+            <property name="text">
+             <string>X=-, Y=-, Z=- mm</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #006400;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerToolPos">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <!-- 자세 (Rx, Ry, Rz) -->
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutToolRotLine">
+          <item>
+           <widget class="QLabel" name="labelToolCurrentRot">
+            <property name="text">
+             <string>자세:</string>
+            </property>
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #006400;</string>
+            </property>
+            <property name="minimumSize">
+             <size><width>36</width><height>0</height></size>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelToolCurrentRotValue">
+            <property name="text">
+             <string>Rx=-, Ry=-, Rz=- deg</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #006400;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerToolRot">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+      <!-- 직선 이동 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutToolLinear">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="labelToolLinear">
           <property name="text">
-           <string>현재 위치 (Base 기준):</string>
+           <string>직선 이동:</string>
           </property>
-          <property name="styleSheet">
-           <string>font-weight: bold; color: #006400;</string>
+          <property name="minimumSize">
+           <size>
+            <width>60</width>
+            <height>0</height>
+           </size>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QLabel" name="labelToolCurrentPosValue">
+         <widget class="QLabel" name="labelToolX">
           <property name="text">
-           <string>X=-, Y=-, Z=- mm | Rx=-, Ry=-, Rz=- deg</string>
+           <string>X:</string>
           </property>
-          <property name="styleSheet">
-           <string>color: #006400;</string>
+          <property name="minimumSize">
+           <size><width>20</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>20</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
           </property>
          </widget>
         </item>
         <item>
-         <spacer name="horizontalSpacerToolStatus">
+         <widget class="QPushButton" name="btnToolXMinus">
+          <property name="text">
+           <string>◄</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnToolXPlus">
+          <property name="text">
+           <string>▶</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelToolY">
+          <property name="text">
+           <string>Y:</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>20</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>20</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnToolYMinus">
+          <property name="text">
+           <string>◄</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnToolYPlus">
+          <property name="text">
+           <string>▶</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelToolZ">
+          <property name="text">
+           <string>Z:</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>20</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>20</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnToolZMinus">
+          <property name="text">
+           <string>◄</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnToolZPlus">
+          <property name="text">
+           <string>▶</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerToolLinear">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -305,153 +544,163 @@
         </item>
        </layout>
       </item>
-      <!-- 직선 이동 -->
-      <item>
-       <layout class="QGridLayout" name="gridLayoutToolLinear">
-        <item row="0" column="0">
-         <widget class="QLabel" name="labelToolLinear">
-          <property name="text">
-           <string>직선 이동:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QLabel" name="labelToolX">
-          <property name="text">
-           <string>X:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="QPushButton" name="btnToolXMinus">
-          <property name="text">
-           <string>◄</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="3">
-         <widget class="QPushButton" name="btnToolXPlus">
-          <property name="text">
-           <string>▶</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="4">
-         <widget class="QLabel" name="labelToolY">
-          <property name="text">
-           <string>Y:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="5">
-         <widget class="QPushButton" name="btnToolYMinus">
-          <property name="text">
-           <string>◄</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="6">
-         <widget class="QPushButton" name="btnToolYPlus">
-          <property name="text">
-           <string>▶</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="7">
-         <widget class="QLabel" name="labelToolZ">
-          <property name="text">
-           <string>Z:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="8">
-         <widget class="QPushButton" name="btnToolZMinus">
-          <property name="text">
-           <string>◄</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="9">
-         <widget class="QPushButton" name="btnToolZPlus">
-          <property name="text">
-           <string>▶</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
       <!-- 회전 이동 -->
       <item>
-       <layout class="QGridLayout" name="gridLayoutToolRotate">
-        <item row="0" column="0">
+       <layout class="QHBoxLayout" name="horizontalLayoutToolRotate">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <item>
          <widget class="QLabel" name="labelToolRotate">
           <property name="text">
            <string>회전 이동:</string>
           </property>
+          <property name="minimumSize">
+           <size>
+            <width>60</width>
+            <height>0</height>
+           </size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item>
          <widget class="QLabel" name="labelToolRx">
           <property name="text">
            <string>Rx:</string>
           </property>
+          <property name="minimumSize">
+           <size><width>24</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>24</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
-        <item row="0" column="2">
+        <item>
          <widget class="QPushButton" name="btnToolRxMinus">
           <property name="text">
            <string>◄</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="3">
+        <item>
          <widget class="QPushButton" name="btnToolRxPlus">
           <property name="text">
            <string>▶</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="4">
+        <item>
          <widget class="QLabel" name="labelToolRy">
           <property name="text">
            <string>Ry:</string>
           </property>
+          <property name="minimumSize">
+           <size><width>24</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>24</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
-        <item row="0" column="5">
+        <item>
          <widget class="QPushButton" name="btnToolRyMinus">
           <property name="text">
            <string>◄</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="6">
+        <item>
          <widget class="QPushButton" name="btnToolRyPlus">
           <property name="text">
            <string>▶</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="7">
+        <item>
          <widget class="QLabel" name="labelToolRz">
           <property name="text">
            <string>Rz:</string>
           </property>
+          <property name="minimumSize">
+           <size><width>24</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>24</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
-        <item row="0" column="8">
+        <item>
          <widget class="QPushButton" name="btnToolRzMinus">
           <property name="text">
            <string>◄</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="9">
+        <item>
          <widget class="QPushButton" name="btnToolRzPlus">
           <property name="text">
            <string>▶</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerToolRotate">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
         </item>
        </layout>
       </item>
@@ -466,31 +715,243 @@
       <string>베이스 좌표계 이동</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayoutBaseMotion">
-      <!-- 현재 위치 (베이스 좌표계 기준) -->
+      <!-- 현재 위치 (베이스 좌표계 기준) - 2줄 표시 -->
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayoutBaseStatus">
+       <layout class="QVBoxLayout" name="verticalLayoutBaseStatus">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <!-- 위치 (X, Y, Z) -->
         <item>
-         <widget class="QLabel" name="labelBaseCurrentPos">
+         <layout class="QHBoxLayout" name="horizontalLayoutBasePosLine">
+          <item>
+           <widget class="QLabel" name="labelBaseCurrentPos">
+            <property name="text">
+             <string>위치:</string>
+            </property>
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #00008B;</string>
+            </property>
+            <property name="minimumSize">
+             <size><width>36</width><height>0</height></size>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelBaseCurrentPosValue">
+            <property name="text">
+             <string>X=-, Y=-, Z=- mm</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #00008B;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerBasePos">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <!-- 자세 (Rx, Ry, Rz) -->
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutBaseRotLine">
+          <item>
+           <widget class="QLabel" name="labelBaseCurrentRot">
+            <property name="text">
+             <string>자세:</string>
+            </property>
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #00008B;</string>
+            </property>
+            <property name="minimumSize">
+             <size><width>36</width><height>0</height></size>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelBaseCurrentRotValue">
+            <property name="text">
+             <string>Rx=-, Ry=-, Rz=- deg</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #00008B;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerBaseRot">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+      <!-- 직선 이동 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutBaseLinear">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="labelBaseLinear">
           <property name="text">
-           <string>현재 위치 (Base 기준):</string>
+           <string>직선 이동:</string>
           </property>
-          <property name="styleSheet">
-           <string>font-weight: bold; color: #00008B;</string>
+          <property name="minimumSize">
+           <size>
+            <width>60</width>
+            <height>0</height>
+           </size>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QLabel" name="labelBaseCurrentPosValue">
+         <widget class="QLabel" name="labelBaseX">
           <property name="text">
-           <string>X=-, Y=-, Z=- mm | Rx=-, Ry=-, Rz=- deg</string>
+           <string>X:</string>
           </property>
-          <property name="styleSheet">
-           <string>color: #00008B;</string>
+          <property name="minimumSize">
+           <size><width>20</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>20</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
           </property>
          </widget>
         </item>
         <item>
-         <spacer name="horizontalSpacerBaseStatus">
+         <widget class="QPushButton" name="btnBaseXMinus">
+          <property name="text">
+           <string>◄</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnBaseXPlus">
+          <property name="text">
+           <string>▶</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelBaseY">
+          <property name="text">
+           <string>Y:</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>20</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>20</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnBaseYMinus">
+          <property name="text">
+           <string>◄</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnBaseYPlus">
+          <property name="text">
+           <string>▶</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelBaseZ">
+          <property name="text">
+           <string>Z:</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>20</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>20</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnBaseZMinus">
+          <property name="text">
+           <string>◄</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnBaseZPlus">
+          <property name="text">
+           <string>▶</string>
+          </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerBaseLinear">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -504,153 +965,163 @@
         </item>
        </layout>
       </item>
-      <!-- 직선 이동 -->
-      <item>
-       <layout class="QGridLayout" name="gridLayoutBaseLinear">
-        <item row="0" column="0">
-         <widget class="QLabel" name="labelBaseLinear">
-          <property name="text">
-           <string>직선 이동:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QLabel" name="labelBaseX">
-          <property name="text">
-           <string>X:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="QPushButton" name="btnBaseXMinus">
-          <property name="text">
-           <string>◄</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="3">
-         <widget class="QPushButton" name="btnBaseXPlus">
-          <property name="text">
-           <string>▶</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="4">
-         <widget class="QLabel" name="labelBaseY">
-          <property name="text">
-           <string>Y:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="5">
-         <widget class="QPushButton" name="btnBaseYMinus">
-          <property name="text">
-           <string>◄</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="6">
-         <widget class="QPushButton" name="btnBaseYPlus">
-          <property name="text">
-           <string>▶</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="7">
-         <widget class="QLabel" name="labelBaseZ">
-          <property name="text">
-           <string>Z:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="8">
-         <widget class="QPushButton" name="btnBaseZMinus">
-          <property name="text">
-           <string>◄</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="9">
-         <widget class="QPushButton" name="btnBaseZPlus">
-          <property name="text">
-           <string>▶</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
       <!-- 회전 이동 -->
       <item>
-       <layout class="QGridLayout" name="gridLayoutBaseRotate">
-        <item row="0" column="0">
+       <layout class="QHBoxLayout" name="horizontalLayoutBaseRotate">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <item>
          <widget class="QLabel" name="labelBaseRotate">
           <property name="text">
            <string>회전 이동:</string>
           </property>
+          <property name="minimumSize">
+           <size>
+            <width>60</width>
+            <height>0</height>
+           </size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item>
          <widget class="QLabel" name="labelBaseRx">
           <property name="text">
            <string>Rx:</string>
           </property>
+          <property name="minimumSize">
+           <size><width>24</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>24</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
-        <item row="0" column="2">
+        <item>
          <widget class="QPushButton" name="btnBaseRxMinus">
           <property name="text">
            <string>◄</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="3">
+        <item>
          <widget class="QPushButton" name="btnBaseRxPlus">
           <property name="text">
            <string>▶</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="4">
+        <item>
          <widget class="QLabel" name="labelBaseRy">
           <property name="text">
            <string>Ry:</string>
           </property>
+          <property name="minimumSize">
+           <size><width>24</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>24</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
-        <item row="0" column="5">
+        <item>
          <widget class="QPushButton" name="btnBaseRyMinus">
           <property name="text">
            <string>◄</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="6">
+        <item>
          <widget class="QPushButton" name="btnBaseRyPlus">
           <property name="text">
            <string>▶</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="7">
+        <item>
          <widget class="QLabel" name="labelBaseRz">
           <property name="text">
            <string>Rz:</string>
           </property>
+          <property name="minimumSize">
+           <size><width>24</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>24</width><height>16777215</height></size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
-        <item row="0" column="8">
+        <item>
          <widget class="QPushButton" name="btnBaseRzMinus">
           <property name="text">
            <string>◄</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
         </item>
-        <item row="0" column="9">
+        <item>
          <widget class="QPushButton" name="btnBaseRzPlus">
           <property name="text">
            <string>▶</string>
           </property>
+          <property name="minimumSize">
+           <size><width>28</width><height>0</height></size>
+          </property>
+          <property name="maximumSize">
+           <size><width>28</width><height>16777215</height></size>
+          </property>
          </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerBaseRotate">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
         </item>
        </layout>
       </item>
@@ -685,16 +1156,22 @@
      </property>
      <property name="minimumSize">
       <size>
-       <width>400</width>
+       <width>500</width>
        <height>600</height>
       </size>
+     </property>
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+       <horstretch>1</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout3DView">
       <item>
        <widget class="QWidget" name="widget3DPlot" native="true">
         <property name="minimumSize">
          <size>
-          <width>380</width>
+          <width>480</width>
           <height>580</height>
          </size>
         </property>

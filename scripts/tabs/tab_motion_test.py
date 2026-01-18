@@ -13,6 +13,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import Axes3D
 
+from utils import require_robot_connection
+
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'ui')
@@ -43,10 +45,12 @@ class TabMotionTest(QWidget):
         self.radioTF0.setChecked(True)
 
         self.step_button_group = QButtonGroup(self)
-        self.step_button_group.addButton(self.radioStep1, 1)
-        self.step_button_group.addButton(self.radioStep5, 5)
-        self.step_button_group.addButton(self.radioStep10, 10)
-        self.step_button_group.addButton(self.radioStep50, 50)
+        self.step_button_group.addButton(self.radioStep01, 1)   # 0.1 -> id=1
+        self.step_button_group.addButton(self.radioStep05, 5)   # 0.5 -> id=5
+        self.step_button_group.addButton(self.radioStep1, 10)   # 1 -> id=10
+        self.step_button_group.addButton(self.radioStep5, 50)   # 5 -> id=50
+        self.step_button_group.addButton(self.radioStep10, 100) # 10 -> id=100
+        self.step_button_group.addButton(self.radioStep50, 500) # 50 -> id=500
 
         # 3D 그래프 초기화
         self._init_3d_plot()
@@ -120,7 +124,33 @@ class TabMotionTest(QWidget):
         self.current_tcp_pos = [0, 0, 0]
         self.current_tcp_rot = [0, 0, 0]
 
+        # 줌 레벨 (1.0 = 기본)
+        self.zoom_level = 1.0
+
+        # 마우스 휠 이벤트 연결
+        self.canvas.mpl_connect('scroll_event', self._on_scroll)
+
         # 초기 그리기
+        self._update_3d_plot()
+
+    def _on_scroll(self, event):
+        """마우스 휠 스크롤 이벤트 처리 (확대/축소)"""
+        if event.inaxes != self.ax:
+            return
+
+        # 줌 비율 설정
+        zoom_factor = 1.15
+        if event.button == 'up':
+            # 휠 위로 = 확대
+            self.zoom_level /= zoom_factor
+        elif event.button == 'down':
+            # 휠 아래로 = 축소
+            self.zoom_level *= zoom_factor
+
+        # 줌 레벨 제한 (0.2 ~ 5.0)
+        self.zoom_level = max(0.2, min(5.0, self.zoom_level))
+
+        # 축 범위 업데이트
         self._update_3d_plot()
 
     def _setup_3d_axes(self, preserve_view=False):
@@ -132,8 +162,9 @@ class TabMotionTest(QWidget):
 
         self.ax.clear()
 
-        # 축 범위 설정 (mm 단위)
-        limit = 500
+        # 축 범위 설정 (mm 단위) - 줌 레벨 적용
+        base_limit = 500
+        limit = base_limit * getattr(self, 'zoom_level', 1.0)
         self.ax.set_xlim([-limit, limit])
         self.ax.set_ylim([-limit, limit])
         self.ax.set_zlim([0, limit * 2])
@@ -233,7 +264,8 @@ class TabMotionTest(QWidget):
 
     def get_step_size(self) -> float:
         """현재 스텝 크기 반환"""
-        return float(self.step_button_group.checkedId())
+        # id를 실제 스텝 값으로 변환 (id는 10배로 저장)
+        return float(self.step_button_group.checkedId()) / 10.0
 
     def is_wait_complete(self) -> bool:
         """완료 대기 여부 반환"""
@@ -241,12 +273,9 @@ class TabMotionTest(QWidget):
 
     # ==================== 프레임 설정 ====================
 
+    @require_robot_connection
     def _on_toolframe_changed(self, button):
         """툴프레임 변경"""
-        if self.robot is None or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-
         frame = self.toolframe_button_group.checkedId()
         self._log(f"툴프레임 {frame} 설정 중...")
 
@@ -262,12 +291,9 @@ class TabMotionTest(QWidget):
             self._log(f"툴프레임 설정 오류: {e}")
             QMessageBox.critical(self, "오류", f"툴프레임 설정 오류: {e}")
 
+    @require_robot_connection
     def _on_reset_baseframe(self):
         """베이스프레임 초기화"""
-        if self.robot is None or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-
         self._log("베이스프레임 초기화 중...")
 
         try:
@@ -283,12 +309,9 @@ class TabMotionTest(QWidget):
 
     # ==================== 툴 좌표계 이동 ====================
 
+    @require_robot_connection
     def _on_tool_linear_move(self, axis: str, direction: int):
         """툴 좌표계 직선 이동"""
-        if self.robot is None or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-
         step = self.get_step_size() * direction
         wait = self.is_wait_complete()
 
@@ -306,12 +329,9 @@ class TabMotionTest(QWidget):
             self._log(f"이동 오류: {e}")
             QMessageBox.critical(self, "오류", f"이동 오류: {e}")
 
+    @require_robot_connection
     def _on_tool_rotate_move(self, axis: str, direction: int):
         """툴 좌표계 회전 이동"""
-        if self.robot is None or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-
         step = self.get_step_size() * direction
         wait = self.is_wait_complete()
 
@@ -331,12 +351,9 @@ class TabMotionTest(QWidget):
 
     # ==================== 베이스 좌표계 이동 ====================
 
+    @require_robot_connection
     def _on_base_linear_move(self, axis: str, direction: int):
         """베이스 좌표계 직선 이동"""
-        if self.robot is None or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-
         step = self.get_step_size() * direction
         wait = self.is_wait_complete()
 
@@ -354,12 +371,9 @@ class TabMotionTest(QWidget):
             self._log(f"이동 오류: {e}")
             QMessageBox.critical(self, "오류", f"이동 오류: {e}")
 
+    @require_robot_connection
     def _on_base_rotate_move(self, axis: str, direction: int):
         """베이스 좌표계 회전 이동"""
-        if self.robot is None or not self.robot.is_connected:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-
         step = self.get_step_size() * direction
         wait = self.is_wait_complete()
 
@@ -405,15 +419,13 @@ class TabMotionTest(QWidget):
         self.labelCurrentPosValue.setText(f"X={x:.1f}, Y={y:.1f}, Z={z:.1f} mm")
         self.labelCurrentRotValue.setText(f"Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f} deg")
 
-        # 툴 좌표계 이동 섹션
-        self.labelToolCurrentPosValue.setText(
-            f"X={x:.1f}, Y={y:.1f}, Z={z:.1f} mm | Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f} deg"
-        )
+        # 툴 좌표계 이동 섹션 (2줄 분리)
+        self.labelToolCurrentPosValue.setText(f"X={x:.1f}, Y={y:.1f}, Z={z:.1f} mm")
+        self.labelToolCurrentRotValue.setText(f"Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f} deg")
 
-        # 베이스 좌표계 이동 섹션
-        self.labelBaseCurrentPosValue.setText(
-            f"X={x:.1f}, Y={y:.1f}, Z={z:.1f} mm | Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f} deg"
-        )
+        # 베이스 좌표계 이동 섹션 (2줄 분리)
+        self.labelBaseCurrentPosValue.setText(f"X={x:.1f}, Y={y:.1f}, Z={z:.1f} mm")
+        self.labelBaseCurrentRotValue.setText(f"Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f} deg")
 
         # 3D 그래프 업데이트
         self.current_tcp_pos = [x, y, z]

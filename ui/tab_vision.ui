@@ -106,6 +106,16 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayoutOverlay">
         <item>
+         <widget class="QCheckBox" name="checkArucoDetect">
+          <property name="text">
+           <string>Aruco 감지</string>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QCheckBox" name="checkShowPoseAxes">
           <property name="text">
            <string>포즈 축 표시</string>

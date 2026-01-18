@@ -34,7 +34,7 @@ DEFAULT_CALIBRATION_FILE = os.path.join(
 class Intrinsics:
     """카메라 내부 파라미터"""
     def __init__(self, fx: float, fy: float, ppx: float, ppy: float, coeffs: list,
-                 width: int = 640, height: int = 480):
+                 width: int = 1280, height: int = 720):
         self.fx = fx
         self.fy = fy
         self.ppx = ppx
@@ -62,8 +62,8 @@ class Intrinsics:
                     data.get('p2', 0.0),
                     data.get('k3', 0.0)
                 ],
-                width=data.get('image_width', 640),
-                height=data.get('image_height', 480)
+                width=data.get('image_width', 1280),
+                height=data.get('image_height', 720)
             )
         except Exception as e:
             print(f"Failed to load calibration: {e}")
@@ -91,17 +91,20 @@ class CameraManager(QObject):
     camera_stopped = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, resolution: Tuple[int, int] = (640, 480), fps: int = 30,
-                 calibration_file: str = None):
+    def __init__(self, color_resolution: Tuple[int, int] = (1280, 720),
+                 depth_resolution: Tuple[int, int] = (640, 480),
+                 fps: int = 15, calibration_file: str = None):
         """
         Args:
-            resolution: 카메라 해상도 (width, height)
+            color_resolution: Color 카메라 해상도 (width, height)
+            depth_resolution: Depth 카메라 해상도 (width, height)
             fps: 프레임 레이트
             calibration_file: 캘리브레이션 YAML 파일 경로 (None이면 기본값 사용)
         """
         super().__init__()
 
-        self.resolution = resolution
+        self.color_resolution = color_resolution
+        self.depth_resolution = depth_resolution
         self.fps = fps
 
         # RealSense 관련
@@ -126,6 +129,8 @@ class CameraManager(QObject):
 
         # 마지막 프레임
         self._last_frame: Optional[np.ndarray] = None
+        self._last_depth_frame: Optional[np.ndarray] = None
+        self._last_depth_raw: Optional[np.ndarray] = None  # Raw depth (mm)
 
         # 감마 보정
         self._gamma = 1.0
@@ -181,9 +186,11 @@ class CameraManager(QObject):
             self._pipeline = rs.pipeline()
             self._config = rs.config()
 
-            # 해상도 설정
-            width, height = self.resolution
-            self._config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, self.fps)
+            # 해상도 설정 (Color / Depth 분리)
+            color_w, color_h = self.color_resolution
+            depth_w, depth_h = self.depth_resolution
+            self._config.enable_stream(rs.stream.color, color_w, color_h, rs.format.bgr8, self.fps)
+            self._config.enable_stream(rs.stream.depth, depth_w, depth_h, rs.format.z16, self.fps)
 
             # 파이프라인 시작
             profile = self._pipeline.start(self._config)
@@ -266,11 +273,12 @@ class CameraManager(QObject):
         try:
             frames = self._pipeline.wait_for_frames()
             color_frame = frames.get_color_frame()
+            depth_frame = frames.get_depth_frame()
 
             if not color_frame:
                 return
 
-            # numpy 배열로 변환
+            # Color 프레임 처리
             frame = np.asanyarray(color_frame.get_data())
 
             # 감마 보정 적용
@@ -278,6 +286,16 @@ class CameraManager(QObject):
                 frame = self._apply_gamma(frame, self._gamma)
 
             self._last_frame = frame
+
+            # Depth 프레임 처리
+            if depth_frame:
+                depth_image = np.asanyarray(depth_frame.get_data())
+                self._last_depth_raw = depth_image  # Raw depth 저장 (mm 단위)
+                depth_colormap = cv2.applyColorMap(
+                    cv2.convertScaleAbs(depth_image, alpha=0.03),
+                    cv2.COLORMAP_JET
+                )
+                self._last_depth_frame = depth_colormap
 
             # 프레임 준비 시그널 발생
             self.frame_ready.emit(frame)
@@ -309,6 +327,66 @@ class CameraManager(QObject):
             self._log(f"프레임 가져오기 오류: {e}")
 
         return None
+
+    def get_depth_frame(self) -> Optional[np.ndarray]:
+        """
+        현재 Depth 프레임 가져오기 (캐시된 프레임)
+
+        Returns:
+            Depth 프레임 (컬러맵 적용된 BGR) 또는 None
+        """
+        return self._last_depth_frame
+
+    def get_depth_raw(self) -> Optional[np.ndarray]:
+        """
+        Raw Depth 프레임 가져오기 (mm 단위)
+
+        Returns:
+            Depth 프레임 (uint16, mm 단위) 또는 None
+        """
+        return self._last_depth_raw
+
+    def get_distance_at(self, x: int, y: int, from_color: bool = False) -> Optional[float]:
+        """
+        특정 픽셀의 거리 가져오기
+
+        Args:
+            x: 픽셀 X 좌표
+            y: 픽셀 Y 좌표
+            from_color: True이면 Color 좌표를 Depth 좌표로 변환
+
+        Returns:
+            거리 (mm) 또는 None (유효하지 않은 경우)
+        """
+        if self._last_depth_raw is None:
+            return None
+
+        depth_h, depth_w = self._last_depth_raw.shape
+
+        # Color 좌표 → Depth 좌표 변환
+        if from_color:
+            color_w, color_h = self.color_resolution
+            x = int(x * depth_w / color_w)
+            y = int(y * depth_h / color_h)
+
+        if 0 <= x < depth_w and 0 <= y < depth_h:
+            distance = self._last_depth_raw[y, x]
+            if distance > 0:
+                return float(distance)
+        return None
+
+    def get_distance_at_center(self) -> Optional[float]:
+        """
+        이미지 중심의 거리 가져오기
+
+        Returns:
+            거리 (mm) 또는 None
+        """
+        if self._last_depth_raw is None:
+            return None
+
+        h, w = self._last_depth_raw.shape
+        return self.get_distance_at(w // 2, h // 2)
 
     def set_gamma(self, gamma: float):
         """

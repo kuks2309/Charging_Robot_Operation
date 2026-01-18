@@ -46,6 +46,9 @@ class ModbusClient:
     CMD_TCP_LINEAR_Y = 11       # tool.transy(y) - 툴 좌표계 Y 이동
     CMD_TCP_LINEAR_Z = 12       # tool.transz(z) - 툴 좌표계 Z 이동
     CMD_TCP_LINEAR_XYZ = 13     # tool.trans(x, y, z) - 툴 좌표계 XYZ 이동
+    CMD_TCP_ROTATE_X = 14       # tool.rotx(rx) - 툴 좌표계 X축 회전
+    CMD_TCP_ROTATE_Y = 15       # tool.roty(ry) - 툴 좌표계 Y축 회전
+    CMD_TCP_ROTATE_Z = 16       # tool.rotz(rz) - 툴 좌표계 Z축 회전
     CMD_MOVE_TO_POSE = 20       # movel(pose) - 절대 좌표 이동
     CMD_GRIPPER_OPEN = 30       # 그리퍼 열기
     CMD_GRIPPER_CLOSE = 31      # 그리퍼 닫기
@@ -294,15 +297,48 @@ class ModbusClient:
             angle: 회전 각도 (deg)
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
-
-        Note:
-            Main_task.prs에서 tool.rot() 명령이 미지원으로 비활성화됨
-            툴 좌표계 회전이 필요하면 send_move_to_pose() 또는 send_base_rotate() 사용
         """
-        return False, "툴 좌표계 회전(tool.rot) 미지원 - 베이스 좌표계 회전 사용"
+        # 회전 전 좌표 출력
+        before_pose = self.read_current_pose()
+        if before_pose:
+            print(f"[TCP ROTATE] 회전 전: X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, "
+                  f"Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
+        print(f"[TCP ROTATE] 명령: axis={axis}, angle={angle}deg")
+
+        if axis.lower() == 'rx':
+            val = self.to_uint16(int(angle))
+            self.write_register(self.REGISTER_POSE_RX, val)
+            print(f"[TCP ROTATE] 레지스터: Rx(304)={val}, CMD(351)={self.CMD_TCP_ROTATE_X}")
+            self.write_command(self.CMD_TCP_ROTATE_X)
+        elif axis.lower() == 'ry':
+            val = self.to_uint16(int(angle))
+            self.write_register(self.REGISTER_POSE_RY, val)
+            print(f"[TCP ROTATE] 레지스터: Ry(305)={val}, CMD(351)={self.CMD_TCP_ROTATE_Y}")
+            self.write_command(self.CMD_TCP_ROTATE_Y)
+        elif axis.lower() == 'rz':
+            val = self.to_uint16(int(angle))
+            self.write_register(self.REGISTER_POSE_RZ, val)
+            print(f"[TCP ROTATE] 레지스터: Rz(306)={val}, CMD(351)={self.CMD_TCP_ROTATE_Z}")
+            self.write_command(self.CMD_TCP_ROTATE_Z)
+        else:
+            return False, "잘못된 축 지정 (rx/ry/rz)"
+
+        if wait:
+            result = self.wait_for_done(process_events_callback=process_events_callback)
+            # 회전 후 좌표 출력
+            after_pose = self.read_current_pose()
+            if after_pose:
+                print(f"[TCP ROTATE] 회전 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, "
+                      f"Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
+                if before_pose:
+                    print(f"[TCP ROTATE] 변화량: dRx={after_pose[3]-before_pose[3]:.2f}, dRy={after_pose[4]-before_pose[4]:.2f}, "
+                          f"dRz={after_pose[5]-before_pose[5]:.2f}")
+            return result
+        return True, "명령 전송됨"
 
     def send_move_to_pose(self, x: float, y: float, z: float,
-                          rx: float, ry: float, rz: float, wait: bool = True) -> Tuple[bool, str]:
+                          rx: float, ry: float, rz: float, wait: bool = True,
+                          process_events_callback=None) -> Tuple[bool, str]:
         """
         절대 좌표 이동 (command 20)
 
@@ -310,6 +346,7 @@ class ModbusClient:
             x, y, z: 위치 (mm)
             rx, ry, rz: 회전 (deg)
             wait: 완료 대기 여부
+            process_events_callback: UI 이벤트 처리 콜백
 
         Note:
             Main_task.prs에서 movel(pose)로 이동 (베이스 좌표계 기준)
@@ -331,7 +368,7 @@ class ModbusClient:
         self.write_command(self.CMD_MOVE_TO_POSE)
 
         if wait:
-            return self.wait_for_done()
+            return self.wait_for_done(process_events_callback=process_events_callback)
         return True, "명령 전송됨"
 
     def send_gripper(self, action: str, wait: bool = True) -> Tuple[bool, str]:

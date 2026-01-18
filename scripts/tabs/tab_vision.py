@@ -7,11 +7,11 @@ Aruco 감지, 포즈 추정, 정렬 테스트, 데이터 수집 기능
 import os
 import cv2
 import numpy as np
-from datetime import datetime
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget, QFileDialog, QMessageBox
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtWidgets import QWidget, QMessageBox
+from PyQt5.QtCore import pyqtSignal
+
+from utils import display_frame_on_label, save_snapshot, require_camera_running
 
 
 # UI 파일 경로
@@ -95,27 +95,14 @@ class TabVision(QWidget):
 
     def display_frame(self, frame: np.ndarray):
         """프레임을 QLabel에 표시"""
-        if frame is None:
-            return
-
-        # BGR -> RGB 변환
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_frame.shape
-        bytes_per_line = ch * w
-
-        # QImage로 변환
-        q_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
-
-        # QLabel 크기에 맞게 스케일링
-        pixmap = QPixmap.fromImage(q_image)
-        scaled_pixmap = pixmap.scaled(
-            self.labelCameraView.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-        self.labelCameraView.setPixmap(scaled_pixmap)
+        if frame is not None:
+            display_frame_on_label(frame, self.labelCameraView)
 
     # ==================== UI 설정 접근자 ====================
+
+    def is_aruco_detect_enabled(self) -> bool:
+        """Aruco 감지 활성화 여부"""
+        return self.checkArucoDetect.isChecked()
 
     def get_target_tag_id(self) -> int:
         """타겟 Tag ID 반환"""
@@ -165,23 +152,10 @@ class TabVision(QWidget):
         """카메라 정지"""
         self.camera_stop_requested.emit()
 
+    @require_camera_running
     def _on_snapshot(self):
         """스냅샷 저장"""
-        if self.current_frame is None:
-            QMessageBox.warning(self, "경고", "카메라가 실행되지 않았습니다.")
-            return
-
-        # 저장 경로
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"snapshot_vision_{timestamp}.png"
-
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, "스냅샷 저장", default_name, "PNG Files (*.png);;All Files (*)"
-        )
-
-        if filepath:
-            cv2.imwrite(filepath, self.current_frame)
-            self._log(f"스냅샷 저장: {filepath}")
+        save_snapshot(self.current_frame, self, "vision", self._log)
 
     def _on_gamma_changed(self, value: int):
         """감마 값 변경"""

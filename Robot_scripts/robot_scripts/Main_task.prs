@@ -78,8 +78,39 @@ while true do
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
 
-    -- command 14-17: 회전 명령 (tool.rot() 미지원으로 비활성화)
-    -- 회전이 필요한 경우 command 20 (절대 위치 이동) 사용
+    -- command 14-16: 툴 좌표계 회전 (tool.rotx/y/z)
+    elseif command == 14 then
+        modserv.write_register('task_done', 1)
+        Rx = modserv.read_register('Rx')
+        if Rx > 32767 then
+            Rx = Rx - 65537
+        end
+        tool.rotx(Rx)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 15 then
+        modserv.write_register('task_done', 1)
+        Ry = modserv.read_register('Ry')
+        if Ry > 32767 then
+            Ry = Ry - 65537
+        end
+        tool.roty(Ry)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 16 then
+        modserv.write_register('task_done', 1)
+        Rz = modserv.read_register('Rz')
+        if Rz > 32767 then
+            Rz = Rz - 65537
+        end
+        tool.rotz(Rz)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
 
     elseif command == 20 then
         modserv.write_register('task_done', 1)

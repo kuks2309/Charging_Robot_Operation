@@ -7,14 +7,44 @@
     <x>0</x>
     <y>0</y>
     <width>1200</width>
-    <height>800</height>
+    <height>900</height>
    </rect>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayoutCalibration">
+   <property name="spacing">
+    <number>4</number>
+   </property>
+   <property name="leftMargin">
+    <number>4</number>
+   </property>
+   <property name="topMargin">
+    <number>4</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>4</number>
+   </property>
    <!-- Left: Camera Stream + Sub Tabs -->
    <item>
     <widget class="QWidget" name="widgetLeft">
      <layout class="QVBoxLayout" name="verticalLayoutLeft">
+      <property name="spacing">
+       <number>2</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
       <!-- Camera View -->
       <item>
        <widget class="QGroupBox" name="groupCalibCameraStream">
@@ -22,6 +52,21 @@
          <string>Camera Stream</string>
         </property>
         <layout class="QVBoxLayout" name="verticalLayoutCalibCamera">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>4</number>
+         </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
          <item>
           <widget class="QLabel" name="labelCalibCameraView">
            <property name="sizePolicy">
@@ -31,6 +76,12 @@
             </sizepolicy>
            </property>
            <property name="minimumSize">
+            <size>
+             <width>640</width>
+             <height>480</height>
+            </size>
+           </property>
+           <property name="maximumSize">
             <size>
              <width>640</width>
              <height>480</height>
@@ -70,6 +121,23 @@
              </property>
             </widget>
            </item>
+           <item>
+            <widget class="QRadioButton" name="radioColorImage">
+             <property name="text">
+              <string>Color</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioDepthImage">
+             <property name="text">
+              <string>Depth</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
         </layout>
@@ -87,6 +155,21 @@
           <string>Chessboard</string>
          </attribute>
          <layout class="QVBoxLayout" name="verticalLayoutChessboardTab">
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
           <!-- Chessboard Settings -->
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutChessboardSettings">
@@ -156,7 +239,7 @@
                <double>0.500000000000000</double>
               </property>
               <property name="value">
-               <double>25.000000000000000</double>
+               <double>22.000000000000000</double>
               </property>
              </widget>
             </item>
@@ -191,6 +274,12 @@
             </item>
             <item>
              <widget class="QLabel" name="labelChessboardCenterValue">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
               <property name="text">
                <string>-</string>
               </property>
@@ -208,11 +297,40 @@
             </item>
             <item>
              <widget class="QLabel" name="labelChessboardAngleValue">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
               <property name="text">
                <string>-</string>
               </property>
               <property name="styleSheet">
                <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardDistance">
+              <property name="text">
+               <string>거리:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardDistanceValue">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold; color: #E91E63;</string>
               </property>
              </widget>
             </item>
@@ -280,110 +398,994 @@
           </item>
           <!-- Chessboard Robot Align -->
           <item>
-           <widget class="QGroupBox" name="groupChessboardAlign">
-            <property name="title">
-             <string>Chessboard Robot Align</string>
+           <layout class="QHBoxLayout" name="horizontalLayoutChessboardAlign">
+            <item>
+             <widget class="QPushButton" name="btnAlignCenter">
+              <property name="text">
+               <string>중심 정렬</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="checkAutoCorrection">
+              <property name="text">
+               <string>중심 정렬 자동 보정</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerAlign">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 중심 정렬 후 Base 좌표 표시 -->
+          <item>
+           <widget class="QLabel" name="labelAlignedBasePos">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayoutChessboardAlign">
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayoutAlignButtons">
-               <item>
-                <widget class="QPushButton" name="btnAlignCenter">
-                 <property name="text">
-                  <string>중심 정렬</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="btnAlignAngle">
-                 <property name="text">
-                  <string>각도 정렬</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="btnAlignBoth">
-                 <property name="text">
-                  <string>전체 정렬</string>
-                 </property>
-                 <property name="styleSheet">
-                  <string>background-color: #9C27B0; color: white;</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="horizontalSpacerAlign">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-            </layout>
+            <property name="text">
+             <string>기준 좌표: -</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #9C27B0; font-weight: bold;</string>
+            </property>
+           </widget>
+          </item>
+          <!-- 정렬 오차 표시 -->
+          <item>
+           <widget class="QLabel" name="labelAlignError">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>정렬 오차: -</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #FF5722;</string>
+            </property>
            </widget>
           </item>
          </layout>
         </widget>
-        <!-- Auto Calibration Tab -->
+        <!-- Auto Calibration Tab - 로봇 좌표 제어 -->
         <widget class="QWidget" name="tabAutoCalib">
          <attribute name="title">
           <string>자동 캘리브레이션</string>
          </attribute>
-         <layout class="QHBoxLayout" name="horizontalLayoutAutoCalibTab">
+         <layout class="QVBoxLayout" name="verticalLayoutAutoCalibTab">
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <!-- 현재 툴프레임 표시 -->
           <item>
-           <widget class="QLabel" name="labelNumPositions">
-            <property name="text">
-             <string>위치 수:</string>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayoutToolframe">
+            <item>
+             <widget class="QLabel" name="labelCalibToolframe">
+              <property name="text">
+               <string>툴프레임:</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibToolframeValue">
+              <property name="text">
+               <string>TF1 (비전)</string>
+              </property>
+              <property name="styleSheet">
+               <string>color: #2196F3; font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerToolframe">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
+          <!-- 좌표 표시 (X, Y, Z) -->
           <item>
-           <widget class="QSpinBox" name="spinNumPositions">
-            <property name="minimum">
-             <number>5</number>
-            </property>
-            <property name="maximum">
-             <number>30</number>
-            </property>
-            <property name="value">
-             <number>10</number>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayoutPosXYZ">
+            <item>
+             <widget class="QLabel" name="labelCalibX">
+              <property name="text">
+               <string>X:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editCalibX">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibY">
+              <property name="text">
+               <string>Y:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editCalibY">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibZ">
+              <property name="text">
+               <string>Z:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editCalibZ">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerPosXYZ">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
+          <!-- 좌표 표시 (Rx, Ry, Rz) -->
           <item>
-           <widget class="QPushButton" name="btnStartAutoCalib">
-            <property name="text">
-             <string>시작</string>
-            </property>
-            <property name="styleSheet">
-             <string>background-color: #2196F3; color: white;</string>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayoutPosRxRyRz">
+            <item>
+             <widget class="QLabel" name="labelCalibRx">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editCalibRx">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibRy">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editCalibRy">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibRz">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editCalibRz">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerPosRxRyRz">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
+          <!-- 스텝 크기 설정 -->
           <item>
-           <widget class="QPushButton" name="btnStopAutoCalib">
-            <property name="text">
-             <string>중지</string>
-            </property>
-            <property name="enabled">
-             <bool>false</bool>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayoutCalibStep">
+            <item>
+             <widget class="QLabel" name="labelCalibStep">
+              <property name="text">
+               <string>스텝:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioCalibStep1">
+              <property name="text">
+               <string>1</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioCalibStep5">
+              <property name="text">
+               <string>5</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioCalibStep10">
+              <property name="text">
+               <string>10</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibStepUnit">
+              <property name="text">
+               <string>mm, deg</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerCalibStep">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
+          <!-- 직선 이동 (Base 좌표계) -->
           <item>
-           <widget class="QLabel" name="labelAutoCalibStatus">
-            <property name="text">
-             <string>상태: 대기</string>
+           <layout class="QHBoxLayout" name="horizontalLayoutCalibLinear">
+            <property name="spacing">
+             <number>2</number>
             </property>
-           </widget>
+            <item>
+             <widget class="QLabel" name="labelCalibLinear">
+              <property name="text">
+               <string>직선:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>36</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibMoveX">
+              <property name="text">
+               <string>X:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>18</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>18</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibXMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibXPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibMoveY">
+              <property name="text">
+               <string>Y:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>18</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>18</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibYMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibYPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibMoveZ">
+              <property name="text">
+               <string>Z:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>18</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>18</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibZMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibZPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerCalibLinear">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
+          <!-- 회전 이동 (Base 좌표계) -->
           <item>
-           <spacer name="horizontalSpacerAutoCalib">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
+           <layout class="QHBoxLayout" name="horizontalLayoutCalibRotate">
+            <property name="spacing">
+             <number>2</number>
             </property>
-           </spacer>
+            <item>
+             <widget class="QLabel" name="labelCalibRotate">
+              <property name="text">
+               <string>회전:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>36</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibMoveRx">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>22</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>22</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibRxMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibRxPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibMoveRy">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>22</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>22</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibRyMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibRyPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCalibMoveRz">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>22</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>22</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibRzMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCalibRzPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerCalibRotate">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- TCP 정렬 (목표 자세로 이동) -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutTcpAlign">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelTcpAlign">
+              <property name="text">
+               <string>TCP:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelTcpAlignRx">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editTcpAlignRx">
+              <property name="minimumSize">
+               <size><width>50</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>60</width><height>16777215</height></size>
+              </property>
+              <property name="text">
+               <string>90</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelTcpAlignRy">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editTcpAlignRy">
+              <property name="minimumSize">
+               <size><width>50</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>60</width><height>16777215</height></size>
+              </property>
+              <property name="text">
+               <string>0</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelTcpAlignRz">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editTcpAlignRz">
+              <property name="minimumSize">
+               <size><width>50</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>60</width><height>16777215</height></size>
+              </property>
+              <property name="text">
+               <string>90</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTcpAlign">
+              <property name="text">
+               <string>정렬</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #2196F3; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTcpAlignRead">
+              <property name="text">
+               <string>읽기</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTcpAlignCenter">
+              <property name="text">
+               <string>중앙</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerTcpAlign">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Rx 프리셋 버튼 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutRxPresets">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelRxPresets">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset70">
+              <property name="text">
+               <string>70°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=70, Ry=0, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset80">
+              <property name="text">
+               <string>80°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=80, Ry=0, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset90">
+              <property name="text">
+               <string>90°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=90 (중앙)</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset100">
+              <property name="text">
+               <string>100°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=100, Ry=0, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset110">
+              <property name="text">
+               <string>110°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=110, Ry=0, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerRxPresets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Ry 프리셋 버튼 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutRyPresets">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelRyPresets">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPresetM20">
+              <property name="text">
+               <string>-20°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=-20, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPresetM10">
+              <property name="text">
+               <string>-10°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=-10, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPreset0">
+              <property name="text">
+               <string>0°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=90 (중앙)</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPreset10">
+              <property name="text">
+               <string>10°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=10, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPreset20">
+              <property name="text">
+               <string>20°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=20, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerRyPresets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Rz 프리셋 버튼 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutRzPresets">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelRzPresets">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset70">
+              <property name="text">
+               <string>70°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=70</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset80">
+              <property name="text">
+               <string>80°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=80</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset90">
+              <property name="text">
+               <string>90°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=90 (중앙)</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset100">
+              <property name="text">
+               <string>100°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=100</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset110">
+              <property name="text">
+               <string>110°</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=110</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerRzPresets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 캘리브레이션 저장/로드 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutCalibSaveLoad">
+            <item>
+             <widget class="QPushButton" name="btnSaveCalibration">
+              <property name="text">
+               <string>캘리브레이션 저장</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnLoadCalibration">
+              <property name="text">
+               <string>캘리브레이션 로드</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -392,11 +1394,11 @@
      </layout>
     </widget>
    </item>
-   <!-- Right: Robot Position + Calibration Result -->
+   <!-- Right: 자동 캘리브레이션 위치 -->
    <item>
-    <widget class="QGroupBox" name="groupCalibControls">
+    <widget class="QGroupBox" name="groupAutoCalibPositions">
      <property name="title">
-      <string>캘리브레이션</string>
+      <string>자동 캘리브레이션 위치</string>
      </property>
      <property name="minimumSize">
       <size>
@@ -404,219 +1406,184 @@
        <height>0</height>
       </size>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayoutCalibControls">
-      <!-- Robot Position -->
+     <layout class="QVBoxLayout" name="verticalLayoutAutoCalibPositions">
+      <property name="spacing">
+       <number>2</number>
+      </property>
+      <property name="leftMargin">
+       <number>4</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>4</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <!-- 기준 좌표 표시 -->
       <item>
-       <widget class="QGroupBox" name="groupRobotPosition">
-        <property name="title">
-         <string>로봇 좌표</string>
+       <widget class="QLabel" name="labelAlignedBasePosAutoTab">
+        <property name="text">
+         <string>기준 좌표: -</string>
         </property>
-        <layout class="QGridLayout" name="gridLayoutRobotPos">
-         <item row="0" column="0">
-          <widget class="QLabel" name="labelCalibX">
-           <property name="text">
-            <string>X:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QLineEdit" name="editCalibX">
-           <property name="readOnly">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight</set>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="2">
-          <widget class="QLabel" name="labelCalibRx">
-           <property name="text">
-            <string>Rx:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="3">
-          <widget class="QLineEdit" name="editCalibRx">
-           <property name="readOnly">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight</set>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="labelCalibY">
-           <property name="text">
-            <string>Y:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QLineEdit" name="editCalibY">
-           <property name="readOnly">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight</set>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="2">
-          <widget class="QLabel" name="labelCalibRy">
-           <property name="text">
-            <string>Ry:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="3">
-          <widget class="QLineEdit" name="editCalibRy">
-           <property name="readOnly">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight</set>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="labelCalibZ">
-           <property name="text">
-            <string>Z:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QLineEdit" name="editCalibZ">
-           <property name="readOnly">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight</set>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="2">
-          <widget class="QLabel" name="labelCalibRz">
-           <property name="text">
-            <string>Rz:</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="3">
-          <widget class="QLineEdit" name="editCalibRz">
-           <property name="readOnly">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight</set>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <property name="styleSheet">
+         <string>color: #9C27B0; font-weight: bold;</string>
+        </property>
        </widget>
       </item>
-      <!-- Calibration Result -->
+      <!-- 그리드 간격 설정 -->
       <item>
-       <widget class="QGroupBox" name="groupCalibResult">
-        <property name="title">
-         <string>캘리브레이션 결과</string>
+       <layout class="QHBoxLayout" name="horizontalLayoutGridStep">
+        <item>
+         <widget class="QLabel" name="labelGridInfo">
+          <property name="text">
+           <string>3x3x3 그리드</string>
+          </property>
+          <property name="toolTip">
+           <string>XY 3x3, Z 3단계 = 27개 위치</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelXYStep">
+          <property name="text">
+           <string>XY간격:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinXYStep">
+          <property name="minimum">
+           <number>10</number>
+          </property>
+          <property name="maximum">
+           <number>200</number>
+          </property>
+          <property name="value">
+           <number>50</number>
+          </property>
+          <property name="suffix">
+           <string>mm</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelZStep">
+          <property name="text">
+           <string>Z간격:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinZStep">
+          <property name="minimum">
+           <number>50</number>
+          </property>
+          <property name="maximum">
+           <number>200</number>
+          </property>
+          <property name="value">
+           <number>100</number>
+          </property>
+          <property name="suffix">
+           <string>mm</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerGridStep">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- 위치 생성 버튼 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutPosGenButtons">
+        <item>
+         <widget class="QPushButton" name="btnGeneratePositions">
+          <property name="text">
+           <string>위치 생성</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #2196F3; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnClearPositions">
+          <property name="text">
+           <string>초기화</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerPosGen">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- 위치 리스트 -->
+      <item>
+       <widget class="QListWidget" name="listAutoCalibPositions">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>100</height>
+         </size>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayoutCalibResult">
-         <item>
-          <layout class="QFormLayout" name="formLayoutCalibResult">
-           <item row="0" column="0">
-            <widget class="QLabel" name="labelRMSError">
-             <property name="text">
-              <string>RMS 오차:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QLabel" name="labelRMSErrorValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="labelFx">
-             <property name="text">
-              <string>fx:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QLabel" name="labelFxValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0">
-            <widget class="QLabel" name="labelFy">
-             <property name="text">
-              <string>fy:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QLabel" name="labelFyValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="labelCx">
-             <property name="text">
-              <string>cx:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QLabel" name="labelCxValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="0">
-            <widget class="QLabel" name="labelCy">
-             <property name="text">
-              <string>cy:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
-            <widget class="QLabel" name="labelCyValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnSaveCalibration">
-           <property name="text">
-            <string>캘리브레이션 저장</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="btnLoadCalibration">
-           <property name="text">
-            <string>캘리브레이션 로드</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SingleSelection</enum>
+        </property>
        </widget>
       </item>
+      <!-- 실행 버튼 -->
       <item>
-       <spacer name="verticalSpacerCalib">
+       <layout class="QHBoxLayout" name="horizontalLayoutPosExec">
+        <item>
+         <widget class="QPushButton" name="btnMoveToSelectedBase">
+          <property name="text">
+           <string>선택 위치 이동</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #2196F3; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSequentialMove">
+          <property name="text">
+           <string>순차 이동</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #FF9800; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnRunAutoCapture">
+          <property name="text">
+           <string>자동 캡처 실행</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #4CAF50; color: white;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <spacer name="verticalSpacerAutoCalib">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
         </property>

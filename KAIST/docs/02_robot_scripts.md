@@ -34,96 +34,136 @@ PC에서 Modbus 명령을 통해 로봇을 원격 제어하는 통합 스크립�
 
 ### 3.2 레지스터 맵
 
+#### 위치 읽기 (Float32)
 | 레지스터 | 용도 | 타입 |
 |----------|------|------|
-| 301 | 명령 코드 (command) | uint16 |
-| 302 | 모드 (0=상대, 1=절대) | uint16 |
-| 303-304 | X값 | float32 (2 regs) |
-| 305-306 | Y값 | float32 (2 regs) |
-| 307-308 | Z값 | float32 (2 regs) |
-| 309-310 | Rx값 | float32 (2 regs) |
-| 311-312 | Ry값 | float32 (2 regs) |
-| 313-314 | Rz값 | float32 (2 regs) |
-| 315 | 상태 코드 | uint16 |
+| 158-159 | 현재 X | float32 (2 regs) |
+| 160-161 | 현재 Y | float32 (2 regs) |
+| 162-163 | 현재 Z | float32 (2 regs) |
+| 164-165 | 현재 Rx | float32 (2 regs) |
+| 166-167 | 현재 Ry | float32 (2 regs) |
+| 168-169 | 현재 Rz | float32 (2 regs) |
 
-### 3.3 상태 코드 (레지스터 315)
+#### 명령 파라미터 (int16 × 10 스케일)
+| 레지스터 | 이름 | 용도 |
+|----------|------|------|
+| 301 | x | X값 (실제값 × 10) |
+| 302 | y | Y값 (실제값 × 10) |
+| 303 | z | Z값 (실제값 × 10) |
+| 304 | Rx | Rx값 (실제값 × 10) |
+| 305 | Ry | Ry값 (실제값 × 10) |
+| 306 | Rz | Rz값 (실제값 × 10) |
+| 351 | task_number | 명령 코드 |
+| 352 | task_done | 상태 코드 |
 
-| 값 | 상수명 | 의미 |
-|----|--------|------|
-| 0 | STATUS_IDLE | 대기 중 |
-| 1 | STATUS_RUNNING | 실행 중 |
-| 2 | STATUS_DONE | 완료 |
-| 3 | STATUS_ERROR | 오류 |
+### 3.3 상태 코드 (레지스터 352)
 
-### 3.4 명령 코드 (레지스터 301)
+| 값 | 의미 |
+|----|------|
+| 0 | Idle (대기) |
+| 1 | Running (실행 중) |
+| 2 | Done (완료) |
+| 3 | Error (오류) |
 
-| 코드 | 명령 | 설명 | 사용 레지스터 |
-|------|------|------|---------------|
+### 3.4 명령 코드 (레지스터 351)
+
+| 코드 | 명령 | 설명 | 좌표계 |
+|------|------|------|--------|
 | **1** | Go Home | var.p(100) 위치로 이동 | - |
-| **2** | Set Home | 현재 위치를 var.p(100)에 저장 | - |
-| **10** | TCP Linear X | X축 직선 이동 | 302, 303-304 |
-| **11** | TCP Linear Y | Y축 직선 이동 | 302, 303-304 |
-| **12** | TCP Linear Z | Z축 직선 이동 | 302, 303-304 |
-| **13** | TCP Linear XYZ | X, Y, Z 동시 직선 이동 | 302, 303-308 |
-| **14** | TCP Rotate Rx | Rx축 회전 | 302, 303-304 |
-| **15** | TCP Rotate Ry | Ry축 회전 | 302, 303-304 |
-| **16** | TCP Rotate Rz | Rz축 회전 | 302, 303-304 |
-| **17** | TCP Rotate RxRyRz | Rx, Ry, Rz 동시 회전 | 302, 303-308 |
-| **20** | Move to Pose | 6DOF 포즈로 절대 이동 | 303-314 |
+| **2** | (Reserved) | - | - |
+| **10** | tool.transx | Tool X축 상대 이동 | Tool |
+| **11** | tool.transy | Tool Y축 상대 이동 | Tool |
+| **12** | tool.transz | Tool Z축 상대 이동 | Tool |
+| **13** | tool.trans | Tool XYZ 동시 상대 이동 | Tool |
+| **20** | movel (절대) | 6DOF 절대 좌표 이동 | Base |
 | **30** | Gripper Open | 그리퍼 열기 | - |
 | **31** | Gripper Close | 그리퍼 닫기 | - |
 | **32** | Gripper Home | 그리퍼 홈 + 열기 | - |
+| **40** | toolframe(0) | 툴프레임 0 선택 | - |
+| **41** | toolframe(1) | 툴프레임 1 선택 | - |
+| **42** | toolframe(2) | 툴프레임 2 선택 | - |
+| **43** | toolframe(3) | 툴프레임 3 선택 | - |
 
-### 3.5 이동 모드 (레지스터 302)
+### 3.5 좌표계 설명
 
-| 값 | 모드 | 동작 방식 |
-|----|------|-----------|
-| 0 | 상대 이동 | `shift(here(), ...)` - 현재 위치 기준 |
-| 1 | 절대 이동 | 특정 좌표값으로 직접 이동 |
+| 명령어 | 좌표계 | 설명 |
+|--------|--------|------|
+| `tool.transx/y/z(mm)` | Tool 좌표계 | 로봇 자세에 따라 축 방향 변함 |
+| `trans(x, y, z)` | Base 좌표계 | 항상 고정된 방향 |
 
-### 3.6 코드 예시
+### 3.6 Python 테스트 스크립트
 
-```lua
--- 메인 루프 (100ms 폴링)
-while true do
-    command = modserv.read_register(301)
-
-    if command == 10 then
-        -- TCP Linear X
-        modserv.write_register(315, STATUS_RUNNING)
-        mode = modserv.read_register(302)
-        dist = modserv.read_float(303)
-        if mode == 0 then
-            movel(shift(here(), dist, 0, 0, 0, 0, 0))
-        else
-            cur = here()
-            cur.x = dist
-            movel(cur)
-        end
-        modserv.write_register(315, STATUS_DONE)
-        modserv.write_register(301, 0)
-    end
-    delay(100)
-end
+#### 절대 좌표 이동 (command 20)
+```bash
+python3 /home/amap/Project/KAIST/Charging_Robot/scripts/test_relative_move.py --dx 10 --dy 0 --dz 0
 ```
 
-### 3.7 Python 클라이언트 사용 예시
+#### Tool Z축 상대 이동 (command 12)
+```bash
+python3 /home/amap/Project/KAIST/Charging_Robot/scripts/test_tool_trans.py --dz 100
+```
+
+#### 회전 설정
+```bash
+python3 /home/amap/Project/KAIST/Charging_Robot/scripts/set_rz.py --rx 45 --ry 0 --rz 90
+```
+
+#### 툴프레임 변경 테스트
+```bash
+python3 /home/amap/Project/KAIST/Charging_Robot/scripts/test_toolframe.py
+```
+
+#### 상태 모니터링
+```bash
+python3 /home/amap/Project/KAIST/Charging_Robot/scripts/debug_status.py
+```
+
+### 3.7 Python 클라이언트 예시
 
 ```python
 from pymodbus.client import ModbusTcpClient
+import struct
+import time
 
-client = ModbusTcpClient('192.168.0.29', port=502)
+ROBOT_IP = "192.168.0.29"
+ROBOT_PORT = 1502
 
-# X축으로 100mm 상대 이동
-client.write_register(302, 0)                    # 상대 모드
-client.write_registers(303, float_to_regs(100.0)) # X = 100mm
-client.write_register(301, 10)                   # X축 이동 명령
+client = ModbusTcpClient(ROBOT_IP, port=ROBOT_PORT)
+client.connect()
 
-# 상태 폴링
-while client.read_holding_registers(315, 1).registers[0] != 2:
+# 현재 위치 읽기 (float32)
+def read_float32(regs, idx):
+    high, low = regs[idx+1], regs[idx]
+    return struct.unpack('>f', high.to_bytes(2,'big') + low.to_bytes(2,'big'))[0]
+
+rr = client.read_holding_registers(158, 12)
+x = read_float32(rr.registers, 0)
+y = read_float32(rr.registers, 2)
+z = read_float32(rr.registers, 4)
+
+# int16 변환 (음수 처리)
+def to_int16(val):
+    return int(val + 65536) if val < 0 else int(val)
+
+# 절대 좌표 이동 (command 20)
+regs = [
+    to_int16(int(x * 10)),     # 301: X
+    to_int16(int(y * 10)),     # 302: Y
+    to_int16(int((z+10) * 10)), # 303: Z (+10mm)
+    to_int16(int(45 * 10)),    # 304: Rx
+    to_int16(int(0 * 10)),     # 305: Ry
+    to_int16(int(90 * 10)),    # 306: Rz
+]
+client.write_registers(301, regs)
+client.write_registers(351, [20])  # command 20
+
+# 완료 대기 (Running → Done)
+while True:
     time.sleep(0.1)
-
-print("이동 완료")
+    rr = client.read_holding_registers(352, 1)
+    if rr.registers[0] == 2:  # Done
+        break
+print("완료")
 ```
 
 ---
