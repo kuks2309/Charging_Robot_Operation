@@ -335,6 +335,9 @@ class MainWindow(QMainWindow):
         # 상태 업데이트 타이머 시작
         self.status_timer.start(100)
 
+        # 상태바에 연결 정보 및 Tool Frame 표시
+        self._update_statusbar()
+
         # 현재 탭이 비전/캘리브레이션 탭이면 Tool Frame 1로 설정
         current_tab = self.tabWidget.currentIndex()
         if current_tab in [1, 2]:
@@ -346,10 +349,28 @@ class MainWindow(QMainWindow):
                     # 캘리브레이션 탭 UI 업데이트
                     if current_tab == 2:
                         self.tabCalibration.update_current_toolframe(1)
+                    # 상태바 업데이트
+                    self._update_statusbar()
                 else:
                     self._log(f"Tool Frame 설정 실패: {msg}")
             except Exception as e:
                 self._log(f"Tool Frame 설정 오류: {e}")
+
+    def _update_statusbar(self):
+        """상태바 업데이트 - 연결 정보 및 Tool Frame 표시"""
+        if not self.robot or not self.robot.is_connected:
+            self.statusbar.showMessage("연결 안 됨")
+            return
+
+        # 현재 Tool Frame 읽기
+        try:
+            toolframe = self.robot.read_current_toolframe()
+            if toolframe is not None:
+                self.statusbar.showMessage(f"연결 성공: {self.robot.ip}:{self.robot.port} | TF: {toolframe}")
+            else:
+                self.statusbar.showMessage(f"연결 성공: {self.robot.ip}:{self.robot.port}")
+        except Exception as e:
+            self.statusbar.showMessage(f"연결 성공: {self.robot.ip}:{self.robot.port}")
 
     def _on_disconnect(self):
         """로봇 연결 해제"""
@@ -851,12 +872,16 @@ class MainWindow(QMainWindow):
                         # 캘리브레이션 탭 UI 업데이트
                         if index == 2:
                             self.tabCalibration.update_current_toolframe(1)
-                        # 상태바에 TF 표시
-                        self.statusBar().showMessage(f"연결됨: {self.robot.ip}:{self.robot.port} | TF1")
+                        # 상태바 업데이트
+                        self._update_statusbar()
                     else:
                         self._log(f"Tool Frame 설정 실패: {msg}")
                 except Exception as e:
                     self._log(f"Tool Frame 설정 오류: {e}")
+        else:
+            # 다른 탭으로 변경 시에도 상태바 업데이트
+            if self.robot and self.robot.is_connected:
+                self._update_statusbar()
 
     # ==================== 유틸리티 ====================
 

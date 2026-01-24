@@ -30,7 +30,7 @@ while true do
         modserv.write_register('task_done', 1)
         x = modserv.read_register('x')
         if  x>32767  then
-            x= x-65537
+            x= x-65536
         end
         tool.transx(x)
         modserv.write_register('task_done', 2)
@@ -41,7 +41,7 @@ while true do
         modserv.write_register('task_done', 1)
         y = modserv.read_register('y')
         if  y>32767  then
-            y= y-65537
+            y= y-65536
         end
         tool.transy(y)
         modserv.write_register('task_done', 2)
@@ -52,7 +52,7 @@ while true do
         modserv.write_register('task_done', 1)
         z = modserv.read_register('z')
         if  z>32767  then
-            z= z-65537
+            z= z-65536
         end
         tool.transz(z)
         modserv.write_register('task_done', 2)
@@ -65,13 +65,13 @@ while true do
         y = modserv.read_register('y')
         z = modserv.read_register('z')
         if  x>32767  then
-            x= x-65537
+            x= x-65536
         end
         if  y>32767  then
-            y= y-65537
+            y= y-65536
         end
         if  z>32767  then
-            z= z-65537
+            z= z-65536
         end
         tool.trans(x, y, z)
         modserv.write_register('task_done', 2)
@@ -83,7 +83,7 @@ while true do
         modserv.write_register('task_done', 1)
         Rx = modserv.read_register('Rx')
         if Rx > 32767 then
-            Rx = Rx - 65537
+            Rx = Rx - 65536
         end
         tool.rotx(Rx)
         modserv.write_register('task_done', 2)
@@ -94,7 +94,7 @@ while true do
         modserv.write_register('task_done', 1)
         Ry = modserv.read_register('Ry')
         if Ry > 32767 then
-            Ry = Ry - 65537
+            Ry = Ry - 65536
         end
         tool.roty(Ry)
         modserv.write_register('task_done', 2)
@@ -105,7 +105,7 @@ while true do
         modserv.write_register('task_done', 1)
         Rz = modserv.read_register('Rz')
         if Rz > 32767 then
-            Rz = Rz - 65537
+            Rz = Rz - 65536
         end
         tool.rotz(Rz)
         modserv.write_register('task_done', 2)
@@ -121,22 +121,22 @@ while true do
         Ry = modserv.read_register('Ry')
         Rz = modserv.read_register('Rz')
         if  x>32767  then
-            x= x-65537
+            x= x-65536
         end
         if  y>32767  then
-            y= y-65537
+            y= y-65536
         end
         if  z>32767  then
-            z= z-65537
+            z= z-65536
         end
         if  Rx>32767  then
-            Rx= Rx-65537
+            Rx= Rx-65536
         end
         if  Ry>32767  then
-            Ry= Ry-65537
+            Ry= Ry-65536
         end
         if  Rz>32767  then
-            Rz= Rz-65537
+            Rz= Rz-65536
         end
         p1 = pose(x/10, y/10, z/10, Rx/10, Ry/10, Rz/10)
         movel(p1)
@@ -248,7 +248,7 @@ while true do
         modserv.write_register('task_done', 1)
         x = modserv.read_register('x')
         if x > 32767 then
-            x = x - 65537
+            x = x - 65536
         end
         transx(x)
         modserv.write_register('task_done', 2)
@@ -259,7 +259,7 @@ while true do
         modserv.write_register('task_done', 1)
         y = modserv.read_register('y')
         if y > 32767 then
-            y = y - 65537
+            y = y - 65536
         end
         transy(y)
         modserv.write_register('task_done', 2)
@@ -270,7 +270,7 @@ while true do
         modserv.write_register('task_done', 1)
         z = modserv.read_register('z')
         if z > 32767 then
-            z = z - 65537
+            z = z - 65536
         end
         transz(z)
         modserv.write_register('task_done', 2)
@@ -283,13 +283,13 @@ while true do
         y = modserv.read_register('y')
         z = modserv.read_register('z')
         if x > 32767 then
-            x = x - 65537
+            x = x - 65536
         end
         if y > 32767 then
-            y = y - 65537
+            y = y - 65536
         end
         if z > 32767 then
-            z = z - 65537
+            z = z - 65536
         end
         trans(x, y, z)
         modserv.write_register('task_done', 2)
@@ -301,7 +301,7 @@ while true do
         modserv.write_register('task_done', 1)
         Rx = modserv.read_register('Rx')
         if Rx > 32767 then
-            Rx = Rx - 65537
+            Rx = Rx - 65536
         end
         rotx(Rx)
         modserv.write_register('task_done', 2)
@@ -312,7 +312,7 @@ while true do
         modserv.write_register('task_done', 1)
         Ry = modserv.read_register('Ry')
         if Ry > 32767 then
-            Ry = Ry - 65537
+            Ry = Ry - 65536
         end
         roty(Ry)
         modserv.write_register('task_done', 2)
@@ -323,7 +323,7 @@ while true do
         modserv.write_register('task_done', 1)
         Rz = modserv.read_register('Rz')
         if Rz > 32767 then
-            Rz = Rz - 65537
+            Rz = Rz - 65536
         end
         rotz(Rz)
         modserv.write_register('task_done', 2)

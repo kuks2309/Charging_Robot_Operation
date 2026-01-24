@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Rz 회전 테스트: 현재 99.627도에서 90도로 변경 (-9.6도 상대 회전)
+툴 좌표계 Rz 회전 테스트: 현재 99.627도에서 90도로 변경 (-9.6도 상대 회전)
+
+좌표계: TF1 (toolframe 1)
+명령: tool.rotz() (command=16)
 """
 
 import time
@@ -32,6 +35,19 @@ def main():
     print("연결 성공!")
 
     try:
+        # TF1 좌표계 설정 (toolframe 1)
+        client.write_registers(REG_COMMAND, [41])
+        print("toolframe(1) 설정 중...")
+        time.sleep(0.5)
+
+        # 설정 완료 대기
+        for _ in range(50):
+            time.sleep(0.1)
+            rr = client.read_holding_registers(address=REG_STATUS, count=1)
+            if not rr.isError() and rr.registers[0] in [0, 2]:
+                break
+        print("toolframe(1) 설정 완료")
+
         # 현재 상태 확인
         rr = client.read_holding_registers(address=REG_COMMAND, count=2)
         if not rr.isError():

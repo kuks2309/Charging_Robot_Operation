@@ -84,10 +84,13 @@ class TabCalibration(QWidget):
 
         # 중심 정렬 시 저장된 체스보드 거리 (mm)
         self.aligned_distance = None
-        # 중심 정렬 시 저장된 Rx, Rz 각도 (deg)
+        # 중심 정렬 시 저장된 Rx, Ry, Rz 각도 (deg)
         self.aligned_rx = None
+        self.aligned_ry = None
         self.aligned_rz = None
-        # 중심 정렬 시 저장된 기준 Z 좌표 (mm)
+        # 중심 정렬 시 저장된 기준 X, Y, Z 좌표 (mm)
+        self.aligned_x = None
+        self.aligned_y = None
         self.aligned_z = None
 
         # 체스보드 정렬 서비스
@@ -813,12 +816,15 @@ class TabCalibration(QWidget):
                 self._log("거리 측정 실패")
                 self.aligned_distance = None
 
-        # 현재 Rx, Rz, Z 저장 (자동 보정용)
+        # 현재 Rx, Ry, Rz, X, Y, Z 저장 (자동 보정용)
         if pose_after:
             self.aligned_rx = pose_after[3]
+            self.aligned_ry = pose_after[4]
             self.aligned_rz = pose_after[5]
+            self.aligned_x = pose_after[0]  # 기준 X 좌표 저장
+            self.aligned_y = pose_after[1]  # 기준 Y 좌표 저장
             self.aligned_z = pose_after[2]  # 기준 Z 좌표 저장
-            self._log(f"[보정용] 기준 저장: Z={self.aligned_z:.1f}mm, Rx={self.aligned_rx:.1f}°, Rz={self.aligned_rz:.1f}°, D={self.aligned_distance}mm")
+            self._log(f"[보정용] 기준 저장: X={self.aligned_x:.1f}mm, Y={self.aligned_y:.1f}mm, Z={self.aligned_z:.1f}mm, Rx={self.aligned_rx:.1f}°, Ry={self.aligned_ry:.1f}°, Rz={self.aligned_rz:.1f}°, D={self.aligned_distance}mm")
 
             # Base 좌표 저장 (6축 전체) 및 UI 표시
             self.auto_calib_base_pos = pose_after  # (X, Y, Z, Rx, Ry, Rz)
@@ -832,50 +838,59 @@ class TabCalibration(QWidget):
         self.checkAutoCorrection.setChecked(True)
         self._log("자동 보정 체크박스 활성화")
 
-        # 정렬 오차 확인 (체스보드 다시 감지)
-        time.sleep(0.3)  # 카메라 프레임 갱신 대기
-        if self.current_frame is not None:
-            result_after = self.find_chessboard_pose(self.current_frame.copy())
-            if result_after is not None:
-                center_after, angle_after = result_after
-                frame_height, frame_width = self.current_frame.shape[:2]
-                error_x = center_after[0] - frame_width / 2
-                error_y = center_after[1] - frame_height / 2
-                error_mm_x = error_x * self.PIXEL_TO_MM
-                error_mm_y = error_y * self.PIXEL_TO_MM
-                self._log(f"[정렬 오차] X={error_x:.1f}px ({error_mm_x:.2f}mm), Y={error_y:.1f}px ({error_mm_y:.2f}mm)")
-                # UI 라벨 업데이트
-                error_text = f"정렬 오차: X={error_x:.1f}px ({error_mm_x:.2f}mm), Y={error_y:.1f}px ({error_mm_y:.2f}mm)"
-                self.labelAlignError.setText(error_text)
+        # 정렬 오차 확인 및 재정렬 (최대 4회 시도: 초기 1회 + 재정렬 3회)
+        RETRY_THRESHOLD_PX = 2.0
+        MAX_RETRY_COUNT = 3
 
-                # 오차가 5px 이상이면 재정렬
-                RETRY_THRESHOLD_PX = 5.0
-                self._log(f"[재정렬 판단] |error_x|={abs(error_x):.1f}px, |error_y|={abs(error_y):.1f}px, 임계값={RETRY_THRESHOLD_PX}px")
-                if abs(error_x) >= RETRY_THRESHOLD_PX or abs(error_y) >= RETRY_THRESHOLD_PX:
-                    self._log(f"오차 {RETRY_THRESHOLD_PX}px 이상 - 재정렬 시도")
-                    dx_mm_retry = -error_x * self.PIXEL_TO_MM
-                    dy_mm_retry = -error_y * self.PIXEL_TO_MM
-                    success_retry, msg_retry = self.robot.send_tcp_linear(
-                        'xyz', (dx_mm_retry, dy_mm_retry, 0),
-                        process_events_callback=QApplication.processEvents
-                    )
-                    if success_retry:
-                        self._log(f"재정렬 완료: {msg_retry}")
-                        # 재정렬 후 오차 재확인
-                        time.sleep(0.3)
-                        if self.current_frame is not None:
-                            result_retry = self.find_chessboard_pose(self.current_frame.copy())
-                            if result_retry is not None:
-                                center_retry, _ = result_retry
-                                error_x_retry = center_retry[0] - frame_width / 2
-                                error_y_retry = center_retry[1] - frame_height / 2
-                                error_mm_x_retry = error_x_retry * self.PIXEL_TO_MM
-                                error_mm_y_retry = error_y_retry * self.PIXEL_TO_MM
-                                self._log(f"[재정렬 후 오차] X={error_x_retry:.1f}px ({error_mm_x_retry:.2f}mm), Y={error_y_retry:.1f}px ({error_mm_y_retry:.2f}mm)")
-                                error_text = f"정렬 오차: X={error_x_retry:.1f}px ({error_mm_x_retry:.2f}mm), Y={error_y_retry:.1f}px ({error_mm_y_retry:.2f}mm)"
-                                self.labelAlignError.setText(error_text)
-                    else:
-                        self._log(f"재정렬 실패: {msg_retry}")
+        time.sleep(0.3)  # 카메라 프레임 갱신 대기
+
+        for retry_count in range(MAX_RETRY_COUNT + 1):  # 0, 1, 2, 3 (총 4회)
+            if self.current_frame is None:
+                break
+
+            result_after = self.find_chessboard_pose(self.current_frame.copy())
+            if result_after is None:
+                self._log(f"[시도 {retry_count + 1}/{MAX_RETRY_COUNT + 1}] 체스보드 감지 실패")
+                break
+
+            center_after, angle_after = result_after
+            frame_height, frame_width = self.current_frame.shape[:2]
+            error_x = center_after[0] - frame_width / 2
+            error_y = center_after[1] - frame_height / 2
+            error_mm_x = error_x * self.PIXEL_TO_MM
+            error_mm_y = error_y * self.PIXEL_TO_MM
+
+            self._log(f"[시도 {retry_count + 1}/{MAX_RETRY_COUNT + 1}] 정렬 오차: X={error_x:.1f}px ({error_mm_x:.2f}mm), Y={error_y:.1f}px ({error_mm_y:.2f}mm)")
+
+            # UI 라벨 업데이트
+            error_text = f"정렬 오차: X={error_x:.1f}px ({error_mm_x:.2f}mm), Y={error_y:.1f}px ({error_mm_y:.2f}mm)"
+            self.labelAlignError.setText(error_text)
+
+            # 오차가 임계값 미만이면 성공
+            if abs(error_x) < RETRY_THRESHOLD_PX and abs(error_y) < RETRY_THRESHOLD_PX:
+                self._log(f"[정렬 성공] 오차 {RETRY_THRESHOLD_PX}px 미만 - 정렬 완료")
+                break
+
+            # 마지막 시도였으면 종료
+            if retry_count >= MAX_RETRY_COUNT:
+                self._log(f"[정렬 실패] {MAX_RETRY_COUNT + 1}회 시도 후에도 오차 {RETRY_THRESHOLD_PX}px 이상")
+                break
+
+            # 재정렬 시도
+            self._log(f"오차 {RETRY_THRESHOLD_PX}px 이상 - 재정렬 시도 {retry_count + 1}/{MAX_RETRY_COUNT}")
+            dx_mm_retry = -error_x * self.PIXEL_TO_MM
+            dy_mm_retry = -error_y * self.PIXEL_TO_MM
+            success_retry, msg_retry = self.robot.send_tcp_linear(
+                'xyz', (dx_mm_retry, dy_mm_retry, 0),
+                process_events_callback=QApplication.processEvents
+            )
+
+            if not success_retry:
+                self._log(f"재정렬 실패: {msg_retry}")
+                break
+
+            self._log(f"재정렬 완료: {msg_retry}")
+            time.sleep(0.3)  # 다음 시도 전 대기
 
         return
 
@@ -970,7 +985,7 @@ class TabCalibration(QWidget):
     # ==================== TCP 정렬 ====================
 
     @require_robot_connection
-    def _on_tcp_align(self):
+    def _on_tcp_align(self, checked=False):
         """TCP 자세 정렬 - 목표 Rx, Ry, Rz로 이동"""
         # 목표 자세 읽기
         try:
@@ -1008,7 +1023,7 @@ class TabCalibration(QWidget):
             QMessageBox.critical(self, "오류", f"TCP 정렬 오류: {e}")
 
     @require_robot_connection
-    def _on_tcp_align_read(self):
+    def _on_tcp_align_read(self, checked=False):
         """현재 TCP 자세를 읽어서 편집창에 표시"""
         # 현재 위치 읽기
         current_pose = self.robot.read_current_pose()
@@ -1110,29 +1125,42 @@ class TabCalibration(QWidget):
         self._on_tcp_align()
 
     def _on_rz_preset(self, rz: int):
-        """Rz 프리셋 적용 (Rx=90, Ry=0 고정) + 자동 X 보정"""
+        """Rz 프리셋 적용 (Rx=90, Ry=0 고정) + 자동 Y 보정"""
         self.editTcpAlignRx.setText("90")
         self.editTcpAlignRy.setText("0")
         self.editTcpAlignRz.setText(str(rz))
 
-        # 자동 보정이 활성화되어 있고, 기준 데이터가 있으면 X 보정
-        if (self.checkAutoCorrection.isChecked() and
-            self.aligned_distance is not None and
-            self.aligned_rz is not None):
-            self._on_tcp_align_with_x_correction(rz)
+        # 자동 보정 조건 확인
+        auto_correction_enabled = self.checkAutoCorrection.isChecked()
+        has_distance = self.aligned_distance is not None
+        has_rz = self.aligned_rz is not None
+        has_y = self.aligned_y is not None
+
+        self._log(f"[Rz 보정 체크] 자동보정={auto_correction_enabled}, 거리={has_distance}, Rz={has_rz}, Y={has_y}")
+        if has_distance:
+            self._log(f"[Rz 보정 체크] aligned_distance={self.aligned_distance:.0f}mm")
+        if has_rz:
+            self._log(f"[Rz 보정 체크] aligned_rz={self.aligned_rz:.1f}°")
+        if has_y:
+            self._log(f"[Rz 보정 체크] aligned_y={self.aligned_y:.1f}mm")
+
+        # 자동 보정이 활성화되어 있고, 기준 데이터가 있으면 Y 보정
+        if auto_correction_enabled and has_distance and has_rz and has_y:
+            self._on_tcp_align_with_y_correction_rz(rz)
         else:
+            self._log(f"[Rz 보정] 조건 미충족 - 일반 정렬 수행")
             self._on_tcp_align()
 
     @require_robot_connection
-    def _on_tcp_align_with_x_correction(self, target_rz: int):
+    def _on_tcp_align_with_y_correction_rz(self, target_rz: int):
         """
-        Rz 변경 시 X축 자동 보정을 포함한 TCP 정렬
+        Rz 변경 시 Y축 자동 보정을 포함한 TCP 정렬
 
-        Rz가 변경되면 카메라가 Z축을 중심으로 회전하면서 X축 위치가 변함.
-        (Rz=90°에서 카메라가 Y- 방향을 바라보는 상태 기준)
+        Rz가 변경되면 Y축 위치가 변함 (부호 반대 적용).
         보정 공식:
         - ΔRz = target_rz - aligned_rz (각도 변화량, deg)
-        - ΔX = D × tan(ΔRz)  (X축 보정량)
+        - ΔY = D × tan(ΔRz)  (Y축 보정량)
+        - new_y = aligned_y - ΔY (기준 Y에서 절대 계산, 부호 반대)
         """
         import math
 
@@ -1140,11 +1168,11 @@ class TabCalibration(QWidget):
         delta_rz = target_rz - self.aligned_rz  # 각도 변화량 (deg)
         delta_rz_rad = math.radians(delta_rz)  # 라디안 변환
 
-        # 보정량 계산 (X축만)
-        dx = D * math.tan(delta_rz_rad)  # X축 보정
+        # 보정량 계산 (Y축만, 부호 반대)
+        dy = D * math.tan(delta_rz_rad)  # Y축 보정
 
         self._log(f"[자동 보정] 기준 Rz={self.aligned_rz:.1f}°, 목표 Rz={target_rz}°, ΔRz={delta_rz:.1f}°")
-        self._log(f"[자동 보정] 거리 D={D:.0f}mm, ΔX={dx:.2f}mm")
+        self._log(f"[자동 보정] 거리 D={D:.0f}mm, ΔY={dy:.2f}mm (부호 반대)")
 
         # 현재 위치 읽기
         current_pose = self.robot.read_current_pose()
@@ -1154,16 +1182,16 @@ class TabCalibration(QWidget):
 
         x, y, z, rx, ry, rz = current_pose
 
-        # 새 위치 계산 (X축 보정만 적용)
-        new_x = x + dx  # X축 보정
-        new_y = y
+        # 새 위치 계산 (기준 Y에서 절대적으로 계산, 부호 반대)
+        new_x = x
+        new_y = self.aligned_y - dy  # 기준 Y - 보정량 (부호 반대)
         new_z = z
         new_rx = 90
         new_ry = 0
         new_rz = target_rz
 
         self._log(f"현재: X={x:.1f}, Y={y:.1f}, Z={z:.1f}, Rz={rz:.1f}")
-        self._log(f"목표: X={new_x:.1f}, Y={new_y:.1f}, Z={new_z:.1f}, Rz={new_rz}")
+        self._log(f"목표: X={new_x:.1f}, Y={new_y:.1f}, Z={new_z:.1f}, Rz={new_rz} (기준Y={self.aligned_y:.1f})")
 
         # 절대 좌표 이동
         try:
@@ -1172,7 +1200,66 @@ class TabCalibration(QWidget):
                 wait=True, process_events_callback=QApplication.processEvents
             )
             if success:
-                self._log(f"TCP 정렬 (X 보정 포함) 완료")
+                self._log(f"TCP 정렬 (Y 보정 포함) 완료")
+            else:
+                self._log(f"TCP 정렬 실패: {msg}")
+                QMessageBox.warning(self, "오류", f"TCP 정렬 실패: {msg}")
+        except Exception as e:
+            self._log(f"TCP 정렬 오류: {e}")
+            QMessageBox.critical(self, "오류", f"TCP 정렬 오류: {e}")
+
+    @require_robot_connection
+    def _on_tcp_align_with_y_correction(self, target_ry: int):
+        """
+        비전 Ry 변경 시 Y축 자동 보정을 포함한 TCP 정렬
+
+        비전 TF1의 Ry가 변경되면 베이스 Rz가 회전하고 Y축 위치가 변함.
+        보정 공식:
+        - 비전 Ry → 베이스 Rz 매핑
+        - ΔRy = target_ry - aligned_ry (각도 변화량, deg)
+        - ΔY = D × tan(ΔRy)  (Y축 보정량)
+        - new_y = aligned_y + ΔY (기준 Y에서 절대 계산)
+        """
+        import math
+
+        D = self.aligned_distance  # 체스보드까지 거리 (mm)
+        delta_ry = target_ry - self.aligned_ry  # 각도 변화량 (deg)
+        delta_ry_rad = math.radians(delta_ry)  # 라디안 변환
+
+        # 보정량 계산 (Y축만)
+        dy = D * math.tan(delta_ry_rad)  # Y축 보정
+
+        self._log(f"[자동 보정] 기준 비전Ry={self.aligned_ry:.1f}°, 목표 비전Ry={target_ry}°, Δ={delta_ry:.1f}°")
+        self._log(f"[자동 보정] 거리 D={D:.0f}mm, ΔY={dy:.2f}mm")
+
+        # 현재 위치 읽기
+        current_pose = self.robot.read_current_pose()
+        if current_pose is None:
+            QMessageBox.warning(self, "오류", "현재 로봇 위치를 읽을 수 없습니다.")
+            return
+
+        x, y, z, rx, ry, rz = current_pose
+
+        # 새 위치 계산 (기준 Y에서 절대적으로 계산)
+        # 비전 Ry → 베이스 Rz 매핑
+        new_x = x
+        new_y = self.aligned_y + dy  # 기준 Y + 보정량 (절대 계산)
+        new_z = z
+        new_rx = 90
+        new_ry = 0          # 베이스 Ry 고정
+        new_rz = target_ry  # 비전 Ry → 베이스 Rz
+
+        self._log(f"현재: X={x:.1f}, Y={y:.1f}, Z={z:.1f}, 베이스Rz={rz:.1f}")
+        self._log(f"목표: X={new_x:.1f}, Y={new_y:.1f}, Z={new_z:.1f}, 베이스Rz={new_rz} (기준Y={self.aligned_y:.1f})")
+
+        # 절대 좌표 이동
+        try:
+            success, msg = self.robot.send_move_to_pose(
+                new_x, new_y, new_z, new_rx, new_ry, new_rz,
+                wait=True, process_events_callback=QApplication.processEvents
+            )
+            if success:
+                self._log(f"TCP 정렬 (Y 보정 포함) 완료")
             else:
                 self._log(f"TCP 정렬 실패: {msg}")
                 QMessageBox.warning(self, "오류", f"TCP 정렬 실패: {msg}")

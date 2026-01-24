@@ -292,7 +292,7 @@ class TabMotionTest(QWidget):
             QMessageBox.critical(self, "오류", f"툴프레임 설정 오류: {e}")
 
     @require_robot_connection
-    def _on_reset_baseframe(self):
+    def _on_reset_baseframe(self, checked=False):
         """베이스프레임 초기화"""
         self._log("베이스프레임 초기화 중...")
 
