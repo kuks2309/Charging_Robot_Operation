@@ -171,13 +171,14 @@ class ModbusClient:
         """응답 레지스터(352) 쓰기"""
         return self.write_register(self.REGISTER_STATUS, response)
 
-    def wait_for_done(self, timeout: float = 30.0, process_events_callback=None) -> Tuple[bool, str]:
+    def wait_for_done(self, timeout: float = 30.0, process_events_callback=None, stop_flag_callback=None) -> Tuple[bool, str]:
         """
         명령 완료 대기 (Running → Done/Idle 감지)
 
         Args:
             timeout: 타임아웃 (초)
             process_events_callback: UI 이벤트 처리 콜백 (예: QApplication.processEvents)
+            stop_flag_callback: 중지 확인 콜백 (True 반환 시 즉시 중지)
         """
         start = time.time()
 
@@ -187,6 +188,10 @@ class ModbusClient:
         while time.time() - start < 5.0:
             if process_events_callback:
                 process_events_callback()
+
+            # 중지 요청 확인
+            if stop_flag_callback and stop_flag_callback():
+                return False, "사용자 중지"
 
             status = self.read_status()
             if status == self.STATUS_RUNNING:
@@ -207,6 +212,10 @@ class ModbusClient:
         while time.time() - start < timeout:
             if process_events_callback:
                 process_events_callback()
+
+            # 중지 요청 확인
+            if stop_flag_callback and stop_flag_callback():
+                return False, "사용자 중지"
 
             status = self.read_status()
             if status is None:
@@ -338,7 +347,7 @@ class ModbusClient:
 
     def send_move_to_pose(self, x: float, y: float, z: float,
                           rx: float, ry: float, rz: float, wait: bool = True,
-                          process_events_callback=None) -> Tuple[bool, str]:
+                          process_events_callback=None, stop_flag_callback=None) -> Tuple[bool, str]:
         """
         절대 좌표 이동 (command 20)
 
@@ -347,6 +356,7 @@ class ModbusClient:
             rx, ry, rz: 회전 (deg)
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
+            stop_flag_callback: 중지 확인 콜백 (True 반환 시 즉시 중지)
 
         Note:
             Main_task.prs에서 movel(pose)로 이동 (베이스 좌표계 기준)
@@ -368,7 +378,10 @@ class ModbusClient:
         self.write_command(self.CMD_MOVE_TO_POSE)
 
         if wait:
-            return self.wait_for_done(process_events_callback=process_events_callback)
+            return self.wait_for_done(
+                process_events_callback=process_events_callback,
+                stop_flag_callback=stop_flag_callback
+            )
         return True, "명령 전송됨"
 
     def send_gripper(self, action: str, wait: bool = True) -> Tuple[bool, str]:
