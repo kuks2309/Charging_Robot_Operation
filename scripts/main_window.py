@@ -15,7 +15,7 @@ from PyQt5.QtCore import QTimer
 from Robot import ModbusClient, RobotController, PoseManager
 from services import CameraManager, VisionManager, AlignmentService, DataCollector, PoseService
 from job_types import JOB_TYPES
-from tabs import TabTaskEdit, TabVision, TabCalibration, TabEyeInHand, TabMotionTest
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
@@ -60,6 +60,10 @@ class MainWindow(QMainWindow):
         self.vision_manager = VisionManager(self.camera_manager)
         self.vision_manager.set_log_callback(self._log)
 
+        # ArUco 신뢰성 검증 탭에 매니저 전달
+        self.tabArucoReliability.set_camera_manager(self.camera_manager)
+        self.tabArucoReliability.set_vision_manager(self.vision_manager)
+
         # 정렬 서비스 초기화
         self.alignment_service = AlignmentService(self.vision_manager)
         self.alignment_service.set_log_callback(self._log)
@@ -68,8 +72,6 @@ class MainWindow(QMainWindow):
         # 데이터 수집 서비스 초기화
         self.data_collector = DataCollector(self.vision_manager)
         self.data_collector.set_log_callback(self._log)
-        self.data_collector.sample_collected.connect(self._on_sample_collected)
-        self.data_collector.collection_completed.connect(self._on_collection_completed)
 
         # 포즈 서비스 초기화
         self.pose_service = PoseService(self.pose_manager)
@@ -141,13 +143,17 @@ class MainWindow(QMainWindow):
         self.tabCalibration = TabCalibration(self)
         self.tabWidget.insertTab(2, self.tabCalibration, "카메라 캘리브레이션")
 
-        # Eye in Hand 탭 (인덱스 3에 삽입)
-        self.tabEyeInHand = TabEyeInHand(self)
-        self.tabWidget.insertTab(3, self.tabEyeInHand, "Eye in Hand")
+        # ArUco 신뢰성 검증 탭 (인덱스 3에 삽입)
+        self.tabArucoReliability = TabArucoReliability(self)
+        self.tabWidget.insertTab(3, self.tabArucoReliability, "ArUco 신뢰성 검증")
 
-        # Motion Test 탭 (인덱스 4에 삽입)
+        # Eye in Hand 탭 (인덱스 4에 삽입)
+        self.tabEyeInHand = TabEyeInHand(self)
+        self.tabWidget.insertTab(4, self.tabEyeInHand, "Eye in Hand")
+
+        # Motion Test 탭 (인덱스 5에 삽입)
         self.tabMotionTest = TabMotionTest(self)
-        self.tabWidget.insertTab(4, self.tabMotionTest, "모션 테스트")
+        self.tabWidget.insertTab(5, self.tabMotionTest, "모션 테스트")
 
         # 탭 시그널 연결
         self._connect_tab_signals()
@@ -174,18 +180,19 @@ class MainWindow(QMainWindow):
         self.tabVision.log_message.connect(self._log)
         self.tabVision.camera_start_requested.connect(self._on_start_camera)
         self.tabVision.camera_stop_requested.connect(self._on_stop_camera)
-        self.tabVision.gamma_changed.connect(self._on_gamma_changed_from_tab)
         self.tabVision.align_center_requested.connect(self._on_align_center_from_tab)
         self.tabVision.align_pose_requested.connect(self._on_align_pose_from_tab)
         self.tabVision.align_full_requested.connect(self._on_align_full_from_tab)
-        self.tabVision.collect_start_requested.connect(self._on_start_collect_from_tab)
-        self.tabVision.collect_stop_requested.connect(self._on_stop_collect)
-        self.tabVision.collect_save_requested.connect(self._on_save_collect)
 
         # 캘리브레이션 탭 시그널
         self.tabCalibration.log_message.connect(self._log)
         self.tabCalibration.camera_start_requested.connect(self._on_start_camera)
         self.tabCalibration.camera_stop_requested.connect(self._on_stop_camera)
+
+        # ArUco 신뢰성 검증 탭 시그널
+        self.tabArucoReliability.log_message.connect(self._log)
+        self.tabArucoReliability.camera_start_requested.connect(self._on_start_camera)
+        self.tabArucoReliability.camera_stop_requested.connect(self._on_stop_camera)
 
         # Eye in Hand 탭 시그널
         self.tabEyeInHand.log_message.connect(self._log)
@@ -362,10 +369,6 @@ class MainWindow(QMainWindow):
         self._log(f"Aruco Tag {tag_id} 감지 성공!")
         QMessageBox.information(self, "성공", f"Aruco Tag {tag_id}를 감지했습니다.")
 
-    def _on_gamma_changed_from_tab(self, gamma: float):
-        """감마 값 변경 (TabVision 시그널 핸들러)"""
-        self.camera_manager.set_gamma(gamma)
-
     def _on_align_center_from_tab(self, tag_id: int, num_samples: int):
         """중심 정렬 요청 (TabVision 시그널 핸들러)"""
         result = self.alignment_service.align_center(tag_id, num_samples)
@@ -383,14 +386,6 @@ class MainWindow(QMainWindow):
         result = self.alignment_service.align_full(tag_id, num_samples)
         if not result.success:
             QMessageBox.warning(self, "경고", result.message)
-
-    def _on_start_collect_from_tab(self, tag_id: int, target_count: int):
-        """데이터 수집 시작 요청 (TabVision 시그널 핸들러)"""
-        if not self.data_collector.start(tag_id, target_count):
-            QMessageBox.warning(self, "경고", "먼저 카메라를 시작하세요.")
-            return
-
-        self.tabVision.set_collect_buttons_enabled(True)
 
     # ==================== 로봇 연결 ====================
 
@@ -456,12 +451,12 @@ class MainWindow(QMainWindow):
         # 상태바에 연결 정보 및 Tool Frame 표시
         self._update_statusbar()
 
-        # 현재 탭이 비전/캘리브레이션 탭이면 Tool Frame 1로 설정
+        # 현재 탭이 비전/캘리브레이션/ArUco 신뢰성 검증 탭이면 Tool Frame 1로 설정
         current_tab = self.tabWidget.currentIndex()
-        if current_tab in [1, 2]:
+        if current_tab in [1, 2, 3]:
             try:
                 success, msg = self.robot.send_set_toolframe(1, wait=True)
-                tab_name = "Vision" if current_tab == 1 else "캘리브레이션"
+                tab_name = "Vision" if current_tab == 1 else ("캘리브레이션" if current_tab == 2 else "ArUco 신뢰성 검증")
                 if success:
                     self._log(f"{tab_name} 탭: Tool Frame 1 (비전)으로 설정 완료")
                     # 캘리브레이션 탭 UI 업데이트
@@ -663,10 +658,6 @@ class MainWindow(QMainWindow):
                     self.tabVision.clear_pose_display()
                     self.tabVision.update_detection_result()
 
-            # 데이터 수집 중이면 샘플 저장
-            if self.data_collector.is_collecting:
-                self.data_collector.collect_sample()
-
             # 탭에 프레임 전달
             self.tabVision.set_current_frame(frame)
             self.tabVision.display_frame(processed_frame)
@@ -683,8 +674,12 @@ class MainWindow(QMainWindow):
                 processed_frame = self.tabCalibration.process_frame(frame)
                 self.tabCalibration.display_frame(processed_frame)
 
+        # ArUco 신뢰성 검증 탭이 활성화된 경우
+        elif current_tab == 3:  # ArUco 신뢰성 검증 탭
+            self.tabArucoReliability.update_frame(frame)
+
         # Eye in Hand 탭이 활성화된 경우
-        elif current_tab == 3:  # Eye in Hand 탭
+        elif current_tab == 4:  # Eye in Hand 탭
             self.tabEyeInHand.set_current_frame(frame)
             self.tabEyeInHand.display_frame(frame)
 
@@ -695,46 +690,6 @@ class MainWindow(QMainWindow):
     def _update_align_status(self, status: str):
         """정렬 상태 업데이트 (AlignmentService signal 핸들러)"""
         self.tabVision.update_align_status(status)
-
-    # ==================== 데이터 수집 (노이즈 분석용) ====================
-
-    def _on_stop_collect(self):
-        """데이터 수집 중지 (DataCollector 위임)"""
-        self.data_collector.stop()
-
-        # 통계 출력
-        stats_str = self.data_collector.print_statistics()
-        for line in stats_str.split('\n'):
-            self._log(line)
-
-    def _on_sample_collected(self, current: int, target: int):
-        """샘플 수집 시그널 핸들러 (DataCollector signal)"""
-        self.tabVision.update_collect_status(current, target)
-
-    def _on_collection_completed(self, count: int):
-        """수집 완료 시그널 핸들러 (DataCollector signal)"""
-        self.tabVision.set_collect_buttons_enabled(False)
-        self.tabVision.set_save_button_enabled(count > 0)
-
-    def _on_save_collect(self):
-        """수집된 데이터를 CSV로 저장 (DataCollector 위임)"""
-        if self.data_collector.collected_count == 0:
-            QMessageBox.warning(self, "경고", "저장할 데이터가 없습니다.")
-            return
-
-        # 파일 저장 다이얼로그
-        default_name = self.data_collector.get_default_filename()
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, "데이터 저장", default_name, "CSV Files (*.csv)"
-        )
-
-        if not filepath:
-            return
-
-        if self.data_collector.save_to_csv(filepath):
-            QMessageBox.information(self, "완료", f"데이터가 저장되었습니다.\n{filepath}")
-        else:
-            QMessageBox.critical(self, "오류", "저장 실패")
 
     # ==================== 실행 모니터 ====================
 
@@ -1009,12 +964,12 @@ class MainWindow(QMainWindow):
 
     def _on_tab_changed(self, index: int):
         """탭 변경 시 호출"""
-        # Vision 탭 (인덱스 1) 또는 캘리브레이션 탭 (인덱스 2)이 선택되면 Tool Frame 1로 설정
-        if index in [1, 2]:
+        # Vision 탭 (인덱스 1), 캘리브레이션 탭 (인덱스 2), ArUco 신뢰성 검증 탭 (인덱스 3)이 선택되면 Tool Frame 1로 설정
+        if index in [1, 2, 3]:
             if self.robot and self.robot.is_connected:
                 try:
                     success, msg = self.robot.send_set_toolframe(1, wait=True)
-                    tab_name = "Vision" if index == 1 else "캘리브레이션"
+                    tab_name = "Vision" if index == 1 else ("캘리브레이션" if index == 2 else "ArUco 신뢰성 검증")
                     if success:
                         self._log(f"{tab_name} 탭 선택: Tool Frame 1 (비전)으로 설정 완료")
                         # 캘리브레이션 탭 UI 업데이트

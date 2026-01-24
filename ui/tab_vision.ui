@@ -21,7 +21,19 @@
      <layout class="QVBoxLayout" name="verticalLayoutCamera">
       <item>
        <widget class="QLabel" name="labelCameraView">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="minimumSize">
+         <size>
+          <width>640</width>
+          <height>480</height>
+         </size>
+        </property>
+        <property name="maximumSize">
          <size>
           <width>640</width>
           <height>480</height>
@@ -58,46 +70,6 @@
          <widget class="QPushButton" name="btnSnapshot">
           <property name="text">
            <string>스냅샷 저장</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayoutGamma">
-        <item>
-         <widget class="QLabel" name="labelGamma">
-          <property name="text">
-           <string>감마 보정:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QSlider" name="sliderGamma">
-          <property name="minimum">
-           <number>50</number>
-          </property>
-          <property name="maximum">
-           <number>200</number>
-          </property>
-          <property name="value">
-           <number>100</number>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="labelGammaValue">
-          <property name="text">
-           <string>1.0</string>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>40</width>
-            <height>0</height>
-           </size>
           </property>
          </widget>
         </item>
@@ -521,107 +493,6 @@
             <widget class="QLabel" name="labelAlignStatus">
              <property name="text">
               <string>상태: 대기</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
-      </item>
-
-      <!-- 데이터 수집 -->
-      <item>
-       <widget class="QGroupBox" name="groupDataCollection">
-        <property name="title">
-         <string>데이터 수집 (노이즈 분석용)</string>
-        </property>
-        <layout class="QVBoxLayout" name="layoutDataCollection">
-         <item>
-          <layout class="QHBoxLayout">
-           <item>
-            <widget class="QLabel" name="labelCollectTagId">
-             <property name="text">
-              <string>Tag ID:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSpinBox" name="spinCollectTagId">
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>255</number>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelCollectCount">
-             <property name="text">
-              <string>수집 횟수:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QSpinBox" name="spinCollectCount">
-             <property name="minimum">
-              <number>10</number>
-             </property>
-             <property name="maximum">
-              <number>1000</number>
-             </property>
-             <property name="value">
-              <number>100</number>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout">
-           <item>
-            <widget class="QPushButton" name="btnStartCollect">
-             <property name="text">
-              <string>수집 시작</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnStopCollect">
-             <property name="text">
-              <string>수집 중지</string>
-             </property>
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnSaveCollect">
-             <property name="text">
-              <string>CSV 저장</string>
-             </property>
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout">
-           <item>
-            <widget class="QLabel" name="labelCollectStatus">
-             <property name="text">
-              <string>수집: 0 / 100</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QProgressBar" name="progressCollect">
-             <property name="value">
-              <number>0</number>
              </property>
             </widget>
            </item>

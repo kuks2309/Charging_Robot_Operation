@@ -1,0 +1,832 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabArucoReliability</class>
+ <widget class="QWidget" name="TabArucoReliability">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutArucoReliability">
+   <property name="spacing">
+    <number>4</number>
+   </property>
+   <property name="leftMargin">
+    <number>4</number>
+   </property>
+   <property name="topMargin">
+    <number>4</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>4</number>
+   </property>
+   <!-- Left: Camera Stream + Results -->
+   <item>
+    <widget class="QWidget" name="widgetLeft">
+     <layout class="QVBoxLayout" name="verticalLayoutLeft">
+      <property name="spacing">
+       <number>2</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <!-- Camera View -->
+      <item>
+       <widget class="QGroupBox" name="groupCameraStream">
+        <property name="title">
+         <string>Camera Stream</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutCamera">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>4</number>
+         </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="labelCameraView">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>640</width>
+             <height>480</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>640</width>
+             <height>480</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string>background-color: #333333; border: 1px solid #555555;</string>
+           </property>
+           <property name="text">
+            <string>카메라 미연결</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
+           <item>
+            <widget class="QPushButton" name="btnStartCamera">
+             <property name="text">
+              <string>카메라 시작</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStopCamera">
+             <property name="text">
+              <string>카메라 정지</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <!-- Statistics Results -->
+      <item>
+       <widget class="QGroupBox" name="groupStatistics">
+        <property name="title">
+         <string>통계 결과</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutStatistics">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>4</number>
+         </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
+         <!-- Translation Statistics -->
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutTranslationStats">
+           <item>
+            <widget class="QLabel" name="labelTranslationTitle">
+             <property name="text">
+              <string>위치 (Translation):</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerTransStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutXStats">
+           <item>
+            <widget class="QLabel" name="labelXMean">
+             <property name="text">
+              <string>X 평균:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelXMeanValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #2196F3;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelXStd">
+             <property name="text">
+              <string>X 표준편차:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelXStdValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #FF9800;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerXStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutYStats">
+           <item>
+            <widget class="QLabel" name="labelYMean">
+             <property name="text">
+              <string>Y 평균:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelYMeanValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #2196F3;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelYStd">
+             <property name="text">
+              <string>Y 표준편차:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelYStdValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #FF9800;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerYStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutZStats">
+           <item>
+            <widget class="QLabel" name="labelZMean">
+             <property name="text">
+              <string>Z 평균:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelZMeanValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #2196F3;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelZStd">
+             <property name="text">
+              <string>Z 표준편차:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelZStdValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #FF9800;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerZStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <!-- Rotation Statistics -->
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutRotationStats">
+           <item>
+            <widget class="QLabel" name="labelRotationTitle">
+             <property name="text">
+              <string>회전 (Rotation):</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerRotStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutRxStats">
+           <item>
+            <widget class="QLabel" name="labelRxMean">
+             <property name="text">
+              <string>Rx 평균:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRxMeanValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #2196F3;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRxStd">
+             <property name="text">
+              <string>Rx 표준편차:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRxStdValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #FF9800;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerRxStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutRyStats">
+           <item>
+            <widget class="QLabel" name="labelRyMean">
+             <property name="text">
+              <string>Ry 평균:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRyMeanValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #2196F3;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRyStd">
+             <property name="text">
+              <string>Ry 표준편차:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRyStdValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #FF9800;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerRyStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutRzStats">
+           <item>
+            <widget class="QLabel" name="labelRzMean">
+             <property name="text">
+              <string>Rz 평균:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRzMeanValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #2196F3;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRzStd">
+             <property name="text">
+              <string>Rz 표준편차:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRzStdValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #FF9800;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerRzStats">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <!-- Detection Rate -->
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutDetectionRate">
+           <item>
+            <widget class="QLabel" name="labelDetectionRate">
+             <property name="text">
+              <string>검출 성공률:</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelDetectionRateValue">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; color: #4CAF50;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerDetectionRate">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- Right: Control Panel -->
+   <item>
+    <widget class="QGroupBox" name="groupControl">
+     <property name="title">
+      <string>신뢰성 검증 설정</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>300</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutControl">
+      <property name="spacing">
+       <number>4</number>
+      </property>
+      <property name="leftMargin">
+       <number>4</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>4</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <!-- Settings (Tag ID, Repeat Count, Stabilization Delay) -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutSettings">
+        <item>
+         <widget class="QLabel" name="labelTagID">
+          <property name="text">
+           <string>Tag ID:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinTagID">
+          <property name="minimum">
+           <number>0</number>
+          </property>
+          <property name="maximum">
+           <number>1000</number>
+          </property>
+          <property name="value">
+           <number>0</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelRepeatCount">
+          <property name="text">
+           <string>반복 횟수:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinRepeatCount">
+          <property name="minimum">
+           <number>10</number>
+          </property>
+          <property name="maximum">
+           <number>1000</number>
+          </property>
+          <property name="singleStep">
+           <number>10</number>
+          </property>
+          <property name="value">
+           <number>50</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelStabilizationDelay">
+          <property name="text">
+           <string>안정화 시간:</string>
+          </property>
+          <property name="toolTip">
+           <string>캡처 간 대기 시간</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinStabilizationDelay">
+          <property name="minimum">
+           <number>0</number>
+          </property>
+          <property name="maximum">
+           <number>2000</number>
+          </property>
+          <property name="singleStep">
+           <number>50</number>
+          </property>
+          <property name="value">
+           <number>100</number>
+          </property>
+          <property name="suffix">
+           <string>ms</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerSettings">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- Control Buttons -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutControlButtons">
+        <item>
+         <widget class="QPushButton" name="btnStartCapture">
+          <property name="text">
+           <string>캡처 시작</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #4CAF50; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnStopCapture">
+          <property name="text">
+           <string>중지</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #F44336; color: white;</string>
+          </property>
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnReset">
+        <property name="text">
+         <string>초기화</string>
+        </property>
+       </widget>
+      </item>
+      <!-- Progress Bar -->
+      <item>
+       <widget class="QProgressBar" name="progressBar">
+        <property name="value">
+         <number>0</number>
+        </property>
+        <property name="textVisible">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <!-- Graph Area -->
+      <item>
+       <widget class="QGroupBox" name="groupGraphs">
+        <property name="title">
+         <string>분포 그래프</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutGraphs">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>4</number>
+         </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QWidget" name="widgetGraphCanvas">
+           <property name="minimumSize">
+            <size>
+             <width>300</width>
+             <height>250</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <!-- Export Buttons -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutExport">
+        <item>
+         <widget class="QPushButton" name="btnExportCSV">
+          <property name="text">
+           <string>CSV 저장</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnExportGraph">
+          <property name="text">
+           <string>그래프 저장</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <!-- Log Area -->
+      <item>
+       <widget class="QGroupBox" name="groupLog">
+        <property name="title">
+         <string>로그</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutLog">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>4</number>
+         </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QPlainTextEdit" name="textLog">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>100</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>100</height>
+            </size>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacerControl">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -156,7 +156,7 @@
          </attribute>
          <layout class="QVBoxLayout" name="verticalLayoutChessboardTab">
           <property name="spacing">
-           <number>2</number>
+           <number>0</number>
           </property>
           <property name="leftMargin">
            <number>4</number>
@@ -173,6 +173,9 @@
           <!-- Chessboard Settings -->
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutChessboardSettings">
+            <property name="spacing">
+             <number>2</number>
+            </property>
             <item>
              <widget class="QCheckBox" name="checkChessboardDetect">
               <property name="text">
@@ -265,6 +268,9 @@
           <!-- Chessboard Pose Result -->
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutChessboardPose">
+            <property name="spacing">
+             <number>2</number>
+            </property>
             <item>
              <widget class="QLabel" name="labelChessboardCenter">
               <property name="text">
@@ -346,6 +352,9 @@
           <!-- Calibration Image Capture -->
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutCalibCapture">
+            <property name="spacing">
+             <number>2</number>
+            </property>
             <item>
              <widget class="QLabel" name="labelCapturedImages">
               <property name="text">
@@ -399,6 +408,9 @@
           <!-- Chessboard Robot Align -->
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutChessboardAlign">
+            <property name="spacing">
+             <number>2</number>
+            </property>
             <item>
              <widget class="QPushButton" name="btnAlignCenter">
               <property name="text">
@@ -438,7 +450,7 @@
              <string>기준 좌표: -</string>
             </property>
             <property name="styleSheet">
-             <string>color: #9C27B0; font-weight: bold;</string>
+             <string>color: #9C27B0; font-weight: bold; padding: 2px 0px;</string>
             </property>
            </widget>
           </item>
@@ -455,7 +467,7 @@
              <string>정렬 오차: -</string>
             </property>
             <property name="styleSheet">
-             <string>color: #FF5722;</string>
+             <string>color: #FF5722; padding: 2px 0px;</string>
             </property>
            </widget>
           </item>
@@ -468,7 +480,7 @@
          </attribute>
          <layout class="QVBoxLayout" name="verticalLayoutAutoCalibTab">
           <property name="spacing">
-           <number>2</number>
+           <number>0</number>
           </property>
           <property name="leftMargin">
            <number>4</number>
@@ -1368,16 +1380,9 @@
             </item>
            </layout>
           </item>
-          <!-- 캘리브레이션 저장/로드 -->
+          <!-- 캘리브레이션 로드 -->
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutCalibSaveLoad">
-            <item>
-             <widget class="QPushButton" name="btnSaveCalibration">
-              <property name="text">
-               <string>캘리브레이션 저장</string>
-              </property>
-             </widget>
-            </item>
             <item>
              <widget class="QPushButton" name="btnLoadCalibration">
               <property name="text">
@@ -1408,7 +1413,7 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayoutAutoCalibPositions">
       <property name="spacing">
-       <number>2</number>
+       <number>1</number>
       </property>
       <property name="leftMargin">
        <number>4</number>
@@ -1429,7 +1434,7 @@
          <string>기준 좌표: -</string>
         </property>
         <property name="styleSheet">
-         <string>color: #9C27B0; font-weight: bold;</string>
+         <string>color: #9C27B0; font-weight: bold; padding: 2px 0px;</string>
         </property>
        </widget>
       </item>

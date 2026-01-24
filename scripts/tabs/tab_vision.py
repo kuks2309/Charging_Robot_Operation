@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 비전 탭
-Aruco 감지, 포즈 추정, 정렬 테스트, 데이터 수집 기능
+Aruco 감지, 포즈 추정, 정렬 테스트 기능
 """
 
 import os
@@ -26,17 +26,11 @@ class TabVision(QWidget):
     log_message = pyqtSignal(str)
     camera_start_requested = pyqtSignal()
     camera_stop_requested = pyqtSignal()
-    gamma_changed = pyqtSignal(float)
 
     # 정렬 시그널
     align_center_requested = pyqtSignal(int, int)  # tag_id, num_samples
     align_pose_requested = pyqtSignal(int, int)
     align_full_requested = pyqtSignal(int, int)
-
-    # 데이터 수집 시그널
-    collect_start_requested = pyqtSignal(int, int)  # tag_id, count
-    collect_stop_requested = pyqtSignal()
-    collect_save_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,24 +59,14 @@ class TabVision(QWidget):
         self.btnStopCamera.clicked.connect(self._on_stop_camera)
         self.btnSnapshot.clicked.connect(self._on_snapshot)
 
-        # 감마 슬라이더
-        self.sliderGamma.valueChanged.connect(self._on_gamma_changed)
-
         # 정렬 버튼
         self.btnAlignCenter.clicked.connect(self._on_align_center)
         self.btnAlignPose.clicked.connect(self._on_align_pose)
         self.btnAlignFull.clicked.connect(self._on_align_full)
 
-        # 데이터 수집 버튼
-        self.btnStartCollect.clicked.connect(self._on_start_collect)
-        self.btnStopCollect.clicked.connect(self._on_stop_collect)
-        self.btnSaveCollect.clicked.connect(self._on_save_collect)
-
     def _init_ui(self):
         """UI 초기화"""
-        # 초기 감마 값 표시
-        gamma = self.sliderGamma.value() / 100.0
-        self.labelGammaValue.setText(f"{gamma:.1f}")
+        pass
 
     def _log(self, message: str):
         """로그 메시지 출력"""
@@ -111,14 +95,6 @@ class TabVision(QWidget):
     def get_num_samples(self) -> int:
         """샘플 수 반환"""
         return self.spinNumSamples.value()
-
-    def get_collect_tag_id(self) -> int:
-        """수집용 Tag ID 반환"""
-        return self.spinCollectTagId.value()
-
-    def get_collect_count(self) -> int:
-        """수집 횟수 반환"""
-        return self.spinCollectCount.value()
 
     def is_pose_axes_enabled(self) -> bool:
         """포즈 축 표시 여부"""
@@ -157,12 +133,6 @@ class TabVision(QWidget):
         """스냅샷 저장"""
         save_snapshot(self.current_frame, self, "vision", self._log)
 
-    def _on_gamma_changed(self, value: int):
-        """감마 값 변경"""
-        gamma = value / 100.0
-        self.labelGammaValue.setText(f"{gamma:.1f}")
-        self.gamma_changed.emit(gamma)
-
     # ==================== 정렬 버튼 핸들러 ====================
 
     def _on_align_center(self):
@@ -182,22 +152,6 @@ class TabVision(QWidget):
         tag_id = self.get_target_tag_id()
         num_samples = self.get_num_samples()
         self.align_full_requested.emit(tag_id, num_samples)
-
-    # ==================== 데이터 수집 핸들러 ====================
-
-    def _on_start_collect(self):
-        """데이터 수집 시작"""
-        tag_id = self.get_collect_tag_id()
-        count = self.get_collect_count()
-        self.collect_start_requested.emit(tag_id, count)
-
-    def _on_stop_collect(self):
-        """데이터 수집 중지"""
-        self.collect_stop_requested.emit()
-
-    def _on_save_collect(self):
-        """수집된 데이터 저장"""
-        self.collect_save_requested.emit()
 
     # ==================== 외부에서 호출하는 UI 업데이트 ====================
 
@@ -247,18 +201,3 @@ class TabVision(QWidget):
     def update_align_status(self, status: str):
         """정렬 상태 업데이트"""
         self.labelAlignStatus.setText(f"상태: {status}")
-
-    def update_collect_status(self, current: int, target: int):
-        """데이터 수집 상태 업데이트"""
-        self.labelCollectStatus.setText(f"수집: {current} / {target}")
-        progress = int(100 * current / target) if target > 0 else 0
-        self.progressCollect.setValue(min(progress, 100))
-
-    def set_collect_buttons_enabled(self, collecting: bool):
-        """데이터 수집 버튼 상태 설정"""
-        self.btnStartCollect.setEnabled(not collecting)
-        self.btnStopCollect.setEnabled(collecting)
-
-    def set_save_button_enabled(self, enabled: bool):
-        """저장 버튼 활성화/비활성화"""
-        self.btnSaveCollect.setEnabled(enabled)

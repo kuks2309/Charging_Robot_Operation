@@ -1354,39 +1354,75 @@ class TabCalibration(QWidget):
             QMessageBox.warning(self, "경고", "먼저 위치를 생성해주세요.")
             return
 
+        if self.auto_calib_running:
+            QMessageBox.warning(self, "경고", "이미 작업이 실행 중입니다.")
+            return
+
+        # 순차 이동 시작 - 중지 버튼 활성화
+        self.auto_calib_running = True
+        self.btnSequentialMove.setEnabled(False)
+        self.btnStopAutoCapture.setEnabled(True)
+
         total = len(self.auto_calib_positions)
         self._log(f"순차 이동 시작: {total}개 위치")
 
-        for index in range(total):
-            # 현재 위치 선택 (UI 표시)
-            self.listAutoCalibPositions.setCurrentRow(index)
-            QApplication.processEvents()
+        try:
+            for index in range(total):
+                # 중지 요청 확인
+                if not self.auto_calib_running:
+                    self._log("사용자 요청으로 순차 이동 중지")
+                    break
 
-            # 목표 좌표 (Base 절대 좌표)
-            target_x, target_y, target_z, target_rx, target_ry, target_rz = self.auto_calib_positions[index]
+                # 현재 위치 선택 (UI 표시)
+                self.listAutoCalibPositions.setCurrentRow(index)
+                QApplication.processEvents()
 
-            self._log(f"[{index}/{total-1}] 이동 중: X={target_x:.1f}, Y={target_y:.1f}, Z={target_z:.1f}")
+                # 목표 좌표 (Base 절대 좌표)
+                target_x, target_y, target_z, target_rx, target_ry, target_rz = self.auto_calib_positions[index]
 
-            # Base 좌표계 절대 이동
-            success, msg = self.robot.send_move_to_pose(
-                target_x, target_y, target_z,
-                target_rx, target_ry, target_rz,
-                wait=True, process_events_callback=QApplication.processEvents
-            )
+                self._log(f"[{index+1}/{total}] 이동 중: X={target_x:.1f}, Y={target_y:.1f}, Z={target_z:.1f}")
 
-            if not success:
-                self._log(f"[{index}/{total-1}] 이동 실패: {msg}")
-                QMessageBox.critical(self, "오류", f"위치 [{index}] 이동 실패: {msg}")
-                return
+                # Base 좌표계 절대 이동 (중지 콜백 포함)
+                success, msg = self.robot.send_move_to_pose(
+                    target_x, target_y, target_z,
+                    target_rx, target_ry, target_rz,
+                    wait=True,
+                    process_events_callback=QApplication.processEvents,
+                    stop_flag_callback=lambda: not self.auto_calib_running
+                )
 
-            self._log(f"[{index}/{total-1}] 이동 완료")
+                if not success:
+                    # 사용자 중지인 경우 에러 메시지 없이 중단
+                    if msg == "사용자 중지":
+                        self._log(f"[{index+1}/{total}] 사용자 중지 요청")
+                        break
+                    # 그 외 오류는 에러 메시지 표시
+                    self._log(f"[{index+1}/{total}] 이동 실패: {msg}")
+                    QMessageBox.critical(self, "오류", f"위치 [{index+1}] 이동 실패: {msg}")
+                    break
 
-            # 다음 이동 전 짧은 대기
-            time.sleep(0.3)
-            QApplication.processEvents()
+                self._log(f"[{index+1}/{total}] 이동 완료")
 
-        self._log("순차 이동 완료")
-        QMessageBox.information(self, "완료", f"순차 이동 완료: {total}개 위치")
+                # 다음 이동 전 짧은 대기
+                time.sleep(0.3)
+                QApplication.processEvents()
+
+            # 완료 또는 중지 메시지
+            if self.auto_calib_running:
+                self._log("순차 이동 완료")
+                QMessageBox.information(self, "완료", f"순차 이동 완료: {total}개 위치")
+            else:
+                self._log("순차 이동 중지됨")
+
+        except Exception as e:
+            self._log(f"순차 이동 오류: {e}")
+            QMessageBox.critical(self, "오류", f"순차 이동 오류: {e}")
+
+        finally:
+            # 버튼 상태 복원
+            self.auto_calib_running = False
+            self.btnSequentialMove.setEnabled(True)
+            self.btnStopAutoCapture.setEnabled(False)
 
     @require_robot_connection
     def _on_move_to_selected_base(self, checked=False):
@@ -1492,14 +1528,21 @@ class TabCalibration(QWidget):
 
                 self._log(f"[{index+1}/{total}] 이동 중: X={target_x:.1f}, Y={target_y:.1f}, Z={target_z:.1f}, Rx={target_rx:.1f}, Ry={target_ry:.1f}, Rz={target_rz:.1f}")
 
-                # Base 좌표계 절대 이동
+                # Base 좌표계 절대 이동 (중지 콜백 포함)
                 success, msg = self.robot.send_move_to_pose(
                     target_x, target_y, target_z,
                     target_rx, target_ry, target_rz,
-                    wait=True, process_events_callback=QApplication.processEvents
+                    wait=True,
+                    process_events_callback=QApplication.processEvents,
+                    stop_flag_callback=lambda: not self.auto_calib_running
                 )
 
                 if not success:
+                    # 사용자 중지인 경우 에러 메시지 없이 중단
+                    if msg == "사용자 중지":
+                        self._log(f"[{index+1}/{total}] 사용자 중지 요청")
+                        break
+                    # 그 외 오류는 에러 메시지 표시
                     self._log(f"[{index+1}/{total}] 이동 실패: {msg}")
                     QMessageBox.critical(self, "오류", f"위치 [{index+1}] 이동 실패: {msg}")
                     break
