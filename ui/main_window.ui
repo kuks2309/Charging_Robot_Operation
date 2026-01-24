@@ -1100,8 +1100,6 @@
     </property>
     <addaction name="actionConnect"/>
     <addaction name="actionDisconnect"/>
-    <addaction name="separator"/>
-    <addaction name="actionGoHome"/>
    </widget>
    <widget class="QMenu" name="menuVision">
     <property name="title">
@@ -1134,8 +1132,6 @@
     <enum>TopToolBarArea</enum>
    </attribute>
    <addaction name="actionConnect"/>
-   <addaction name="separator"/>
-   <addaction name="actionGoHome"/>
    <addaction name="separator"/>
    <addaction name="actionEmergencyStop"/>
   </widget>
@@ -1189,11 +1185,6 @@
   <action name="actionDisconnect">
    <property name="text">
     <string>연결 해제</string>
-   </property>
-  </action>
-  <action name="actionGoHome">
-   <property name="text">
-    <string>HOME</string>
    </property>
   </action>
   <action name="actionStartCamera">

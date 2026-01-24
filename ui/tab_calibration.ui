@@ -1501,6 +1501,50 @@
         </item>
        </layout>
       </item>
+      <!-- 안정화 시간 설정 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutStabilization">
+        <item>
+         <widget class="QLabel" name="labelStabilizationDelay">
+          <property name="text">
+           <string>안정화 시간:</string>
+          </property>
+          <property name="toolTip">
+           <string>이동 후 캡처 전 대기 시간</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinStabilizationDelay">
+          <property name="minimum">
+           <number>0</number>
+          </property>
+          <property name="maximum">
+           <number>2000</number>
+          </property>
+          <property name="singleStep">
+           <number>50</number>
+          </property>
+          <property name="value">
+           <number>300</number>
+          </property>
+          <property name="suffix">
+           <string>ms</string>
+          </property>
+          <property name="toolTip">
+           <string>로봇 이동 후 카메라 캡처 전 안정화 대기 시간</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerStabilization">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
       <!-- 위치 생성 버튼 -->
       <item>
        <layout class="QHBoxLayout" name="horizontalLayoutPosGenButtons">

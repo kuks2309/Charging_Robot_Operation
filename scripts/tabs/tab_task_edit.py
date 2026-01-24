@@ -28,14 +28,22 @@ class TabTaskEdit(QWidget):
     log_message = pyqtSignal(str)
     connect_requested = pyqtSignal(str, int)  # ip, port
     disconnect_requested = pyqtSignal()
-    go_home_requested = pyqtSignal()
-    set_home_requested = pyqtSignal()
 
     # 포즈 관련 시그널
     save_pose_requested = pyqtSignal(str, str)  # name, pose_type
     delete_pose_requested = pyqtSignal(str)  # name
     move_to_pose_requested = pyqtSignal(str)  # name
     approach_pose_requested = pyqtSignal(str, float)  # name, distance
+
+    # 현재 위치 읽기 시그널
+    read_current_position_requested = pyqtSignal()
+
+    # 현재 Task 실행 시그널
+    execute_current_task_requested = pyqtSignal(dict)  # task 정보
+
+    # 조그 이동 시그널 (베이스 좌표계)
+    jog_move_requested = pyqtSignal(str, float)  # axis, distance
+    jog_rotate_requested = pyqtSignal(str, float)  # axis, angle
 
     # 태스크 시퀀스 변경 시그널
     task_sequence_changed = pyqtSignal(list)
@@ -81,8 +89,6 @@ class TabTaskEdit(QWidget):
 
         # 로봇 연결
         self.btnConnect.clicked.connect(self._on_connect)
-        self.btnGoHome.clicked.connect(self._on_go_home)
-        self.btnSetHome.clicked.connect(self._on_set_home)
 
         # 포즈 관리
         self.btnSavePose.clicked.connect(self._on_save_pose)
@@ -90,6 +96,20 @@ class TabTaskEdit(QWidget):
         self.btnMoveToPose.clicked.connect(self._on_move_to_pose)
         self.btnApproachPose.clicked.connect(self._on_approach_pose)
         self.listSavedPoses.itemDoubleClicked.connect(self._on_move_to_pose)
+
+        # 조그 이동 (베이스 좌표계)
+        self.btnJogXMinus.clicked.connect(lambda: self._on_jog_move('x', -1))
+        self.btnJogXPlus.clicked.connect(lambda: self._on_jog_move('x', 1))
+        self.btnJogYMinus.clicked.connect(lambda: self._on_jog_move('y', -1))
+        self.btnJogYPlus.clicked.connect(lambda: self._on_jog_move('y', 1))
+        self.btnJogZMinus.clicked.connect(lambda: self._on_jog_move('z', -1))
+        self.btnJogZPlus.clicked.connect(lambda: self._on_jog_move('z', 1))
+        self.btnJogRxMinus.clicked.connect(lambda: self._on_jog_rotate('rx', -1))
+        self.btnJogRxPlus.clicked.connect(lambda: self._on_jog_rotate('rx', 1))
+        self.btnJogRyMinus.clicked.connect(lambda: self._on_jog_rotate('ry', -1))
+        self.btnJogRyPlus.clicked.connect(lambda: self._on_jog_rotate('ry', 1))
+        self.btnJogRzMinus.clicked.connect(lambda: self._on_jog_rotate('rz', -1))
+        self.btnJogRzPlus.clicked.connect(lambda: self._on_jog_rotate('rz', 1))
 
     def _init_ui(self):
         """UI 초기화"""
@@ -487,13 +507,23 @@ class TabTaskEdit(QWidget):
         self.task_sequence_changed.emit(self.task_sequence)
 
     def _on_teach_position(self):
-        """현재 위치 입력"""
-        self._log("현재 위치 입력 (미구현)")
+        """현재 선택된 Task 실행"""
+        # 현재 선택된 태스크 가져오기
+        current_row = self.listTaskSequence.currentRow()
+        if current_row < 0 or current_row >= len(self.task_sequence):
+            QMessageBox.warning(self, "경고", "실행할 Task를 선택해주세요.")
+            return
+
+        task = self.task_sequence[current_row]
+        task_name = self._get_task_display_name(task)
+
+        self._log(f"현 Task 실행 요청: {task_name}")
+        self.execute_current_task_requested.emit(task)
 
     def _on_read_current_position(self):
         """로봇의 현재 위치를 읽어서 파라미터에 입력"""
         self._log("현재 위치 읽기 요청")
-        # MainWindow에서 로봇 데이터를 받아서 처리해야 함
+        self.read_current_position_requested.emit()
 
     # ==================== 로봇 연결 ====================
 
@@ -502,14 +532,6 @@ class TabTaskEdit(QWidget):
         ip = self.editRobotIP.text()
         port = self.spinModbusPort.value()
         self.connect_requested.emit(ip, port)
-
-    def _on_go_home(self):
-        """HOME 이동"""
-        self.go_home_requested.emit()
-
-    def _on_set_home(self):
-        """현재 위치를 HOME으로 설정"""
-        self.set_home_requested.emit()
 
     # ==================== 포즈 관리 ====================
 
@@ -572,6 +594,40 @@ class TabTaskEdit(QWidget):
 
         self.approach_pose_requested.emit(name, distance)
 
+    # ==================== 조그 이동 ====================
+
+    def _on_jog_move(self, axis: str, direction: int):
+        """베이스 좌표계 조그 이동"""
+        # 스텝 크기 가져오기
+        if axis == 'x':
+            step = self.spinJogStepX.value()
+        elif axis == 'y':
+            step = self.spinJogStepY.value()
+        elif axis == 'z':
+            step = self.spinJogStepZ.value()
+        else:
+            return
+
+        distance = step * direction
+        self._log(f"조그 이동: {axis.upper()} {'+' if direction > 0 else ''}{distance}mm")
+        self.jog_move_requested.emit(axis, distance)
+
+    def _on_jog_rotate(self, axis: str, direction: int):
+        """베이스 좌표계 조그 회전"""
+        # 스텝 크기 가져오기
+        if axis == 'rx':
+            step = self.spinJogStepRx.value()
+        elif axis == 'ry':
+            step = self.spinJogStepRy.value()
+        elif axis == 'rz':
+            step = self.spinJogStepRz.value()
+        else:
+            return
+
+        angle = step * direction
+        self._log(f"조그 회전: {axis.upper()} {'+' if direction > 0 else ''}{angle}deg")
+        self.jog_rotate_requested.emit(axis, angle)
+
     def _refresh_saved_poses_list(self):
         """저장된 포즈 리스트 갱신"""
         self.listSavedPoses.clear()
@@ -628,6 +684,28 @@ class TabTaskEdit(QWidget):
         self.editJ4.setText(f"{j4:.2f}")
         self.editJ5.setText(f"{j5:.2f}")
         self.editJ6.setText(f"{j6:.2f}")
+
+    def fill_current_position_to_params(self, x, y, z, rx, ry, rz):
+        """현재 로봇 위치를 Task Parameters에 채우기"""
+        # param_widgets 딕셔너리의 위젯에 값 설정
+        param_map = {
+            'x': x,
+            'y': y,
+            'z': z,
+            'rx': rx,
+            'ry': ry,
+            'rz': rz
+        }
+
+        for param_name, value in param_map.items():
+            if param_name in self.param_widgets:
+                widget = self.param_widgets[param_name]
+                if isinstance(widget, (QDoubleSpinBox, QSpinBox)):
+                    widget.setValue(value)
+                elif isinstance(widget, QLineEdit):
+                    widget.setText(f"{value:.2f}")
+
+        self._log(f"현재 위치 입력 완료: X={x:.2f}, Y={y:.2f}, Z={z:.2f}, Rx={rx:.2f}, Ry={ry:.2f}, Rz={rz:.2f}")
 
     def update_current_toolframe(self, toolframe: int):
         """현재 툴프레임 업데이트 (placeholder)"""

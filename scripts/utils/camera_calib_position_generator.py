@@ -194,10 +194,10 @@ def format_position_label_base(
         base_dx = x - base_pose[0]  # Base X 차이
         base_dy = y - base_pose[1]  # Base Y 차이
         base_dz = z - base_pose[2]  # Base Z 차이
-        # TF1 좌표로 역변환
-        tf1_dx = int(base_dy)   # Base Y → TF1 X
-        tf1_dy = int(base_dz)   # Base Z → TF1 Y
-        tf1_dz = int(-base_dx)  # Base -X → TF1 Z (부호 반전)
+        # TF1 좌표로 역변환 (반올림 사용)
+        tf1_dx = round(base_dy)   # Base Y → TF1 X
+        tf1_dy = round(base_dz)   # Base Z → TF1 Y
+        tf1_dz = round(-base_dx)  # Base -X → TF1 Z (부호 반전)
         rel_str = f"X={tf1_dx:+d}, Y={tf1_dy:+d}, Z={tf1_dz:+d}mm"
     else:
         rel_str = ""
@@ -223,34 +223,54 @@ def format_position_label_base(
 def generate_base_positions_with_rotation(
     base_pose: Tuple[float, float, float, float, float, float],
     xy_step: int,
-    z_step: int
+    z_step: int,
+    aligned_distance: float = None,
+    aligned_y: float = None,
+    aligned_z: float = None,
+    aligned_rx: float = None,
+    aligned_rz: float = None
 ) -> List[Tuple[float, float, float, float, float, float]]:
     """
     캘리브레이션 위치 생성 (회전 포함) - Base 절대 좌표
 
-    각 XYZ 위치마다 9개 독립 회전 자세 적용 (복합 회전 금지):
-    - Rx만 변화 (Ry=0, Rz=90 고정): 80°, 90°, 100° (3개)
-    - Ry만 변화 (Rx=90, Rz=90 고정): -10°, 0°, 10° (3개)
-    - Rz만 변화 (Rx=90, Ry=0 고정): 80°, 90°, 100° (3개)
-    = 총 9개 회전 자세 (중앙 90/0/90 중복 포함)
+    2-Stage 방식:
+    - Stage 1 (자세 변환): 보정을 기준점에만 적용
+    - Stage 2 (XYZ 이동): 보정된 기준점에서 32개 XYZ 상대 이동
 
-    총 위치 수: 32개 XYZ × 9개 회전 = 288개
+    회전 자세별 그룹화 (효율적 순회):
+    1. 기준 자세 (90, 0, 90) → 32개 XYZ 모션 → 원점 복귀
+    2. Rx=80 자세 변환 (Z 보정) → 32개 XYZ 모션 → 원점 복귀
+    3. Rx=100 자세 변환 (Z 보정) → 32개 XYZ 모션 → 원점 복귀
+    4. Ry=-10 자세 변환 → 32개 XYZ 모션 → 원점 복귀
+    5. Ry=0 자세 복귀 → 32개 XYZ 모션 → 원점 복귀
+    6. Ry=10 자세 변환 → 32개 XYZ 모션 → 원점 복귀
+    7. Rz=80 자세 변환 (Y 보정) → 32개 XYZ 모션 → 원점 복귀
+    8. Rz=90 자세 복귀 → 32개 XYZ 모션 → 원점 복귀
+    9. Rz=100 자세 변환 (Y 보정) → 32개 XYZ 모션 → 원점 복귀
+
+    총 위치 수: 9개 자세 × 32개 XYZ = 288개
 
     Args:
         base_pose: 기준 좌표 (X, Y, Z, Rx, Ry, Rz) - mm, deg
         xy_step: XY 이동 간격 (mm)
         z_step: Z 이동 간격 (mm)
+        aligned_distance: 중심 정렬 시 체스보드 거리 (mm) - 보정용
+        aligned_y: 중심 정렬 시 Y 좌표 (mm) - Rz 보정용
+        aligned_z: 중심 정렬 시 Z 좌표 (mm) - Rx 보정용
+        aligned_rx: 중심 정렬 시 Rx 각도 (deg) - Rx 보정용
+        aligned_rz: 중심 정렬 시 Rz 각도 (deg) - Rz 보정용
 
     Returns:
         위치 리스트 [(X, Y, Z, Rx, Ry, Rz), ...] - Base 절대 좌표
     """
-    # 기존 XYZ 위치 생성 (32개)
-    xyz_positions = generate_base_absolute_positions(base_pose, xy_step, z_step)
+    import math
+
+    base_x, base_y, base_z = base_pose[0], base_pose[1], base_pose[2]
 
     # 독립 회전 자세 (9개 - 복합 회전 금지)
     rotation_poses = []
     # Rx만 변화 (Ry=0, Rz=90 고정)
-    for rx in [80, 90, 100]:
+    for rx in [90, 80, 100]:
         rotation_poses.append((rx, 0, 90))
     # Ry만 변화 (Rx=90, Rz=90 고정)
     for ry in [-10, 0, 10]:
@@ -259,12 +279,43 @@ def generate_base_positions_with_rotation(
     for rz in [80, 90, 100]:
         rotation_poses.append((90, 0, rz))
 
-    # 각 XYZ 위치에 대해 9개 회전 자세 적용
+    # 각 회전 자세별로 보정된 기준점에서 32개 XYZ 생성
     positions = []
-    for xyz_pos in xyz_positions:
-        x, y, z, _, _, _ = xyz_pos  # XYZ만 사용
-        for rx, ry, rz in rotation_poses:
-            positions.append((x, y, z, rx, ry, rz))
+    for rx, ry, rz in rotation_poses:
+        # Stage 1: 자세 변환 시 보정 계산 (기준점에만 적용)
+        y_correction = 0
+        z_correction = 0
+
+        # Rx 변화 시 Z축 보정
+        if aligned_distance and aligned_z is not None and aligned_rx is not None:
+            if rx != aligned_rx:
+                delta_rx = rx - aligned_rx
+                delta_rx_rad = math.radians(delta_rx)
+                dz = aligned_distance * math.tan(delta_rx_rad)
+                z_correction = dz  # 부호 그대로
+
+        # Rz 변화 시 Y축 보정
+        if aligned_distance and aligned_y is not None and aligned_rz is not None:
+            if rz != aligned_rz:
+                delta_rz = rz - aligned_rz
+                delta_rz_rad = math.radians(delta_rz)
+                dy = aligned_distance * math.tan(delta_rz_rad)
+                y_correction = -dy  # 부호 반대
+
+        # 보정된 기준 pose 생성
+        corrected_base_pose = (
+            base_x,
+            base_y + y_correction,
+            base_z + z_correction,
+            rx, ry, rz
+        )
+
+        # Stage 2: 보정된 기준점에서 32개 XYZ 위치 생성 (상대 이동)
+        xyz_positions_corrected = generate_base_absolute_positions(
+            corrected_base_pose, xy_step, z_step
+        )
+
+        positions.extend(xyz_positions_corrected)
 
     return positions
 

@@ -119,7 +119,6 @@ class MainWindow(QMainWindow):
         self.actionExit.triggered.connect(self.close)
         self.actionConnect.triggered.connect(self._on_connect)
         self.actionDisconnect.triggered.connect(self._on_disconnect)
-        self.actionGoHome.triggered.connect(self._on_go_home)
         self.actionStartCamera.triggered.connect(self._on_start_camera)
         self.actionStopCamera.triggered.connect(self._on_stop_camera)
         self.actionEmergencyStop.triggered.connect(self._on_emergency_stop)
@@ -161,12 +160,14 @@ class MainWindow(QMainWindow):
         # Task 편집 탭 시그널
         self.tabTaskEdit.log_message.connect(self._log)
         self.tabTaskEdit.connect_requested.connect(self._on_connect_from_tab)
-        self.tabTaskEdit.go_home_requested.connect(self._on_go_home)
-        self.tabTaskEdit.set_home_requested.connect(self._on_set_home)
         self.tabTaskEdit.save_pose_requested.connect(self._on_save_pose_from_tab)
         self.tabTaskEdit.delete_pose_requested.connect(self._on_delete_pose_from_tab)
         self.tabTaskEdit.move_to_pose_requested.connect(self._on_move_to_pose_from_tab)
         self.tabTaskEdit.approach_pose_requested.connect(self._on_approach_pose_from_tab)
+        self.tabTaskEdit.read_current_position_requested.connect(self._on_read_current_position_from_tab)
+        self.tabTaskEdit.execute_current_task_requested.connect(self._on_execute_current_task_from_tab)
+        self.tabTaskEdit.jog_move_requested.connect(self._on_jog_move_from_tab)
+        self.tabTaskEdit.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
         self.tabTaskEdit.task_sequence_changed.connect(self._on_task_sequence_changed)
 
         # 비전 탭 시그널
@@ -243,6 +244,123 @@ class MainWindow(QMainWindow):
         result = self.pose_service.approach_pose(name, distance)
         if not result.success:
             QMessageBox.warning(self, "오류", result.message)
+
+    def _on_read_current_position_from_tab(self):
+        """현재 위치 읽기 요청 (TabTaskEdit 시그널 핸들러)"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        current_pose = self.robot.read_current_pose()
+        if current_pose is None:
+            QMessageBox.warning(self, "오류", "현재 로봇 위치를 읽을 수 없습니다.")
+            return
+
+        x, y, z, rx, ry, rz = current_pose
+        self.tabTaskEdit.fill_current_position_to_params(x, y, z, rx, ry, rz)
+
+    def _on_execute_current_task_from_tab(self, task: dict):
+        """현재 Task 실행 요청 (TabTaskEdit 시그널 핸들러)"""
+        task_type = task.get('type')
+        params = task.get('params', {})
+
+        # Vision Task는 로봇 연결 불필요
+        vision_tasks = ['detect_aruco']
+
+        if task_type not in vision_tasks:
+            if not self.robot or not self.robot.is_connected:
+                QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+                return
+
+        self._log(f"Task 실행: {task_type}")
+
+        try:
+            # Task 타입별 실행
+            if task_type == 'go_home':
+                self._execute_go_home()
+            elif task_type == 'move_to_pose':
+                self._execute_move_to_pose(params)
+            elif task_type == 'tcp_linear_x':
+                self._execute_tcp_linear(params, 'x')
+            elif task_type == 'tcp_linear_y':
+                self._execute_tcp_linear(params, 'y')
+            elif task_type == 'tcp_linear_z':
+                self._execute_tcp_linear(params, 'z')
+            elif task_type == 'tcp_rotate_rx':
+                self._execute_tcp_rotate(params, 'rx')
+            elif task_type == 'tcp_rotate_ry':
+                self._execute_tcp_rotate(params, 'ry')
+            elif task_type == 'tcp_rotate_rz':
+                self._execute_tcp_rotate(params, 'rz')
+            elif task_type == 'detect_aruco':
+                self._execute_detect_aruco(params)
+            else:
+                QMessageBox.information(self, "알림", f"'{task_type}' Task 실행은 아직 구현되지 않았습니다.")
+                return
+
+            self._log(f"Task 실행 완료: {task_type}")
+
+        except Exception as e:
+            self._log(f"Task 실행 오류: {e}")
+            QMessageBox.critical(self, "오류", f"Task 실행 중 오류 발생:\n{e}")
+
+    def _execute_go_home(self):
+        """GO HOME 실행"""
+        success, message = self.robot.send_go_home()
+        if not success:
+            raise Exception(f"GO HOME 실패: {message}")
+
+    def _execute_move_to_pose(self, params: dict):
+        """절대 위치 이동 실행"""
+        x = params.get('x', 0.0)
+        y = params.get('y', 0.0)
+        z = params.get('z', 0.0)
+        rx = params.get('rx', 0.0)
+        ry = params.get('ry', 0.0)
+        rz = params.get('rz', 0.0)
+
+        success, message = self.robot.send_move_to_pose(x, y, z, rx, ry, rz)
+        if not success:
+            raise Exception(f"위치 이동 실패: {message}")
+
+    def _execute_tcp_linear(self, params: dict, axis: str):
+        """TCP 직선 이동 실행"""
+        distance = params.get('distance', 0.0)
+
+        success, message = self.robot.send_tcp_linear(axis, distance)
+        if not success:
+            raise Exception(f"TCP {axis.upper()} 이동 실패: {message}")
+
+    def _execute_tcp_rotate(self, params: dict, axis: str):
+        """TCP 회전 이동 실행"""
+        angle = params.get('angle', 0.0)
+
+        success, message = self.robot.send_tcp_rotate(axis, angle)
+        if not success:
+            raise Exception(f"TCP {axis.upper()} 회전 실패: {message}")
+
+    def _execute_detect_aruco(self, params: dict):
+        """Aruco Tag 인식 실행 (카메라 자동 켜기 포함)"""
+        tag_id = params.get('tag_id', 0)
+        timeout = params.get('timeout', 10.0)
+
+        # 카메라가 꺼져 있으면 자동으로 켜기
+        if not self.camera_manager.is_running:
+            self._log("카메라가 꺼져 있습니다. 자동으로 카메라를 시작합니다...")
+            success, msg = self.camera_manager.start()
+            if not success:
+                raise Exception(f"카메라 시작 실패: {msg}")
+            self._log("카메라 시작 완료")
+
+        # Aruco Tag 감지
+        self._log(f"Aruco Tag {tag_id} 감지 시작 (timeout: {timeout}초)...")
+        result = self.detect_aruco_tag(tag_id, timeout)
+
+        if result is None:
+            raise Exception(f"Aruco Tag {tag_id}를 {timeout}초 안에 감지하지 못했습니다.")
+
+        self._log(f"Aruco Tag {tag_id} 감지 성공!")
+        QMessageBox.information(self, "성공", f"Aruco Tag {tag_id}를 감지했습니다.")
 
     def _on_gamma_changed_from_tab(self, gamma: float):
         """감마 값 변경 (TabVision 시그널 핸들러)"""
@@ -403,15 +521,45 @@ class MainWindow(QMainWindow):
         self.tabTaskEdit.update_connection_status(False)
         self.statusbar.showMessage("연결 해제됨")
 
-    def _on_go_home(self):
-        """HOME 이동"""
-        self._log("HOME으로 이동")
-        # TODO: 로봇 HOME 이동 명령
+    def _on_jog_move_from_tab(self, axis: str, distance: float):
+        """조그 이동 요청 (TabTaskEdit 시그널 핸들러)"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
 
-    def _on_set_home(self):
-        """현재 위치를 HOME으로 설정"""
-        self._log("현재 위치를 HOME으로 설정")
-        # TODO: HOME 위치 저장
+        # Command 매핑
+        cmd_map = {
+            'x': self.robot.CMD_BASE_LINEAR_X,
+            'y': self.robot.CMD_BASE_LINEAR_Y,
+            'z': self.robot.CMD_BASE_LINEAR_Z,
+        }
+
+        cmd = cmd_map.get(axis)
+        if cmd is None:
+            self._log(f"알 수 없는 축: {axis}")
+            return
+
+        # 베이스 좌표계 이동
+        success, message = self.robot.send_base_linear(axis, distance)
+        if not success:
+            self._log(f"조그 이동 실패: {message}")
+            QMessageBox.warning(self, "오류", f"조그 이동 실패:\n{message}")
+        else:
+            self._log(f"조그 이동 완료: {axis.upper()} {'+' if distance > 0 else ''}{distance}mm")
+
+    def _on_jog_rotate_from_tab(self, axis: str, angle: float):
+        """조그 회전 요청 (TabTaskEdit 시그널 핸들러)"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        # 베이스 좌표계 회전
+        success, message = self.robot.send_base_rotate(axis, angle)
+        if not success:
+            self._log(f"조그 회전 실패: {message}")
+            QMessageBox.warning(self, "오류", f"조그 회전 실패:\n{message}")
+        else:
+            self._log(f"조그 회전 완료: {axis.upper()} {'+' if angle > 0 else ''}{angle}deg")
 
     def _update_robot_status(self):
         """로봇 상태 업데이트 (TCP 위치, 레지스터 등)"""

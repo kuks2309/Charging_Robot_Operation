@@ -1287,18 +1287,40 @@ class TabCalibration(QWidget):
                 x, y, z, rx, ry, rz = current_pose
                 self._log(f"기준 좌표 저장: X={x:.1f}, Y={y:.1f}, Z={z:.1f}, Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f}")
 
-                # Base 절대 좌표로 위치 생성 (회전 포함)
-                self.auto_calib_positions = generate_base_positions_with_rotation(current_pose, xy_step, z_step)
+                # Base 절대 좌표로 위치 생성 (회전 포함, Rx/Rz 보정 적용)
+                self.auto_calib_positions = generate_base_positions_with_rotation(
+                    current_pose, xy_step, z_step,
+                    aligned_distance=self.aligned_distance,
+                    aligned_y=self.aligned_y,
+                    aligned_z=self.aligned_z,
+                    aligned_rx=self.aligned_rx,
+                    aligned_rz=self.aligned_rz
+                )
                 self._update_position_list()
 
-                # 위치 수 계산 (32개 XYZ × 9개 회전 = 288개)
+                # 위치 수 계산 (9개 자세 × 32개 XYZ = 288개)
                 xyz_count = 32
                 rotation_count = 9  # Rx 3개 + Ry 3개 + Rz 3개 (독립)
                 total_count = len(self.auto_calib_positions)
 
-                self._log(f"위치 생성 완료: {total_count}개 ({xyz_count}개 XYZ × {rotation_count}개 회전)")
+                self._log(f"위치 생성 완료: {total_count}개 ({rotation_count}개 자세 × {xyz_count}개 XYZ)")
                 self._log(f"  - XY 간격: {xy_step}mm, Z 간격: {z_step}mm")
-                self._log(f"  - 독립 회전: Rx만(80/90/100°), Ry만(-10/0/10°), Rz만(80/90/100°)")
+                self._log(f"  - 독립 회전: Rx만(90/80/100°), Ry만(-10/0/10°), Rz만(80/90/100°)")
+
+                # Rx/Rz 보정 상태 표시
+                rx_applied = self.aligned_distance and self.aligned_z is not None and self.aligned_rx is not None
+                rz_applied = self.aligned_distance and self.aligned_y is not None and self.aligned_rz is not None
+
+                if rx_applied and rz_applied:
+                    self._log(f"  - Rx/Rz 보정 적용: D={self.aligned_distance:.0f}mm, 기준Rx={self.aligned_rx:.1f}°, 기준Rz={self.aligned_rz:.1f}°")
+                elif rz_applied:
+                    self._log(f"  - Rz 보정 적용: D={self.aligned_distance:.0f}mm, 기준Rz={self.aligned_rz:.1f}°")
+                    self._log(f"  - Rx 보정 미적용 (aligned_z 또는 aligned_rx 누락)")
+                elif rx_applied:
+                    self._log(f"  - Rx 보정 적용: D={self.aligned_distance:.0f}mm, 기준Rx={self.aligned_rx:.1f}°")
+                    self._log(f"  - Rz 보정 미적용 (aligned_y 또는 aligned_rz 누락)")
+                else:
+                    self._log(f"  - Rx/Rz 보정 미적용 (중심 정렬 필요)")
             else:
                 self._log("로봇 좌표 읽기 실패 - 위치 생성 불가")
         else:
@@ -1419,7 +1441,9 @@ class TabCalibration(QWidget):
             QMessageBox.critical(self, "오류", f"이동 오류: {e}")
 
     def _on_run_auto_capture(self):
-        """자동 캡처 실행 - TODO: 구현 필요"""
+        """자동 캡처 실행 - 모든 위치로 이동하며 이미지 자동 저장"""
+        import time
+
         if not self.auto_calib_positions:
             QMessageBox.warning(self, "경고", "먼저 위치를 생성해주세요.")
             return
@@ -1428,18 +1452,97 @@ class TabCalibration(QWidget):
             QMessageBox.warning(self, "경고", "이미 자동 캡처가 실행 중입니다.")
             return
 
+        # 저장 디렉토리 생성
+        home_dir = os.path.expanduser("~")
+        base_save_dir = os.path.join(home_dir, "Project", "Charging_Robot_Operation", "calibration", "camera")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_dir = os.path.join(base_save_dir, f"auto_{timestamp}")
+
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            self._log(f"저장 경로: {save_dir}")
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"디렉토리 생성 실패: {e}")
+            return
+
         # 자동 캡처 시작
         self.auto_calib_running = True
         self.btnRunAutoCapture.setEnabled(False)
         self.btnStopAutoCapture.setEnabled(True)
 
-        self._log(f"자동 캡처 실행: {len(self.auto_calib_positions)}개 위치")
-        # TODO: 순차적으로 위치 이동 및 이미지 캡처 구현
+        total = len(self.auto_calib_positions)
+        stabilization_ms = self.spinStabilizationDelay.value()
+        stabilization_sec = stabilization_ms / 1000.0
 
-        # 임시: 종료 시 버튼 상태 복원
-        self.auto_calib_running = False
-        self.btnRunAutoCapture.setEnabled(True)
-        self.btnStopAutoCapture.setEnabled(False)
+        self._log(f"자동 캡처 시작: {total}개 위치, 안정화 시간: {stabilization_ms}ms")
+
+        try:
+            for index in range(total):
+                # 중지 요청 확인
+                if not self.auto_calib_running:
+                    self._log("사용자 요청으로 자동 캡처 중지")
+                    break
+
+                # 현재 위치 선택 (UI 표시)
+                self.listAutoCalibPositions.setCurrentRow(index)
+                QApplication.processEvents()
+
+                # 목표 좌표 (Base 절대 좌표)
+                target_x, target_y, target_z, target_rx, target_ry, target_rz = self.auto_calib_positions[index]
+
+                self._log(f"[{index+1}/{total}] 이동 중: X={target_x:.1f}, Y={target_y:.1f}, Z={target_z:.1f}, Rx={target_rx:.1f}, Ry={target_ry:.1f}, Rz={target_rz:.1f}")
+
+                # Base 좌표계 절대 이동
+                success, msg = self.robot.send_move_to_pose(
+                    target_x, target_y, target_z,
+                    target_rx, target_ry, target_rz,
+                    wait=True, process_events_callback=QApplication.processEvents
+                )
+
+                if not success:
+                    self._log(f"[{index+1}/{total}] 이동 실패: {msg}")
+                    QMessageBox.critical(self, "오류", f"위치 [{index+1}] 이동 실패: {msg}")
+                    break
+
+                self._log(f"[{index+1}/{total}] 이동 완료, 안정화 대기 중...")
+
+                # 안정화 대기
+                time.sleep(stabilization_sec)
+                QApplication.processEvents()
+
+                # 이미지 캡처
+                if self.current_frame is None:
+                    self._log(f"[{index+1}/{total}] 경고: 프레임 없음, 캡처 건너뜀")
+                    continue
+
+                # 파일명: 인덱스_좌표.png
+                filename = f"{index:04d}_X{target_x:.1f}_Y{target_y:.1f}_Z{target_z:.1f}_Rx{target_rx:.1f}_Ry{target_ry:.1f}_Rz{target_rz:.1f}.png"
+                filepath = os.path.join(save_dir, filename)
+
+                try:
+                    cv2.imwrite(filepath, self.current_frame)
+                    self._log(f"[{index+1}/{total}] 캡처 완료: {filename}")
+                except Exception as e:
+                    self._log(f"[{index+1}/{total}] 캡처 실패: {e}")
+
+                QApplication.processEvents()
+
+            # 완료 또는 중지 메시지
+            if self.auto_calib_running:
+                self._log(f"자동 캡처 완료: {total}개 위치")
+                QMessageBox.information(self, "완료", f"자동 캡처 완료\n저장 위치: {save_dir}")
+            else:
+                self._log("자동 캡처 중지됨")
+
+        except Exception as e:
+            self._log(f"자동 캡처 오류: {e}")
+            QMessageBox.critical(self, "오류", f"자동 캡처 오류: {e}")
+
+        finally:
+            # 버튼 상태 복원
+            self.auto_calib_running = False
+            self.btnRunAutoCapture.setEnabled(True)
+            self.btnStopAutoCapture.setEnabled(False)
 
     def _on_stop_auto_capture(self):
         """자동 캡처 중지"""
