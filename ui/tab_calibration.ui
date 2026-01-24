@@ -1580,6 +1580,19 @@
           </property>
          </widget>
         </item>
+        <item>
+         <widget class="QPushButton" name="btnStopAutoCapture">
+          <property name="text">
+           <string>중지</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #F44336; color: white;</string>
+          </property>
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>

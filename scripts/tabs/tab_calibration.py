@@ -175,6 +175,7 @@ class TabCalibration(QWidget):
         self.btnMoveToSelectedBase.clicked.connect(self._on_move_to_selected_base)
         self.btnSequentialMove.clicked.connect(self._on_sequential_move)
         self.btnRunAutoCapture.clicked.connect(self._on_run_auto_capture)
+        self.btnStopAutoCapture.clicked.connect(self._on_stop_auto_capture)
 
         # 서브탭 변경 시그널
         self.tabWidgetCalibSub.currentChanged.connect(self._on_calib_sub_tab_changed)
@@ -1423,5 +1424,30 @@ class TabCalibration(QWidget):
             QMessageBox.warning(self, "경고", "먼저 위치를 생성해주세요.")
             return
 
+        if self.auto_calib_running:
+            QMessageBox.warning(self, "경고", "이미 자동 캡처가 실행 중입니다.")
+            return
+
+        # 자동 캡처 시작
+        self.auto_calib_running = True
+        self.btnRunAutoCapture.setEnabled(False)
+        self.btnStopAutoCapture.setEnabled(True)
+
         self._log(f"자동 캡처 실행: {len(self.auto_calib_positions)}개 위치")
         # TODO: 순차적으로 위치 이동 및 이미지 캡처 구현
+
+        # 임시: 종료 시 버튼 상태 복원
+        self.auto_calib_running = False
+        self.btnRunAutoCapture.setEnabled(True)
+        self.btnStopAutoCapture.setEnabled(False)
+
+    def _on_stop_auto_capture(self):
+        """자동 캡처 중지"""
+        if not self.auto_calib_running:
+            return
+
+        self._log("자동 캡처 중지 요청")
+        self.auto_calib_running = False
+        self.btnRunAutoCapture.setEnabled(True)
+        self.btnStopAutoCapture.setEnabled(False)
+        self._log("자동 캡처 중지됨")
