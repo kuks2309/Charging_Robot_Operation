@@ -173,7 +173,7 @@ def format_position_label_base(
     base_pose: Tuple[float, float, float, float, float, float] = None
 ) -> str:
     """
-    Base 절대 좌표를 표시용 문자열로 변환 (상대 + 절대)
+    Base 절대 좌표를 표시용 문자열로 변환 (상대 + 절대 + 회전)
 
     Args:
         index: 위치 인덱스 (0부터 시작)
@@ -202,17 +202,71 @@ def format_position_label_base(
     else:
         rel_str = ""
 
+    # 회전 정보 (기준과 다를 때만 표시)
+    rotation_str = ""
+    if base_pose and (rx != base_pose[3] or ry != base_pose[4] or rz != base_pose[5]):
+        rotation_str = f" Rx={rx:.0f}°, Ry={ry:.0f}°, Rz={rz:.0f}°"
+
     if is_first:
-        label = f"[{index}] 시작 - Base: X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm"
+        label = f"[{index}] 시작 - X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm{rotation_str}"
     elif is_last:
-        label = f"[{index}] 복귀 - Base: X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm"
+        label = f"[{index}] 복귀 - X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm{rotation_str}"
     else:
         if rel_str:
-            label = f"[{index}] {rel_str} | Base: X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm"
+            label = f"[{index}] {rel_str}{rotation_str}"
         else:
-            label = f"[{index}] Base: X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm"
+            label = f"[{index}] X={x:.1f}, Y={y:.1f}, Z={z:.1f}mm{rotation_str}"
 
     return label
+
+
+def generate_base_positions_with_rotation(
+    base_pose: Tuple[float, float, float, float, float, float],
+    xy_step: int,
+    z_step: int
+) -> List[Tuple[float, float, float, float, float, float]]:
+    """
+    캘리브레이션 위치 생성 (회전 포함) - Base 절대 좌표
+
+    각 XYZ 위치마다 9개 독립 회전 자세 적용 (복합 회전 금지):
+    - Rx만 변화 (Ry=0, Rz=90 고정): 80°, 90°, 100° (3개)
+    - Ry만 변화 (Rx=90, Rz=90 고정): -10°, 0°, 10° (3개)
+    - Rz만 변화 (Rx=90, Ry=0 고정): 80°, 90°, 100° (3개)
+    = 총 9개 회전 자세 (중앙 90/0/90 중복 포함)
+
+    총 위치 수: 32개 XYZ × 9개 회전 = 288개
+
+    Args:
+        base_pose: 기준 좌표 (X, Y, Z, Rx, Ry, Rz) - mm, deg
+        xy_step: XY 이동 간격 (mm)
+        z_step: Z 이동 간격 (mm)
+
+    Returns:
+        위치 리스트 [(X, Y, Z, Rx, Ry, Rz), ...] - Base 절대 좌표
+    """
+    # 기존 XYZ 위치 생성 (32개)
+    xyz_positions = generate_base_absolute_positions(base_pose, xy_step, z_step)
+
+    # 독립 회전 자세 (9개 - 복합 회전 금지)
+    rotation_poses = []
+    # Rx만 변화 (Ry=0, Rz=90 고정)
+    for rx in [80, 90, 100]:
+        rotation_poses.append((rx, 0, 90))
+    # Ry만 변화 (Rx=90, Rz=90 고정)
+    for ry in [-10, 0, 10]:
+        rotation_poses.append((90, ry, 90))
+    # Rz만 변화 (Rx=90, Ry=0 고정)
+    for rz in [80, 90, 100]:
+        rotation_poses.append((90, 0, rz))
+
+    # 각 XYZ 위치에 대해 9개 회전 자세 적용
+    positions = []
+    for xyz_pos in xyz_positions:
+        x, y, z, _, _, _ = xyz_pos  # XYZ만 사용
+        for rx, ry, rz in rotation_poses:
+            positions.append((x, y, z, rx, ry, rz))
+
+    return positions
 
 
 def format_position_label(

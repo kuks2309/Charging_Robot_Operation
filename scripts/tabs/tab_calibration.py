@@ -24,7 +24,7 @@ from utils.common import (
 from utils.chessboard_detector import ChessboardDetector
 from utils.camera_calib_position_generator import (
     generate_planar_positions_vision_tf,
-    generate_base_absolute_positions,
+    generate_base_positions_with_rotation,
     format_position_label,
     format_position_label_base,
 )
@@ -1274,7 +1274,7 @@ class TabCalibration(QWidget):
     # - Z: 카메라와 타겟 간 거리 (광축 방향)
 
     def _on_generate_positions(self):
-        """자동 캘리브레이션 위치 생성 - Base 절대 좌표"""
+        """자동 캘리브레이션 위치 생성 - Base 절대 좌표 (회전 포함)"""
         xy_step = self.spinXYStep.value()
         z_step = self.spinZStep.value()
 
@@ -1286,12 +1286,18 @@ class TabCalibration(QWidget):
                 x, y, z, rx, ry, rz = current_pose
                 self._log(f"기준 좌표 저장: X={x:.1f}, Y={y:.1f}, Z={z:.1f}, Rx={rx:.1f}, Ry={ry:.1f}, Rz={rz:.1f}")
 
-                # Base 절대 좌표로 위치 생성
-                self.auto_calib_positions = generate_base_absolute_positions(current_pose, xy_step, z_step)
+                # Base 절대 좌표로 위치 생성 (회전 포함)
+                self.auto_calib_positions = generate_base_positions_with_rotation(current_pose, xy_step, z_step)
                 self._update_position_list()
 
-                self._log(f"위치 생성 완료: {len(self.auto_calib_positions)}개 (XY간격 {xy_step}mm, Z간격 {z_step}mm)")
-                self._log(f"총 촬영 이미지: 27장 (시작/복귀 제외)")
+                # 위치 수 계산 (32개 XYZ × 9개 회전 = 288개)
+                xyz_count = 32
+                rotation_count = 9  # Rx 3개 + Ry 3개 + Rz 3개 (독립)
+                total_count = len(self.auto_calib_positions)
+
+                self._log(f"위치 생성 완료: {total_count}개 ({xyz_count}개 XYZ × {rotation_count}개 회전)")
+                self._log(f"  - XY 간격: {xy_step}mm, Z 간격: {z_step}mm")
+                self._log(f"  - 독립 회전: Rx만(80/90/100°), Ry만(-10/0/10°), Rz만(80/90/100°)")
             else:
                 self._log("로봇 좌표 읽기 실패 - 위치 생성 불가")
         else:
