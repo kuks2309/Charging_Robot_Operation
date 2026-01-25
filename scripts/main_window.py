@@ -13,8 +13,12 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QTimer
 
 from Robot import ModbusClient, RobotController, PoseManager
-from services import CameraManager, VisionManager, AlignmentService, DataCollector, PoseService
+from services import CameraManager, ArduCamManager, VisionManager, AlignmentService, DataCollector, PoseService
 from job_types import JOB_TYPES
+
+# 카메라 타입 상수
+CAMERA_DS435 = "DS435"
+CAMERA_ARDUCAM = "ArduCam"
 from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest
 
 # UI 파일 경로
@@ -48,10 +52,21 @@ class MainWindow(QMainWindow):
         # 분리된 탭 클래스 로드 및 추가
         self._load_separated_tabs()
 
-        # 카메라 매니저 초기화
-        self.camera_manager = CameraManager()
-        self.camera_manager.set_log_callback(self._log)
-        self.camera_manager.frame_ready.connect(self._on_camera_frame)
+        # 현재 선택된 카메라 타입
+        self._current_camera_type = CAMERA_DS435
+
+        # DS435 카메라 매니저 초기화
+        self.ds435_camera_manager = CameraManager()
+        self.ds435_camera_manager.set_log_callback(self._log)
+        self.ds435_camera_manager.frame_ready.connect(self._on_camera_frame)
+
+        # ArduCam 카메라 매니저 초기화
+        self.arducam_manager = ArduCamManager(device_index=0)
+        self.arducam_manager.set_log_callback(self._log)
+        self.arducam_manager.frame_ready.connect(self._on_camera_frame)
+
+        # 현재 활성 카메라 매니저 (기본: DS435)
+        self.camera_manager = self.ds435_camera_manager
 
         # 탭에 카메라 매니저 전달
         self.tabCalibration.set_camera_manager(self.camera_manager)
@@ -76,7 +91,6 @@ class MainWindow(QMainWindow):
         # 포즈 서비스 초기화
         self.pose_service = PoseService(self.pose_manager)
         self.pose_service.set_log_callback(self._log)
-        self.pose_service.pose_list_changed.connect(self._refresh_saved_poses_list)
 
         # 초기화
         self._connect_signals()
@@ -84,10 +98,6 @@ class MainWindow(QMainWindow):
 
         # 타이머 설정
         self._setup_timers()
-
-    def _refresh_saved_poses_list(self):
-        """저장된 포즈 리스트 갱신 (PoseService 시그널 핸들러)"""
-        self.tabTaskEdit.refresh_poses()
 
     def _connect_signals(self):
         """시그널-슬롯 연결 (메인윈도우 UI 위젯들만)"""
@@ -166,10 +176,6 @@ class MainWindow(QMainWindow):
         # Task 편집 탭 시그널
         self.tabTaskEdit.log_message.connect(self._log)
         self.tabTaskEdit.connect_requested.connect(self._on_connect_from_tab)
-        self.tabTaskEdit.save_pose_requested.connect(self._on_save_pose_from_tab)
-        self.tabTaskEdit.delete_pose_requested.connect(self._on_delete_pose_from_tab)
-        self.tabTaskEdit.move_to_pose_requested.connect(self._on_move_to_pose_from_tab)
-        self.tabTaskEdit.approach_pose_requested.connect(self._on_approach_pose_from_tab)
         self.tabTaskEdit.read_current_position_requested.connect(self._on_read_current_position_from_tab)
         self.tabTaskEdit.execute_current_task_requested.connect(self._on_execute_current_task_from_tab)
         self.tabTaskEdit.jog_move_requested.connect(self._on_jog_move_from_tab)
@@ -202,6 +208,9 @@ class MainWindow(QMainWindow):
         # Motion Test 탭 시그널
         self.tabMotionTest.log_message.connect(self._log)
 
+        # 카메라 선택 라디오 버튼 시그널 연결
+        self._connect_camera_selection_signals()
+
     def _init_status(self):
         """상태 초기화"""
         self.statusbar.showMessage("준비됨")
@@ -223,34 +232,6 @@ class MainWindow(QMainWindow):
     def _on_connect_from_tab(self, ip: str, port: int):
         """로봇 연결 요청 (TabTaskEdit 시그널 핸들러)"""
         self._connect_robot(ip, port)
-
-    def _on_save_pose_from_tab(self, name: str, pose_type: str):
-        """포즈 저장 요청 (TabTaskEdit 시그널 핸들러)"""
-        result = self.pose_service.save_current_pose(name, pose_type)
-        if not result.success:
-            QMessageBox.warning(self, "오류", result.message)
-        else:
-            self.tabTaskEdit.refresh_poses()
-
-    def _on_delete_pose_from_tab(self, name: str):
-        """포즈 삭제 요청 (TabTaskEdit 시그널 핸들러)"""
-        result = self.pose_service.delete_pose(name)
-        if not result.success:
-            QMessageBox.warning(self, "오류", result.message)
-        else:
-            self.tabTaskEdit.refresh_poses()
-
-    def _on_move_to_pose_from_tab(self, name: str):
-        """포즈로 이동 요청 (TabTaskEdit 시그널 핸들러)"""
-        result = self.pose_service.move_to_pose(name)
-        if not result.success:
-            QMessageBox.warning(self, "오류", result.message)
-
-    def _on_approach_pose_from_tab(self, name: str, distance: float):
-        """어프로치 위치로 이동 요청 (TabTaskEdit 시그널 핸들러)"""
-        result = self.pose_service.approach_pose(name, distance)
-        if not result.success:
-            QMessageBox.warning(self, "오류", result.message)
 
     def _on_read_current_position_from_tab(self):
         """현재 위치 읽기 요청 (TabTaskEdit 시그널 핸들러)"""
@@ -593,6 +574,103 @@ class MainWindow(QMainWindow):
             if resp is not None:
                 self.tableModbusRegisters.setItem(3, 1,
                     QTableWidgetItem(str(resp)))
+
+    # ==================== 카메라 선택 ====================
+
+    def _connect_camera_selection_signals(self):
+        """각 탭의 카메라 선택 라디오 버튼 시그널 연결"""
+        # TabVision
+        if hasattr(self.tabVision, 'radioDS435'):
+            self.tabVision.radioDS435.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_DS435) if checked else None
+            )
+        if hasattr(self.tabVision, 'radioArduCam'):
+            self.tabVision.radioArduCam.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_ARDUCAM) if checked else None
+            )
+
+        # TabCalibration
+        if hasattr(self.tabCalibration, 'radioDS435'):
+            self.tabCalibration.radioDS435.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_DS435) if checked else None
+            )
+        if hasattr(self.tabCalibration, 'radioArduCam'):
+            self.tabCalibration.radioArduCam.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_ARDUCAM) if checked else None
+            )
+
+        # TabArucoReliability
+        if hasattr(self.tabArucoReliability, 'radioDS435'):
+            self.tabArucoReliability.radioDS435.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_DS435) if checked else None
+            )
+        if hasattr(self.tabArucoReliability, 'radioArduCam'):
+            self.tabArucoReliability.radioArduCam.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_ARDUCAM) if checked else None
+            )
+
+        # TabEyeInHand
+        if hasattr(self.tabEyeInHand, 'radioDS435'):
+            self.tabEyeInHand.radioDS435.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_DS435) if checked else None
+            )
+        if hasattr(self.tabEyeInHand, 'radioArduCam'):
+            self.tabEyeInHand.radioArduCam.toggled.connect(
+                lambda checked: self._on_camera_type_changed(CAMERA_ARDUCAM) if checked else None
+            )
+
+    def _on_camera_type_changed(self, camera_type: str):
+        """카메라 타입 변경 시 호출"""
+        if camera_type == self._current_camera_type:
+            return
+
+        # 현재 카메라가 실행 중이면 정지
+        was_running = self.camera_manager.is_running
+        if was_running:
+            self.camera_manager.stop()
+
+        # 카메라 타입 변경
+        self._current_camera_type = camera_type
+
+        # 새 카메라 매니저로 전환
+        if camera_type == CAMERA_DS435:
+            self.camera_manager = self.ds435_camera_manager
+        else:
+            self.camera_manager = self.arducam_manager
+
+        # 탭들에 새 카메라 매니저 전달
+        self.tabCalibration.set_camera_manager(self.camera_manager)
+        self.tabArucoReliability.set_camera_manager(self.camera_manager)
+
+        # Vision 매니저에 새 카메라 매니저 설정
+        self.vision_manager.set_camera_manager(self.camera_manager)
+
+        self._log(f"카메라 변경: {camera_type}")
+
+        # 모든 탭의 라디오 버튼 동기화
+        self._sync_camera_radio_buttons(camera_type)
+
+        # 이전에 실행 중이었으면 새 카메라 시작
+        if was_running:
+            self._on_start_camera()
+
+    def _sync_camera_radio_buttons(self, camera_type: str):
+        """모든 탭의 카메라 선택 라디오 버튼 동기화"""
+        is_ds435 = camera_type == CAMERA_DS435
+
+        # 시그널 블로킹하여 무한 루프 방지
+        tabs = [self.tabVision, self.tabCalibration, self.tabArucoReliability, self.tabEyeInHand]
+
+        for tab in tabs:
+            if hasattr(tab, 'radioDS435') and hasattr(tab, 'radioArduCam'):
+                tab.radioDS435.blockSignals(True)
+                tab.radioArduCam.blockSignals(True)
+
+                tab.radioDS435.setChecked(is_ds435)
+                tab.radioArduCam.setChecked(not is_ds435)
+
+                tab.radioDS435.blockSignals(False)
+                tab.radioArduCam.blockSignals(False)
 
     # ==================== 비전 ====================
 
@@ -1019,9 +1097,11 @@ class MainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
-            # 카메라 정지
-            if self.camera_manager.is_running:
-                self.camera_manager.stop()
+            # 모든 카메라 정지
+            if self.ds435_camera_manager.is_running:
+                self.ds435_camera_manager.stop()
+            if self.arducam_manager.is_running:
+                self.arducam_manager.stop()
 
             # 타이머 정지
             if hasattr(self, 'status_timer'):

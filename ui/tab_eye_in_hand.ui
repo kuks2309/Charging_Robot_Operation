@@ -7,95 +7,1630 @@
     <x>0</x>
     <y>0</y>
     <width>1200</width>
-    <height>800</height>
+    <height>700</height>
    </rect>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayoutEyeInHand">
-   <!-- Left: Camera Stream -->
+   <property name="spacing">
+    <number>4</number>
+   </property>
+   <property name="leftMargin">
+    <number>4</number>
+   </property>
+   <property name="topMargin">
+    <number>4</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>4</number>
+   </property>
+   <!-- Left: Camera Stream + Sub Tabs -->
    <item>
-    <widget class="QGroupBox" name="groupEyeInHandCameraStream">
-     <property name="title">
-      <string>Camera Stream</string>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayoutEyeInHandCamera">
+    <widget class="QWidget" name="widgetLeft">
+     <layout class="QVBoxLayout" name="verticalLayoutLeft">
+      <property name="spacing">
+       <number>2</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <!-- Camera View -->
       <item>
-       <widget class="QLabel" name="labelEyeInHandCameraView">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
+       <widget class="QGroupBox" name="groupEyeInHandCameraStream">
+        <property name="title">
+         <string>Camera Stream (Undistorted)</string>
         </property>
-        <property name="minimumSize">
-         <size>
-          <width>640</width>
-          <height>480</height>
-         </size>
+        <layout class="QVBoxLayout" name="verticalLayoutEyeInHandCamera">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>4</number>
+         </property>
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="labelEyeInHandCameraView">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>640</width>
+             <height>480</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>640</width>
+             <height>480</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string>background-color: #333333; border: 1px solid #555555;</string>
+           </property>
+           <property name="text">
+            <string>카메라 미연결</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutEyeInHandCameraButtons">
+           <item>
+            <widget class="QRadioButton" name="radioDS435">
+             <property name="text">
+              <string>DS435</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioArduCam">
+             <property name="text">
+              <string>ArduCam</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerCameraSelect">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnEyeInHandStartCamera">
+             <property name="text">
+              <string>카메라 시작</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnEyeInHandStopCamera">
+             <property name="text">
+              <string>카메라 정지</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnEyeInHandSnapshot">
+             <property name="text">
+              <string>스냅샷 저장</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <!-- Sub Tab Widget -->
+      <item>
+       <widget class="QTabWidget" name="tabWidgetEyeInHandSub">
+        <property name="currentIndex">
+         <number>0</number>
+        </property>
+        <!-- Chessboard Tab -->
+        <widget class="QWidget" name="tabChessboard">
+         <attribute name="title">
+          <string>Chessboard</string>
+         </attribute>
+         <layout class="QVBoxLayout" name="verticalLayoutChessboardTab">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <!-- Chessboard Settings -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutChessboardSettings">
+            <property name="spacing">
+             <number>2</number>
+            </property>
+            <item>
+             <widget class="QCheckBox" name="checkChessboardDetect">
+              <property name="text">
+               <string>감지</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardCols">
+              <property name="text">
+               <string>가로:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinChessboardCols">
+              <property name="minimum">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardRows">
+              <property name="text">
+               <string>세로:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="spinChessboardRows">
+              <property name="minimum">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="value">
+               <number>7</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelSquareSize">
+              <property name="text">
+               <string>크기(mm):</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="spinSquareSize">
+              <property name="minimum">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>100.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.500000000000000</double>
+              </property>
+              <property name="value">
+               <double>22.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerChessboard">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnFindChessboardPose">
+              <property name="text">
+               <string>Find Pose</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <!-- Chessboard Pose Result -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutChessboardPose">
+            <property name="spacing">
+             <number>2</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelChessboardCenter">
+              <property name="text">
+               <string>중심:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardCenterValue">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardAngle">
+              <property name="text">
+               <string>각도:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardAngleValue">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardDistance">
+              <property name="text">
+               <string>거리:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelChessboardDistanceValue">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold; color: #E91E63;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerPose">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Chessboard Robot Align -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutChessboardAlign">
+            <property name="spacing">
+             <number>2</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="btnAlignCenter">
+              <property name="text">
+               <string>중심 정렬</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="checkAutoCorrection">
+              <property name="text">
+               <string>중심 정렬 자동 보정</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerAlign">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 중심 정렬 후 Base 좌표 표시 -->
+          <item>
+           <widget class="QLabel" name="labelAlignedBasePos">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>기준 좌표: -</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #9C27B0; font-weight: bold; padding: 2px 0px;</string>
+            </property>
+           </widget>
+          </item>
+          <!-- 정렬 오차 표시 -->
+          <item>
+           <widget class="QLabel" name="labelAlignError">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>정렬 오차: -</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #FF5722; padding: 2px 0px;</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <!-- 로봇 제어 Tab -->
+        <widget class="QWidget" name="tabRobotControl">
+         <attribute name="title">
+          <string>로봇 제어</string>
+         </attribute>
+         <layout class="QVBoxLayout" name="verticalLayoutRobotControlTab">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <!-- 현재 툴프레임 표시 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutToolframe">
+            <item>
+             <widget class="QLabel" name="labelEyeInHandToolframe">
+              <property name="text">
+               <string>툴프레임:</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandToolframeValue">
+              <property name="text">
+               <string>TF0 (기본)</string>
+              </property>
+              <property name="styleSheet">
+               <string>color: #666666; font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerToolframe">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 좌표 표시 (X, Y, Z) -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutPosXYZ">
+            <item>
+             <widget class="QLabel" name="labelEyeInHandX">
+              <property name="text">
+               <string>X:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editEyeInHandX">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandY">
+              <property name="text">
+               <string>Y:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editEyeInHandY">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandZ">
+              <property name="text">
+               <string>Z:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editEyeInHandZ">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerPosXYZ">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 좌표 표시 (Rx, Ry, Rz) -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutPosRxRyRz">
+            <item>
+             <widget class="QLabel" name="labelEyeInHandRx">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editEyeInHandRx">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandRy">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editEyeInHandRy">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandRz">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="editEyeInHandRz">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="styleSheet">
+               <string>font-weight: bold;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerPosRxRyRz">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 스텝 크기 설정 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutEyeInHandStep">
+            <item>
+             <widget class="QLabel" name="labelEyeInHandStep">
+              <property name="text">
+               <string>스텝:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioEyeInHandStep1">
+              <property name="text">
+               <string>1</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioEyeInHandStep5">
+              <property name="text">
+               <string>5</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="radioEyeInHandStep10">
+              <property name="text">
+               <string>10</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandStepUnit">
+              <property name="text">
+               <string>mm, deg</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerEyeInHandStep">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 직선 이동 (Base 좌표계) -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutEyeInHandLinear">
+            <property name="spacing">
+             <number>2</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandLinear">
+              <property name="text">
+               <string>직선:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>36</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandMoveX">
+              <property name="text">
+               <string>X:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>18</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>18</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandXMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandXPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandMoveY">
+              <property name="text">
+               <string>Y:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>18</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>18</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandYMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandYPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandMoveZ">
+              <property name="text">
+               <string>Z:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>18</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>18</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandZMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandZPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerEyeInHandLinear">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- 회전 이동 (Base 좌표계) -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutEyeInHandRotate">
+            <property name="spacing">
+             <number>2</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandRotate">
+              <property name="text">
+               <string>회전:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>36</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandMoveRx">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>22</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>22</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandRxMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandRxPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandMoveRy">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>22</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>22</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandRyMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandRyPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelEyeInHandMoveRz">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>22</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>22</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandRzMinus">
+              <property name="text">
+               <string>-</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnEyeInHandRzPlus">
+              <property name="text">
+               <string>+</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>26</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>26</width><height>16777215</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerEyeInHandRotate">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- TCP 정렬 (목표 자세로 이동) -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutTcpAlign">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelTcpAlign">
+              <property name="text">
+               <string>TCP:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelTcpAlignRx">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editTcpAlignRx">
+              <property name="minimumSize">
+               <size><width>50</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>60</width><height>16777215</height></size>
+              </property>
+              <property name="text">
+               <string>90</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelTcpAlignRy">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editTcpAlignRy">
+              <property name="minimumSize">
+               <size><width>50</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>60</width><height>16777215</height></size>
+              </property>
+              <property name="text">
+               <string>0</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelTcpAlignRz">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="editTcpAlignRz">
+              <property name="minimumSize">
+               <size><width>50</width><height>0</height></size>
+              </property>
+              <property name="maximumSize">
+               <size><width>60</width><height>16777215</height></size>
+              </property>
+              <property name="text">
+               <string>90</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTcpAlign">
+              <property name="text">
+               <string>정렬</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #2196F3; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTcpAlignRead">
+              <property name="text">
+               <string>읽기</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnTcpAlignCenter">
+              <property name="text">
+               <string>중앙</string>
+              </property>
+              <property name="toolTip">
+               <string>Rx=90, Ry=0, Rz=90</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerTcpAlign">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Rx 프리셋 버튼 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutRxPresets">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelRxPresets">
+              <property name="text">
+               <string>Rx:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset70">
+              <property name="text">
+               <string>70°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset80">
+              <property name="text">
+               <string>80°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset90">
+              <property name="text">
+               <string>90°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset100">
+              <property name="text">
+               <string>100°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRxPreset110">
+              <property name="text">
+               <string>110°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #FF9800; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerRxPresets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Ry 프리셋 버튼 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutRyPresets">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelRyPresets">
+              <property name="text">
+               <string>Ry:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPresetM20">
+              <property name="text">
+               <string>-20°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPresetM10">
+              <property name="text">
+               <string>-10°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPreset0">
+              <property name="text">
+               <string>0°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPreset10">
+              <property name="text">
+               <string>10°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRyPreset20">
+              <property name="text">
+               <string>20°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #00BCD4; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerRyPresets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <!-- Rz 프리셋 버튼 -->
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutRzPresets">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelRzPresets">
+              <property name="text">
+               <string>Rz:</string>
+              </property>
+              <property name="minimumSize">
+               <size><width>30</width><height>0</height></size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset70">
+              <property name="text">
+               <string>70°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset80">
+              <property name="text">
+               <string>80°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset90">
+              <property name="text">
+               <string>90°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #4CAF50; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset100">
+              <property name="text">
+               <string>100°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnRzPreset110">
+              <property name="text">
+               <string>110°</string>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #9C27B0; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerRzPresets">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- Right: Hand-Eye 캘리브레이션 -->
+   <item>
+    <widget class="QGroupBox" name="groupHandEyeCalib">
+     <property name="title">
+      <string>Hand-Eye 캘리브레이션</string>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>300</width>
+       <height>0</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutHandEyeCalib">
+      <property name="spacing">
+       <number>1</number>
+      </property>
+      <property name="leftMargin">
+       <number>4</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>4</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <!-- 기준 좌표 표시 -->
+      <item>
+       <widget class="QLabel" name="labelAlignedBasePosAutoTab">
+        <property name="text">
+         <string>기준 좌표: -</string>
         </property>
         <property name="styleSheet">
-         <string>background-color: #333333; border: 1px solid #555555;</string>
-        </property>
-        <property name="text">
-         <string>카메라 미연결</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
+         <string>color: #9C27B0; font-weight: bold; padding: 2px 0px;</string>
         </property>
        </widget>
       </item>
+      <!-- 그리드 간격 설정 -->
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayoutEyeInHandCameraButtons">
+       <layout class="QHBoxLayout" name="horizontalLayoutGridStep">
         <item>
-         <widget class="QPushButton" name="btnEyeInHandStartCamera">
+         <widget class="QLabel" name="labelGridInfo">
           <property name="text">
-           <string>카메라 시작</string>
+           <string>3x3x3 그리드</string>
+          </property>
+          <property name="toolTip">
+           <string>XY 3x3, Z 3단계 = 27개 위치</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="btnEyeInHandStopCamera">
+         <widget class="QLabel" name="labelXYStep">
           <property name="text">
-           <string>카메라 정지</string>
+           <string>XY간격:</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="btnEyeInHandSnapshot">
+         <widget class="QSpinBox" name="spinXYStep">
+          <property name="minimum">
+           <number>10</number>
+          </property>
+          <property name="maximum">
+           <number>200</number>
+          </property>
+          <property name="value">
+           <number>50</number>
+          </property>
+          <property name="suffix">
+           <string>mm</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelZStep">
           <property name="text">
-           <string>스냅샷 저장</string>
+           <string>Z간격:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinZStep">
+          <property name="minimum">
+           <number>50</number>
+          </property>
+          <property name="maximum">
+           <number>200</number>
+          </property>
+          <property name="value">
+           <number>100</number>
+          </property>
+          <property name="suffix">
+           <string>mm</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerGridStep">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- 안정화 시간 설정 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutStabilization">
+        <item>
+         <widget class="QLabel" name="labelStabilizationDelay">
+          <property name="text">
+           <string>안정화 시간:</string>
+          </property>
+          <property name="toolTip">
+           <string>이동 후 캡처 전 대기 시간</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinStabilizationDelay">
+          <property name="minimum">
+           <number>0</number>
+          </property>
+          <property name="maximum">
+           <number>2000</number>
+          </property>
+          <property name="singleStep">
+           <number>50</number>
+          </property>
+          <property name="value">
+           <number>300</number>
+          </property>
+          <property name="suffix">
+           <string>ms</string>
+          </property>
+          <property name="toolTip">
+           <string>로봇 이동 후 카메라 캡처 전 안정화 대기 시간</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerStabilization">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- 위치 생성 버튼 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutPosGenButtons">
+        <item>
+         <widget class="QPushButton" name="btnGeneratePositions">
+          <property name="text">
+           <string>위치 생성</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #2196F3; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnClearPositions">
+          <property name="text">
+           <string>초기화</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerPosGen">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- 위치 리스트 -->
+      <item>
+       <widget class="QListWidget" name="listAutoCalibPositions">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>100</height>
+         </size>
+        </property>
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SingleSelection</enum>
+        </property>
+       </widget>
+      </item>
+      <!-- 실행 버튼 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutPosExec">
+        <item>
+         <widget class="QPushButton" name="btnMoveToSelectedBase">
+          <property name="text">
+           <string>선택 위치 이동</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #2196F3; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSequentialMove">
+          <property name="text">
+           <string>순차 이동</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #FF9800; color: white;</string>
           </property>
          </widget>
         </item>
        </layout>
       </item>
-     </layout>
-    </widget>
-   </item>
-   <!-- Right: Eye in Hand Controls -->
-   <item>
-    <widget class="QGroupBox" name="groupEyeInHandControls">
-     <property name="title">
-      <string>Eye in Hand 컨트롤</string>
-     </property>
-     <property name="minimumSize">
-      <size>
-       <width>350</width>
-       <height>0</height>
-      </size>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayoutEyeInHandControls">
       <item>
-       <widget class="QLabel" name="labelEyeInHandPlaceholder">
+       <layout class="QHBoxLayout" name="horizontalLayoutAutoCapture">
+        <item>
+         <widget class="QPushButton" name="btnRunAutoCapture">
+          <property name="text">
+           <string>자동 캡처 실행</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #4CAF50; color: white;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnStopAutoCapture">
+          <property name="text">
+           <string>중지</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #F44336; color: white;</string>
+          </property>
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <!-- 포즈 쌍 수 표시 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutPosePairCount">
+        <item>
+         <widget class="QLabel" name="labelPosePairCount">
+          <property name="text">
+           <string>캡처된 포즈 쌍:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelPosePairCountValue">
+          <property name="text">
+           <string>0</string>
+          </property>
+          <property name="styleSheet">
+           <string>font-weight: bold; color: #4CAF50;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerPosePair">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- Hand-Eye 캘리브레이션 실행 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutHandEyeExec">
+        <item>
+         <widget class="QPushButton" name="btnRunHandEyeCalib">
+          <property name="text">
+           <string>Hand-Eye 캘리브레이션 실행</string>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #E91E63; color: white; font-weight: bold;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <!-- 결과 저장/로드 -->
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutHandEyeSaveLoad">
+        <item>
+         <widget class="QPushButton" name="btnSaveHandEyeCalib">
+          <property name="text">
+           <string>결과 저장</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnLoadHandEyeCalib">
+          <property name="text">
+           <string>결과 로드</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerHandEyeSaveLoad">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <!-- 결과 표시 -->
+      <item>
+       <widget class="QLabel" name="labelHandEyeResult">
         <property name="text">
-         <string>Eye in Hand 컨트롤 (추후 구현 예정)</string>
+         <string>결과: -</string>
         </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
+        <property name="styleSheet">
+         <string>font-weight: bold; padding: 4px 0px;</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="verticalSpacerEyeInHand">
+       <spacer name="verticalSpacerHandEye">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
         </property>
