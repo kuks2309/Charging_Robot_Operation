@@ -33,6 +33,7 @@ JOB_TYPES = {
         'name': 'TCP Linear X',
         'category': 'Motion',
         'params': {
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 이동 거리', 'description_absolute': 'X 목표 위치'},
         }
@@ -41,6 +42,7 @@ JOB_TYPES = {
         'name': 'TCP Linear Y',
         'category': 'Motion',
         'params': {
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 이동 거리', 'description_absolute': 'Y 목표 위치'},
         }
@@ -49,6 +51,7 @@ JOB_TYPES = {
         'name': 'TCP Linear Z',
         'category': 'Motion',
         'params': {
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Z 이동 거리', 'description_absolute': 'Z 목표 위치'},
         }
@@ -57,6 +60,7 @@ JOB_TYPES = {
         'name': 'TCP Linear XYZ',
         'category': 'Motion',
         'params': {
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 이동 거리', 'description_absolute': 'X 목표 위치'},
             'y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 이동 거리', 'description_absolute': 'Y 목표 위치'},

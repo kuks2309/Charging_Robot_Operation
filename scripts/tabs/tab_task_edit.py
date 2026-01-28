@@ -29,12 +29,6 @@ class TabTaskEdit(QWidget):
     connect_requested = pyqtSignal(str, int)  # ip, port
     disconnect_requested = pyqtSignal()
 
-    # 포즈 관련 시그널
-    save_pose_requested = pyqtSignal(str, str)  # name, pose_type
-    delete_pose_requested = pyqtSignal(str)  # name
-    move_to_pose_requested = pyqtSignal(str)  # name
-    approach_pose_requested = pyqtSignal(str, float)  # name, distance
-
     # 현재 위치 읽기 시그널
     read_current_position_requested = pyqtSignal()
 
@@ -90,13 +84,6 @@ class TabTaskEdit(QWidget):
         # 로봇 연결
         self.btnConnect.clicked.connect(self._on_connect)
 
-        # 포즈 관리
-        self.btnSavePose.clicked.connect(self._on_save_pose)
-        self.btnDeletePose.clicked.connect(self._on_delete_pose)
-        self.btnMoveToPose.clicked.connect(self._on_move_to_pose)
-        self.btnApproachPose.clicked.connect(self._on_approach_pose)
-        self.listSavedPoses.itemDoubleClicked.connect(self._on_move_to_pose)
-
         # 조그 이동 (베이스 좌표계)
         self.btnJogXMinus.clicked.connect(lambda: self._on_jog_move('x', -1))
         self.btnJogXPlus.clicked.connect(lambda: self._on_jog_move('x', 1))
@@ -115,7 +102,6 @@ class TabTaskEdit(QWidget):
         """UI 초기화"""
         self._init_available_tasks()
         self._init_pc_ip_combo()
-        self._refresh_saved_poses_list()
 
     def _log(self, message: str):
         """로그 메시지 출력"""
@@ -293,17 +279,18 @@ class TabTaskEdit(QWidget):
             if action:
                 return f"{base_name} {action}"
 
-        # TCP Linear: 모드와 거리 표시
+        # TCP Linear: 좌표계, 모드와 거리 표시
         elif task_type.startswith('tcp_linear_'):
             mode = params.get('mode', '상대')
+            coord = params.get('coordinate', 'TF1')
             if task_type == 'tcp_linear_xyz':
                 x = params.get('x', 0)
                 y = params.get('y', 0)
                 z = params.get('z', 0)
-                return f"{base_name} ({mode}) [{x},{y},{z}]"
+                return f"{base_name} [{coord}] ({mode}) [{x},{y},{z}]"
             else:
                 dist = params.get('distance', 0)
-                return f"{base_name} ({mode}) {dist}mm"
+                return f"{base_name} [{coord}] ({mode}) {dist}mm"
 
         # TCP Rotate: 모드와 각도 표시
         elif task_type.startswith('tcp_rotate_'):
@@ -533,67 +520,6 @@ class TabTaskEdit(QWidget):
         port = self.spinModbusPort.value()
         self.connect_requested.emit(ip, port)
 
-    # ==================== 포즈 관리 ====================
-
-    def _on_save_pose(self):
-        """현재 위치 저장"""
-        name, ok = QInputDialog.getText(self, "포즈 저장", "포즈 이름:")
-        if not ok or not name.strip():
-            return
-
-        pose_types = ["JOINT", "TCP", "APPROACH", "WAYPOINT", "HOME"]
-        pose_type, ok = QInputDialog.getItem(self, "포즈 타입", "타입 선택:", pose_types, 0, False)
-        if not ok:
-            return
-
-        self.save_pose_requested.emit(name.strip(), pose_type)
-
-    def _on_delete_pose(self):
-        """저장된 포즈 삭제"""
-        current_item = self.listSavedPoses.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "경고", "삭제할 포즈를 선택하세요.")
-            return
-
-        name = current_item.data(Qt.UserRole)
-        reply = QMessageBox.question(
-            self, "삭제 확인", f"'{name}' 포즈를 삭제하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            self.delete_pose_requested.emit(name)
-
-    def _on_move_to_pose(self):
-        """저장된 위치로 이동"""
-        current_item = self.listSavedPoses.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "경고", "이동할 포즈를 선택하세요.")
-            return
-
-        name = current_item.data(Qt.UserRole)
-        reply = QMessageBox.question(
-            self, "이동 확인", f"'{name}' 위치로 이동하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
-        )
-        if reply == QMessageBox.Yes:
-            self.move_to_pose_requested.emit(name)
-
-    def _on_approach_pose(self):
-        """어프로치 위치로 이동"""
-        current_item = self.listSavedPoses.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "경고", "이동할 포즈를 선택하세요.")
-            return
-
-        name = current_item.data(Qt.UserRole)
-        distance, ok = QInputDialog.getDouble(
-            self, "어프로치 거리", "거리 (meter):", 0.2, 0.01, 1.0, 2
-        )
-        if not ok:
-            return
-
-        self.approach_pose_requested.emit(name, distance)
-
     # ==================== 조그 이동 ====================
 
     def _on_jog_move(self, axis: str, direction: int):
@@ -628,33 +554,11 @@ class TabTaskEdit(QWidget):
         self._log(f"조그 회전: {axis.upper()} {'+' if direction > 0 else ''}{angle}deg")
         self.jog_rotate_requested.emit(axis, angle)
 
-    def _refresh_saved_poses_list(self):
-        """저장된 포즈 리스트 갱신"""
-        self.listSavedPoses.clear()
-
-        if not self.pose_manager:
-            return
-
-        for name in self.pose_manager.get_all_names():
-            saved_pose = self.pose_manager.get_pose(name)
-            if saved_pose:
-                pose = saved_pose.pose
-                item_text = f"{name} ({saved_pose.pose_type})"
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.UserRole, name)
-                item.setToolTip(
-                    f"X: {pose.x:.2f}, Y: {pose.y:.2f}, Z: {pose.z:.2f}\n"
-                    f"Rx: {pose.rx:.2f}, Ry: {pose.ry:.2f}, Rz: {pose.rz:.2f}\n"
-                    f"{saved_pose.description}"
-                )
-                self.listSavedPoses.addItem(item)
-
     # ==================== 외부 인터페이스 ====================
 
     def set_pose_manager(self, pose_manager):
         """포즈 매니저 설정"""
         self.pose_manager = pose_manager
-        self._refresh_saved_poses_list()
 
     def update_connection_status(self, connected: bool):
         """연결 상태 업데이트"""
@@ -719,7 +623,3 @@ class TabTaskEdit(QWidget):
         """태스크 시퀀스 설정"""
         self.task_sequence = sequence
         self._refresh_task_list()
-
-    def refresh_poses(self):
-        """포즈 리스트 새로고침 (외부 호출용)"""
-        self._refresh_saved_poses_list()

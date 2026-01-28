@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         self.ds435_camera_manager.frame_ready.connect(self._on_camera_frame)
 
         # ArduCam 카메라 매니저 초기화
-        self.arducam_manager = ArduCamManager(device_index=0)
+        self.arducam_manager = ArduCamManager(device_index=6) #0
         self.arducam_manager.set_log_callback(self._log)
         self.arducam_manager.frame_ready.connect(self._on_camera_frame)
 
@@ -170,6 +170,9 @@ class MainWindow(QMainWindow):
 
         # 첫 번째 탭 선택
         self.tabWidget.setCurrentIndex(0)
+
+        # 초기 카메라 타입으로 모든 탭의 라디오 버튼 동기화
+        self._sync_camera_radio_buttons(CAMERA_DS435)
 
     def _connect_tab_signals(self):
         """탭 클래스들의 시그널을 메인윈도우 슬롯에 연결"""
@@ -280,6 +283,12 @@ class MainWindow(QMainWindow):
                 self._execute_tcp_rotate(params, 'ry')
             elif task_type == 'tcp_rotate_rz':
                 self._execute_tcp_rotate(params, 'rz')
+            elif task_type == 'tcp_linear_xyz':
+                self._execute_tcp_linear_xyz(params)
+            elif task_type == 'tcp_rotate_rxryrz':
+                self._execute_tcp_rotate_rxryrz(params)
+            elif task_type == 'toolframe':
+                self._execute_toolframe(params)
             elif task_type == 'detect_aruco':
                 self._execute_detect_aruco(params)
             else:
@@ -314,10 +323,40 @@ class MainWindow(QMainWindow):
     def _execute_tcp_linear(self, params: dict, axis: str):
         """TCP 직선 이동 실행"""
         distance = params.get('distance', 0.0)
+        coordinate = params.get('coordinate', 'TF1')
+        self._log(f"[DEBUG] params={params}, coordinate={coordinate}")
 
-        success, message = self.robot.send_tcp_linear(axis, distance)
+        # 이동 전 위치 기록
+        before_pose = self.robot.read_current_pose()
+        if before_pose:
+            self._log(f"[이동 전] X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
+
+        if coordinate == 'Base':
+            success, message = self.robot.send_base_linear(axis, distance)
+        else:
+            # TF0, TF1, TF2, TF3 - 툴프레임 설정 후 tool.trans 실행
+            tf_num = int(coordinate[2])  # 'TF0' -> 0, 'TF1' -> 1, etc.
+            tf_success, tf_msg = self.robot.send_set_toolframe(tf_num, wait=True)
+            if not tf_success:
+                raise Exception(f"툴프레임 {tf_num} 설정 실패: {tf_msg}")
+            self._log(f"툴프레임 {tf_num} 설정 완료")
+            self._update_statusbar()
+            success, message = self.robot.send_tcp_linear(axis, distance)
+
         if not success:
-            raise Exception(f"TCP {axis.upper()} 이동 실패: {message}")
+            raise Exception(f"{coordinate} {axis.upper()} 이동 실패: {message}")
+
+        # 이동 후 위치 기록 및 검증
+        after_pose = self.robot.read_current_pose()
+        if after_pose and before_pose:
+            dx = after_pose[0] - before_pose[0]
+            dy = after_pose[1] - before_pose[1]
+            dz = after_pose[2] - before_pose[2]
+            self._log(f"[이동 후] X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
+            drx = after_pose[3] - before_pose[3]
+            dry = after_pose[4] - before_pose[4]
+            drz = after_pose[5] - before_pose[5]
+            self._log(f"[변화량] dX={dx:.2f}, dY={dy:.2f}, dZ={dz:.2f}mm, dRx={drx:.2f}, dRy={dry:.2f}, dRz={drz:.2f}deg")
 
     def _execute_tcp_rotate(self, params: dict, axis: str):
         """TCP 회전 이동 실행"""
@@ -326,6 +365,65 @@ class MainWindow(QMainWindow):
         success, message = self.robot.send_tcp_rotate(axis, angle)
         if not success:
             raise Exception(f"TCP {axis.upper()} 회전 실패: {message}")
+
+    def _execute_tcp_linear_xyz(self, params: dict):
+        """TCP XYZ 직선 이동 실행"""
+        x = params.get('x', 0.0)
+        y = params.get('y', 0.0)
+        z = params.get('z', 0.0)
+        coordinate = params.get('coordinate', 'TF1')
+
+        # 이동 전 위치 기록
+        before_pose = self.robot.read_current_pose()
+        if before_pose:
+            self._log(f"[이동 전] X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
+
+        if coordinate == 'Base':
+            success, message = self.robot.send_base_linear('xyz', (x, y, z))
+        else:
+            # TF0, TF1, TF2, TF3 - 툴프레임 설정 후 tool.trans 실행
+            tf_num = int(coordinate[2])  # 'TF0' -> 0, 'TF1' -> 1, etc.
+            tf_success, tf_msg = self.robot.send_set_toolframe(tf_num, wait=True)
+            if not tf_success:
+                raise Exception(f"툴프레임 {tf_num} 설정 실패: {tf_msg}")
+            self._log(f"툴프레임 {tf_num} 설정 완료")
+            self._update_statusbar()
+            success, message = self.robot.send_tcp_linear('xyz', (x, y, z))
+
+        if not success:
+            raise Exception(f"{coordinate} XYZ 이동 실패: {message}")
+
+        # 이동 후 위치 기록 및 검증
+        after_pose = self.robot.read_current_pose()
+        if after_pose and before_pose:
+            dx = after_pose[0] - before_pose[0]
+            dy = after_pose[1] - before_pose[1]
+            dz = after_pose[2] - before_pose[2]
+            self._log(f"[이동 후] X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
+            drx = after_pose[3] - before_pose[3]
+            dry = after_pose[4] - before_pose[4]
+            drz = after_pose[5] - before_pose[5]
+            self._log(f"[변화량] dX={dx:.2f}, dY={dy:.2f}, dZ={dz:.2f}mm, dRx={drx:.2f}, dRy={dry:.2f}, dRz={drz:.2f}deg")
+
+    def _execute_tcp_rotate_rxryrz(self, params: dict):
+        """TCP RxRyRz 회전 이동 실행"""
+        rx = params.get('rx', 0.0)
+        ry = params.get('ry', 0.0)
+        rz = params.get('rz', 0.0)
+
+        success, message = self.robot.send_tcp_rotate('rxryrz', (rx, ry, rz))
+        if not success:
+            raise Exception(f"TCP RxRyRz 회전 실패: {message}")
+
+    def _execute_toolframe(self, params: dict):
+        """툴프레임 변경 실행"""
+        frame = params.get('frame', 0)
+
+        success, message = self.robot.send_set_toolframe(frame, wait=True)
+        if not success:
+            raise Exception(f"툴프레임 {frame} 변경 실패: {message}")
+
+        self._log(f"툴프레임 {frame}으로 변경 완료")
 
     def _execute_detect_aruco(self, params: dict):
         """Aruco Tag 인식 실행 (카메라 자동 켜기 포함)"""
@@ -759,7 +857,8 @@ class MainWindow(QMainWindow):
         # Eye in Hand 탭이 활성화된 경우
         elif current_tab == 4:  # Eye in Hand 탭
             self.tabEyeInHand.set_current_frame(frame)
-            self.tabEyeInHand.display_frame(frame)
+            processed_frame = self.tabEyeInHand.process_frame(frame)
+            self.tabEyeInHand.display_frame(processed_frame)
 
     def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
         """특정 Aruco 태그 감지 (VisionManager 위임)"""
@@ -1059,6 +1158,25 @@ class MainWindow(QMainWindow):
                         self._log(f"Tool Frame 설정 실패: {msg}")
                 except Exception as e:
                     self._log(f"Tool Frame 설정 오류: {e}")
+        # Eye in Hand 탭 (인덱스 4)이 선택되면 Tool Frame 0으로 설정
+        elif index == 4:
+            print(f"[DEBUG] Eye in Hand 탭 선택됨 (index={index})")
+            if self.robot and self.robot.is_connected:
+                print(f"[DEBUG] 로봇 연결 상태: {self.robot.is_connected}")
+                try:
+                    success, msg = self.robot.send_set_toolframe(0, wait=True)
+                    print(f"[DEBUG] send_set_toolframe(0) 결과: success={success}, msg={msg}")
+                    if success:
+                        self._log("Eye in Hand 탭 선택: Tool Frame 0 (기본 TCP)으로 설정 완료")
+                        self.tabEyeInHand.update_current_toolframe(0)
+                        self._update_statusbar()
+                    else:
+                        self._log(f"Tool Frame 설정 실패: {msg}")
+                except Exception as e:
+                    print(f"[DEBUG] 예외 발생: {e}")
+                    self._log(f"Tool Frame 설정 오류: {e}")
+            else:
+                print(f"[DEBUG] 로봇 미연결 - robot={self.robot}, is_connected={self.robot.is_connected if self.robot else 'N/A'}")
         else:
             # 다른 탭으로 변경 시에도 상태바 업데이트
             if self.robot and self.robot.is_connected:
@@ -1085,7 +1203,9 @@ class MainWindow(QMainWindow):
     def _log(self, message):
         """로그 메시지 추가"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.textExecutionLog.append(f"[{timestamp}] {message}")
+        log_msg = f"[{timestamp}] {message}"
+        self.textExecutionLog.append(log_msg)
+        print(f"[MainWindow] {log_msg}")
 
     def closeEvent(self, event):
         """종료 이벤트"""
