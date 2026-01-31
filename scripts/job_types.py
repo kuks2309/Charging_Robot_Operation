@@ -33,7 +33,7 @@ JOB_TYPES = {
         'name': 'TCP Linear X',
         'category': 'Motion',
         'params': {
-            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF1', 'TF2', 'TF3', 'TF4', 'TF5'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 이동 거리', 'description_absolute': 'X 목표 위치'},
         }
@@ -42,7 +42,7 @@ JOB_TYPES = {
         'name': 'TCP Linear Y',
         'category': 'Motion',
         'params': {
-            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF1', 'TF2', 'TF3', 'TF4', 'TF5'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 이동 거리', 'description_absolute': 'Y 목표 위치'},
         }
@@ -51,7 +51,7 @@ JOB_TYPES = {
         'name': 'TCP Linear Z',
         'category': 'Motion',
         'params': {
-            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF1', 'TF2', 'TF3', 'TF4', 'TF5'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'distance': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Z 이동 거리', 'description_absolute': 'Z 목표 위치'},
         }
@@ -60,7 +60,7 @@ JOB_TYPES = {
         'name': 'TCP Linear XYZ',
         'category': 'Motion',
         'params': {
-            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF0', 'TF1', 'TF2', 'TF3'], 'description': '좌표계'},
+            'coordinate': {'type': 'str', 'default': 'TF1', 'options': ['Base', 'TF1', 'TF2', 'TF3', 'TF4', 'TF5'], 'description': '좌표계'},
             'mode': {'type': 'str', 'default': '상대', 'options': ['절대', '상대'], 'description': '이동 모드'},
             'x': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'X 이동 거리', 'description_absolute': 'X 목표 위치'},
             'y': {'type': 'float', 'default': 0.0, 'unit': 'mm', 'description': 'Y 이동 거리', 'description_absolute': 'Y 목표 위치'},
@@ -111,6 +111,18 @@ JOB_TYPES = {
             'timeout': {'type': 'float', 'default': 10.0, 'unit': 'sec'},
         }
     },
+    'detect_dual_aruco_plane': {
+        'name': '듀얼 ArUco 평면 추출',
+        'category': 'Vision',
+        'params': {
+            'tag_id1': {'type': 'int', 'default': 0, 'min': 0, 'max': 255, 'description': 'Tag ID 1'},
+            'tag_id2': {'type': 'int', 'default': 1, 'min': 0, 'max': 255, 'description': 'Tag ID 2'},
+            'num_samples': {'type': 'int', 'default': 20, 'min': 5, 'max': 100, 'description': '인식 횟수'},
+            'delay_ms': {'type': 'int', 'default': 100, 'min': 0, 'max': 1000, 'unit': 'ms', 'description': '샘플 간 지연'},
+            'timeout': {'type': 'float', 'default': 30.0, 'unit': 'sec', 'description': '타임아웃'},
+        },
+        'has_result_display': True,
+    },
 
     # 정렬 (Alignment)
     'align_aruco_center': {
@@ -126,8 +138,15 @@ JOB_TYPES = {
         'name': 'Aruco Tag 자세 정렬',
         'category': '정렬',
         'params': {
-            'tag_id': {'type': 'int', 'default': 0, 'description': 'Tag ID'},
-        }
+            'tag_id1': {'type': 'int', 'default': 0, 'min': 0, 'max': 255, 'description': 'Tag ID 1'},
+            'tag_id2': {'type': 'int', 'default': 1, 'min': 0, 'max': 255, 'description': 'Tag ID 2'},
+            'num_samples': {'type': 'int', 'default': 20, 'min': 5, 'max': 100, 'description': '인식 횟수'},
+            'target_rx': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': '목표 Rx'},
+            'target_ry': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': '목표 Ry'},
+            'target_rz': {'type': 'float', 'default': 0.0, 'unit': 'deg', 'description': '목표 Rz'},
+            'timeout': {'type': 'float', 'default': 30.0, 'unit': 'sec', 'description': '타임아웃'},
+        },
+        'has_result_display': True,
     },
     'align_aruco_full': {
         'name': 'Aruco Tag 전체 정렬',

@@ -40,9 +40,10 @@ class ArucoCameraPoseEstimator:
                 params.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
             else:
                 params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-            params.cornerRefinementWinSize = 5
-            params.cornerRefinementMaxIterations = 30
-            params.cornerRefinementMinAccuracy = 0.1
+            # Precision-tuned parameters (matching OpenCV 4.5.4 quality)
+            params.cornerRefinementWinSize = 7
+            params.cornerRefinementMaxIterations = 50
+            params.cornerRefinementMinAccuracy = 0.01
             # Detection parameters - more permissive for small markers
             params.minMarkerPerimeterRate = 0.01
             params.maxMarkerPerimeterRate = 4.0
@@ -72,9 +73,10 @@ class ArucoCameraPoseEstimator:
                 params.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
             else:
                 params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-            params.cornerRefinementWinSize = 5
-            params.cornerRefinementMaxIterations = 30
-            params.cornerRefinementMinAccuracy = 0.1
+            # Precision-tuned parameters (matching OpenCV 4.5.4 quality)
+            params.cornerRefinementWinSize = 7
+            params.cornerRefinementMaxIterations = 50
+            params.cornerRefinementMinAccuracy = 0.01
             # Detection parameters - more permissive for small markers
             params.minMarkerPerimeterRate = 0.01
             params.maxMarkerPerimeterRate = 4.0
@@ -159,6 +161,16 @@ class ArucoCameraPoseEstimator:
                 if not success:
                     continue
 
+                # LM refinement for higher precision (matching OpenCV 4.5.4 quality)
+                rvec, tvec = cv2.solvePnPRefineLM(
+                    obj_points,
+                    corners[i].reshape(-1, 2),
+                    camera_matrix,
+                    dist_coeffs,
+                    rvec,
+                    tvec
+                )
+
                 rvec = rvec.flatten()
                 tvec = tvec.flatten()
                 
@@ -185,6 +197,188 @@ class ArucoCameraPoseEstimator:
                 
         
         return marker_poses
+
+    def detect_and_estimate_pose_dual_disambiguated(self, image, intrinsics, target_ids: tuple, known_distance_m: float):
+        """
+        Detect two ArUco markers and disambiguate poses using known inter-marker distance.
+
+        Uses solvePnPGeneric to get BOTH IPPE solutions and selects the combination
+        that best matches the known distance constraint.
+
+        Args:
+            image: Input image
+            intrinsics: Camera intrinsics
+            target_ids: Tuple of two marker IDs (e.g., (0, 1))
+            known_distance_m: Known distance between markers in meters
+
+        Returns:
+            Tuple of (marker1_pose, marker2_pose, measured_distance, distance_error, combo_idx)
+            Returns (None, None, 0, float('inf'), -1) if detection fails
+        """
+        print(f"[Disambiguation] Target IDs: {target_ids}, Known distance: {known_distance_m*1000:.2f}mm")
+
+        camera_matrix = np.array([
+            [intrinsics.fx, 0, intrinsics.ppx],
+            [0, intrinsics.fy, intrinsics.ppy],
+            [0, 0, 1]
+        ], dtype=np.float32)
+        dist_coeffs = np.array(intrinsics.coeffs)
+
+        # Convert to grayscale
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        # Detect markers
+        if self.use_legacy_api:
+            corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.detector_params)
+        else:
+            corners, ids, _ = self.detector.detectMarkers(gray)
+
+        if ids is None:
+            return (None, None, 0, float('inf'), -1)
+
+        ids_flat = ids.flatten()
+
+        # Find target markers
+        marker1_idx = np.where(ids_flat == target_ids[0])[0]
+        marker2_idx = np.where(ids_flat == target_ids[1])[0]
+
+        if len(marker1_idx) == 0 or len(marker2_idx) == 0:
+            return (None, None, 0, float('inf'), -1)
+
+        marker1_idx = marker1_idx[0]
+        marker2_idx = marker2_idx[0]
+
+        # Object points for marker
+        half_size = self.marker_size / 2.0
+        obj_points = np.array([
+            [-half_size,  half_size, 0],
+            [ half_size,  half_size, 0],
+            [ half_size, -half_size, 0],
+            [-half_size, -half_size, 0]
+        ], dtype=np.float32)
+
+        # Get BOTH IPPE solutions for each marker using solvePnPGeneric
+        def get_dual_solutions(corner_idx):
+            num_sol, rvecs, tvecs, reproj_errs = cv2.solvePnPGeneric(
+                obj_points,
+                corners[corner_idx].reshape(-1, 2),
+                camera_matrix,
+                dist_coeffs,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE
+            )
+            solutions = []
+            for i in range(num_sol):
+                solutions.append({
+                    'rvec': rvecs[i].flatten(),
+                    'tvec': tvecs[i].flatten(),
+                    'reproj_error': reproj_errs[i][0] if reproj_errs is not None else 0
+                })
+            return solutions
+
+        m1_solutions = get_dual_solutions(marker1_idx)
+        m2_solutions = get_dual_solutions(marker2_idx)
+
+        print(f"[Disambiguation] Marker {target_ids[0]}: {len(m1_solutions)} IPPE solutions, Marker {target_ids[1]}: {len(m2_solutions)} IPPE solutions")
+
+        if len(m1_solutions) < 2 or len(m2_solutions) < 2:
+            # Fallback: not enough solutions
+            return (None, None, 0, float('inf'), -1)
+
+        # Evaluate all 4 combinations
+        best_combo = None
+        best_error = float('inf')
+        best_distance = 0
+        best_combo_idx = -1
+
+        combinations = [
+            (0, 0), (0, 1), (1, 0), (1, 1)
+        ]
+
+        for combo_idx, (i, j) in enumerate(combinations):
+            tvec1 = m1_solutions[i]['tvec']
+            tvec2 = m2_solutions[j]['tvec']
+            rvec1 = m1_solutions[i]['rvec']
+            rvec2 = m2_solutions[j]['rvec']
+
+            distance = np.linalg.norm(tvec1 - tvec2)
+            dist_error = abs(distance - known_distance_m)
+
+            # Z축 방향 일치 확인 (같은 평면이면 Z축이 비슷해야 함)
+            R1, _ = cv2.Rodrigues(rvec1)
+            R2, _ = cv2.Rodrigues(rvec2)
+            z1 = R1[:, 2]  # 마커1 Z축
+            z2 = R2[:, 2]  # 마커2 Z축
+            z_dot = np.dot(z1, z2)  # 내적: 1이면 같은 방향, -1이면 반대
+            z_angle = np.degrees(np.arccos(np.clip(z_dot, -1, 1)))
+
+            # Z축 각도가 30° 이상이면 뒤집힌 것으로 판단, 페널티 부여
+            if z_angle > 30:
+                penalty = 1.0  # 큰 페널티
+            else:
+                penalty = 0.0
+
+            error = dist_error + penalty
+
+            print(f"[Disambiguation] Combo {combo_idx} ({i},{j}): dist={distance*1000:.2f}mm, z_angle={z_angle:.1f}°, err={dist_error*1000:.2f}mm, penalty={penalty:.1f}")
+
+            if error < best_error:
+                best_error = error
+                best_distance = distance
+                best_combo = (i, j)
+                best_combo_idx = combo_idx
+
+        # Apply LM refinement to selected solutions
+        i, j = best_combo
+        print(f"[Disambiguation] Selected combo {best_combo_idx}, error={best_error*1000:.2f}mm")
+
+        rvec1_refined, tvec1_refined = cv2.solvePnPRefineLM(
+            obj_points,
+            corners[marker1_idx].reshape(-1, 2),
+            camera_matrix,
+            dist_coeffs,
+            m1_solutions[i]['rvec'].reshape(3, 1),
+            m1_solutions[i]['tvec'].reshape(3, 1)
+        )
+
+        rvec2_refined, tvec2_refined = cv2.solvePnPRefineLM(
+            obj_points,
+            corners[marker2_idx].reshape(-1, 2),
+            camera_matrix,
+            dist_coeffs,
+            m2_solutions[j]['rvec'].reshape(3, 1),
+            m2_solutions[j]['tvec'].reshape(3, 1)
+        )
+
+        # Build marker pose dicts
+        def build_pose(rvec, tvec, marker_id, corner):
+            rvec = rvec.flatten()
+            tvec = tvec.flatten()
+            rotation_matrix, _ = cv2.Rodrigues(rvec)
+            camera_rotation_in_marker = rotation_matrix.T
+            camera_position_in_marker = -camera_rotation_in_marker @ tvec
+            return {
+                'id': int(marker_id),
+                'corners': corner,
+                'rvec': rvec,
+                'tvec': tvec,
+                'rotation_matrix': rotation_matrix,
+                'camera_position': camera_position_in_marker,
+                'camera_rotation': camera_rotation_in_marker,
+                'marker_position_in_camera': tvec,
+                'marker_rotation_in_camera': rotation_matrix
+            }
+
+        marker1_pose = build_pose(rvec1_refined, tvec1_refined, target_ids[0], corners[marker1_idx])
+        marker2_pose = build_pose(rvec2_refined, tvec2_refined, target_ids[1], corners[marker2_idx])
+
+        # Recalculate distance with refined poses
+        final_distance = np.linalg.norm(tvec1_refined.flatten() - tvec2_refined.flatten())
+        final_error = abs(final_distance - known_distance_m)
+
+        return (marker1_pose, marker2_pose, final_distance, final_error, best_combo_idx)
 
     def detect_and_estimate_chessboard_pose(self, image, intrinsics, chessboard_size=(10, 7), square_size=0.05):
         """

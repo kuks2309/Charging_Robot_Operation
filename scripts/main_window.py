@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         self.ds435_camera_manager.frame_ready.connect(self._on_camera_frame)
 
         # ArduCam 카메라 매니저 초기화
-        self.arducam_manager = ArduCamManager(device_index=6) #0
+        self.arducam_manager = ArduCamManager(device_index=6)
         self.arducam_manager.set_log_callback(self._log)
         self.arducam_manager.frame_ready.connect(self._on_camera_frame)
 
@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
 
         # 탭에 카메라 매니저 전달
         self.tabCalibration.set_camera_manager(self.camera_manager)
+        self.tabEyeInHand.set_camera_manager(self.camera_manager)
 
         # Vision 매니저 초기화
         self.vision_manager = VisionManager(self.camera_manager)
@@ -202,6 +203,8 @@ class MainWindow(QMainWindow):
         self.tabArucoReliability.log_message.connect(self._log)
         self.tabArucoReliability.camera_start_requested.connect(self._on_start_camera)
         self.tabArucoReliability.camera_stop_requested.connect(self._on_stop_camera)
+        self.tabArucoReliability.jog_move_requested.connect(self._on_jog_move_from_tab)
+        self.tabArucoReliability.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
 
         # Eye in Hand 탭 시그널
         self.tabEyeInHand.log_message.connect(self._log)
@@ -255,7 +258,7 @@ class MainWindow(QMainWindow):
         task_type = task.get('type')
         params = task.get('params', {})
 
-        # Vision Task는 로봇 연결 불필요
+        # Vision Task는 로봇 연결 불필요 (detect_dual_aruco_plane은 최종 TCP 계산에 로봇 필요)
         vision_tasks = ['detect_aruco']
 
         if task_type not in vision_tasks:
@@ -291,6 +294,10 @@ class MainWindow(QMainWindow):
                 self._execute_toolframe(params)
             elif task_type == 'detect_aruco':
                 self._execute_detect_aruco(params)
+            elif task_type == 'detect_dual_aruco_plane':
+                self._execute_detect_dual_aruco_plane(params)
+            elif task_type == 'align_aruco_pose':
+                self._execute_align_aruco_pose(params)
             else:
                 QMessageBox.information(self, "알림", f"'{task_type}' Task 실행은 아직 구현되지 않았습니다.")
                 return
@@ -330,12 +337,14 @@ class MainWindow(QMainWindow):
         before_pose = self.robot.read_current_pose()
         if before_pose:
             self._log(f"[이동 전] X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
+        else:
+            self._log("[경고] 이동 전 위치 읽기 실패")
 
         if coordinate == 'Base':
             success, message = self.robot.send_base_linear(axis, distance)
         else:
-            # TF0, TF1, TF2, TF3 - 툴프레임 설정 후 tool.trans 실행
-            tf_num = int(coordinate[2])  # 'TF0' -> 0, 'TF1' -> 1, etc.
+            # TF1, TF2, TF3, TF4 - 툴프레임 설정 후 tool.trans 실행
+            tf_num = int(coordinate[2])  # 'TF1' -> 1, 'TF2' -> 2, etc.
             tf_success, tf_msg = self.robot.send_set_toolframe(tf_num, wait=True)
             if not tf_success:
                 raise Exception(f"툴프레임 {tf_num} 설정 실패: {tf_msg}")
@@ -377,12 +386,14 @@ class MainWindow(QMainWindow):
         before_pose = self.robot.read_current_pose()
         if before_pose:
             self._log(f"[이동 전] X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
+        else:
+            self._log("[경고] 이동 전 위치 읽기 실패")
 
         if coordinate == 'Base':
             success, message = self.robot.send_base_linear('xyz', (x, y, z))
         else:
-            # TF0, TF1, TF2, TF3 - 툴프레임 설정 후 tool.trans 실행
-            tf_num = int(coordinate[2])  # 'TF0' -> 0, 'TF1' -> 1, etc.
+            # TF1, TF2, TF3, TF4 - 툴프레임 설정 후 tool.trans 실행
+            tf_num = int(coordinate[2])  # 'TF1' -> 1, 'TF2' -> 2, etc.
             tf_success, tf_msg = self.robot.send_set_toolframe(tf_num, wait=True)
             if not tf_success:
                 raise Exception(f"툴프레임 {tf_num} 설정 실패: {tf_msg}")
@@ -447,6 +458,191 @@ class MainWindow(QMainWindow):
 
         self._log(f"Aruco Tag {tag_id} 감지 성공!")
         QMessageBox.information(self, "성공", f"Aruco Tag {tag_id}를 감지했습니다.")
+
+    def _execute_detect_dual_aruco_plane(self, params: dict):
+        """듀얼 ArUco 평면 추출 실행"""
+        import time
+
+        tag_id1 = params.get('tag_id1', 0)
+        tag_id2 = params.get('tag_id2', 1)
+        num_samples = params.get('num_samples', 20)
+        delay_ms = params.get('delay_ms', 100)
+        timeout = params.get('timeout', 30.0)
+
+        # 카메라 매니저 확인
+        if not self.camera_manager:
+            raise Exception("카메라가 초기화되지 않았습니다. 비전 탭에서 카메라를 선택해주세요.")
+
+        # 카메라가 꺼져 있으면 자동으로 켜기
+        if not self.camera_manager.is_running:
+            self._log("카메라가 꺼져 있습니다. 자동으로 카메라를 시작합니다...")
+            success, msg = self.camera_manager.start()
+            if not success:
+                raise Exception(f"카메라 시작 실패: {msg}")
+            self._log("카메라 시작 완료")
+
+        # DualArucoDetector import
+        try:
+            from services.dual_aruco_detector import DualArucoDetector
+        except ImportError:
+            raise Exception("DualArucoDetector 모듈을 찾을 수 없습니다.")
+
+        # DualArucoDetector 초기화
+        detector = DualArucoDetector(
+            vision_manager=self.vision_manager,
+            marker_id1=tag_id1,
+            marker_id2=tag_id2
+        )
+        detector.set_log_callback(self._log)
+
+        # PlaneExtractor와 TCPCorrector import
+        from services.plane_extractor import PlaneExtractor
+        from services.tcp_corrector import TCPCorrector
+
+        # PlaneExtractor 초기화
+        extractor = PlaneExtractor(
+            dual_detector=detector,
+            target_samples=num_samples,
+            max_attempts=num_samples * 3
+        )
+
+        # 평면 추출 실행
+        self._log(f"듀얼 ArUco 평면 추출 시작 (Tag {tag_id1}, {tag_id2}, {num_samples}회, delay={delay_ms}ms, timeout={timeout}초)...")
+
+        def get_frame():
+            if delay_ms > 0:
+                time.sleep(delay_ms / 1000.0)
+            return self.camera_manager.get_frame()
+
+        valid, attempts = extractor.collect_samples(
+            frame_source=get_frame,
+            on_progress=lambda curr, total: self._log(f"샘플 수집: {curr}/{total}")
+        )
+
+        plane_pose = extractor.get_plane_pose()
+
+        if plane_pose is None:
+            raise Exception(f"듀얼 ArUco 평면 추출 실패: 유효 샘플 부족 ({valid}/{attempts})")
+
+        # TCP 보정값 계산
+        corrector = TCPCorrector(target_rx=0, target_ry=0, target_rz=0)
+        correction = corrector.compute_correction(plane_pose)
+
+        self._log(f"평면 추출 성공: {valid}/{attempts}회 유효")
+        self._log(f"평면 중심: X={plane_pose.x:.2f}, Y={plane_pose.y:.2f}, Z={plane_pose.z:.2f} mm")
+        self._log(f"평면 자세: Rx={plane_pose.rx:.2f}, Ry={plane_pose.ry:.2f}, Rz={plane_pose.rz:.2f}°")
+        self._log(f"TCP 보정: dRx={correction.delta_rx:.2f}, dRy={correction.delta_ry:.2f}, dRz={correction.delta_rz:.2f}°")
+
+        # 현재 로봇 TCP 가져오기
+        current_tcp = None
+        if self.robot_controller:
+            current_tcp = self.robot_controller.get_current_camera_pose()
+
+        # 결과 표시 업데이트
+        self.tabTaskEdit.update_plane_result(plane_pose, correction, current_tcp)
+
+        QMessageBox.information(self, "성공",
+            f"듀얼 ArUco 평면 추출 완료!\n"
+            f"유효 샘플: {valid}/{attempts}\n"
+            f"평면 중심: X={plane_pose.x:.2f}, Y={plane_pose.y:.2f}, Z={plane_pose.z:.2f} mm\n"
+            f"평면 자세: Rx={plane_pose.rx:.2f}°, Ry={plane_pose.ry:.2f}°, Rz={plane_pose.rz:.2f}°")
+
+    def _execute_align_aruco_pose(self, params: dict):
+        """듀얼 ArUco 기반 자세 정렬 실행"""
+        import time
+
+        tag_id1 = params.get('tag_id1', 0)
+        tag_id2 = params.get('tag_id2', 1)
+        num_samples = params.get('num_samples', 20)
+        target_rx = params.get('target_rx', 0.0)
+        target_ry = params.get('target_ry', 0.0)
+        target_rz = params.get('target_rz', 0.0)
+        timeout = params.get('timeout', 30.0)
+
+        # 로봇 연결 확인 (자세 정렬은 로봇 이동 필요)
+        if not self.robot_controller or not self.robot_controller.is_connected:
+            raise Exception("로봇이 연결되지 않았습니다. 자세 정렬에는 로봇 연결이 필요합니다.")
+
+        # 카메라 매니저 확인
+        if not self.camera_manager:
+            raise Exception("카메라가 초기화되지 않았습니다. 비전 탭에서 카메라를 선택해주세요.")
+
+        # 카메라가 꺼져 있으면 자동으로 켜기
+        if not self.camera_manager.is_running:
+            self._log("카메라가 꺼져 있습니다. 자동으로 카메라를 시작합니다...")
+            success, msg = self.camera_manager.start()
+            if not success:
+                raise Exception(f"카메라 시작 실패: {msg}")
+            self._log("카메라 시작 완료")
+
+        # 모듈 import
+        from services.dual_aruco_detector import DualArucoDetector
+        from services.plane_extractor import PlaneExtractor
+        from services.tcp_corrector import TCPCorrector
+
+        # DualArucoDetector 초기화
+        detector = DualArucoDetector(
+            vision_manager=self.vision_manager,
+            marker_id1=tag_id1,
+            marker_id2=tag_id2
+        )
+        detector.set_log_callback(self._log)
+
+        # PlaneExtractor 초기화
+        extractor = PlaneExtractor(
+            dual_detector=detector,
+            target_samples=num_samples,
+            max_attempts=num_samples * 3
+        )
+
+        self._log(f"자세 정렬 시작 (Tag {tag_id1}, {tag_id2}, {num_samples}회)...")
+        self._log(f"목표 자세: Rx={target_rx:.2f}°, Ry={target_ry:.2f}°, Rz={target_rz:.2f}°")
+
+        # 평면 추출
+        def get_frame():
+            time.sleep(0.1)  # 100ms delay
+            return self.camera_manager.get_frame()
+
+        valid, attempts = extractor.collect_samples(
+            frame_source=get_frame,
+            on_progress=lambda curr, total: self._log(f"샘플 수집: {curr}/{total}")
+        )
+
+        plane_pose = extractor.get_plane_pose()
+        if plane_pose is None:
+            raise Exception(f"평면 추출 실패: 유효 샘플 부족 ({valid}/{attempts})")
+
+        # TCP 보정값 계산
+        current_tcp = self.robot_controller.get_current_camera_pose()
+        if current_tcp is None:
+            raise Exception("현재 TCP 조회 실패")
+
+        corrector = TCPCorrector(target_rx=target_rx, target_ry=target_ry, target_rz=target_rz)
+        correction = corrector.compute_correction(plane_pose, current_tcp=current_tcp)
+
+        self._log(f"평면 자세: Rx={plane_pose.rx:.2f}°, Ry={plane_pose.ry:.2f}°, Rz={plane_pose.rz:.2f}°")
+        self._log(f"보정량: dRx={correction.delta_rx:.2f}°, dRy={correction.delta_ry:.2f}°, dRz={correction.delta_rz:.2f}°")
+
+        # 최종 TCP 계산
+        final_tcp = corrector.compute_final_tcp(current_tcp, correction)
+        self._log(f"최종 TCP: Rx={final_tcp[3]:.2f}°, Ry={final_tcp[4]:.2f}°, Rz={final_tcp[5]:.2f}°")
+
+        # 로봇 이동 (위치: mm→meter 변환, 회전: deg 그대로)
+        x_m = final_tcp[0] / 1000.0
+        y_m = final_tcp[1] / 1000.0
+        z_m = final_tcp[2] / 1000.0
+        result = self.robot_controller.move_to_pose(x_m, y_m, z_m, final_tcp[3], final_tcp[4], final_tcp[5])
+        if not result.success:
+            raise Exception(f"로봇 이동 실패: {result.message}")
+
+        self._log("자세 정렬 완료!")
+
+        # 결과 표시 업데이트
+        self.tabTaskEdit.update_plane_result(plane_pose, correction, current_tcp)
+
+        QMessageBox.information(self, "성공",
+            f"자세 정렬 완료!\n"
+            f"보정량: dRx={correction.delta_rx:.2f}°, dRy={correction.delta_ry:.2f}°, dRz={correction.delta_rz:.2f}°")
 
     def _on_align_center_from_tab(self, tag_id: int, num_samples: int):
         """중심 정렬 요청 (TabVision 시그널 핸들러)"""
@@ -738,6 +934,7 @@ class MainWindow(QMainWindow):
 
         # 탭들에 새 카메라 매니저 전달
         self.tabCalibration.set_camera_manager(self.camera_manager)
+        self.tabEyeInHand.set_camera_manager(self.camera_manager)
         self.tabArucoReliability.set_camera_manager(self.camera_manager)
 
         # Vision 매니저에 새 카메라 매니저 설정
@@ -1158,17 +1355,17 @@ class MainWindow(QMainWindow):
                         self._log(f"Tool Frame 설정 실패: {msg}")
                 except Exception as e:
                     self._log(f"Tool Frame 설정 오류: {e}")
-        # Eye in Hand 탭 (인덱스 4)이 선택되면 Tool Frame 0으로 설정
+        # Eye in Hand 탭 (인덱스 4)이 선택되면 Tool Frame 4로 설정
         elif index == 4:
             print(f"[DEBUG] Eye in Hand 탭 선택됨 (index={index})")
             if self.robot and self.robot.is_connected:
                 print(f"[DEBUG] 로봇 연결 상태: {self.robot.is_connected}")
                 try:
-                    success, msg = self.robot.send_set_toolframe(0, wait=True)
-                    print(f"[DEBUG] send_set_toolframe(0) 결과: success={success}, msg={msg}")
+                    success, msg = self.robot.send_set_toolframe(4, wait=True)
+                    print(f"[DEBUG] send_set_toolframe(4) 결과: success={success}, msg={msg}")
                     if success:
-                        self._log("Eye in Hand 탭 선택: Tool Frame 0 (기본 TCP)으로 설정 완료")
-                        self.tabEyeInHand.update_current_toolframe(0)
+                        self._log("Eye in Hand 탭 선택: Tool Frame 4로 설정 완료")
+                        self.tabEyeInHand.update_current_toolframe(4)
                         self._update_statusbar()
                     else:
                         self._log(f"Tool Frame 설정 실패: {msg}")
