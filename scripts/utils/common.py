@@ -3,6 +3,7 @@
 공통 유틸리티 함수 및 데코레이터
 """
 
+import inspect
 from datetime import datetime
 from functools import wraps
 from typing import Optional, Callable
@@ -122,12 +123,13 @@ def require_robot_connection(method):
             # self.robot이 연결되어 있어야 실행됨
             ...
     """
+    _n_params = len(inspect.signature(method).parameters) - 1  # 'self' 제외
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         if self.robot is None or not self.robot.is_connected:
             QMessageBox.warning(self, "경고", Messages.ROBOT_NOT_CONNECTED)
             return None
-        return method(self, *args, **kwargs)
+        return method(self, *args[:_n_params], **kwargs)
     return wrapper
 
 
@@ -141,10 +143,11 @@ def require_camera_running(method):
             # self.current_frame이 있어야 실행됨
             ...
     """
+    _n_params = len(inspect.signature(method).parameters) - 1  # 'self' 제외
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         if self.current_frame is None:
             QMessageBox.warning(self, "경고", Messages.CAMERA_NOT_RUNNING)
             return None
-        return method(self, *args, **kwargs)
+        return method(self, *args[:_n_params], **kwargs)
     return wrapper

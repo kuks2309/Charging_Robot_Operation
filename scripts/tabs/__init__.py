@@ -9,6 +9,7 @@ from .tab_eye_in_hand import TabEyeInHand
 from .tab_vision import TabVision
 from .tab_task_edit import TabTaskEdit
 from .tab_motion_test import TabMotionTest
+from .tab_ar_tag_tcp_align import TabArTagTcpAlign
 
 __all__ = [
     'TabCalibration',
@@ -17,4 +18,5 @@ __all__ = [
     'TabVision',
     'TabTaskEdit',
     'TabMotionTest',
+    'TabArTagTcpAlign',
 ]

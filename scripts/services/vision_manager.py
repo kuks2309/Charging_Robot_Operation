@@ -28,7 +28,7 @@ class VisionManager(QObject):
     tag_found = pyqtSignal(int, dict)   # 특정 태그 발견 (tag_id, marker_info)
 
     def __init__(self, camera_manager: CameraManager,
-                 marker_size_meters: float = 0.03,
+                 marker_size_meters: float = 0.015,
                  dictionary_type: int = cv2.aruco.DICT_5X5_50):
         """
         Args:
@@ -40,6 +40,7 @@ class VisionManager(QObject):
 
         self.camera_manager = camera_manager
         self.marker_size = marker_size_meters
+        self._dictionary_type = dictionary_type
 
         # Aruco 검출기 초기화
         self.aruco_detector = ArucoCameraPoseEstimator(
@@ -273,5 +274,5 @@ class VisionManager(QObject):
         self.marker_size = size_meters
         self.aruco_detector = ArucoCameraPoseEstimator(
             marker_size_meters=size_meters,
-            dictionary_type=cv2.aruco.DICT_5X5_50
+            dictionary_type=self._dictionary_type
         )

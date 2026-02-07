@@ -398,27 +398,26 @@ class ModbusClient:
         print(f"[TCP ROTATE] 명령: axis={axis}, angle={angle}deg")
 
         if axis.lower() == 'rx':
-            val = self.to_uint16(int(angle))
+            val = self.to_uint16(int(round(angle * 10)))
             self.write_register(self.REGISTER_POSE_RX, val)
-            print(f"[TCP ROTATE] 레지스터: Rx(304)={val}, CMD(351)={self.CMD_TCP_ROTATE_X}")
+            print(f"[TCP ROTATE] Rx(304)={val} (×10→PRS÷10={angle:.1f}°), CMD={self.CMD_TCP_ROTATE_X}")
             self.write_command(self.CMD_TCP_ROTATE_X)
         elif axis.lower() == 'ry':
-            val = self.to_uint16(int(angle))
+            val = self.to_uint16(int(round(angle * 10)))
             self.write_register(self.REGISTER_POSE_RY, val)
-            print(f"[TCP ROTATE] 레지스터: Ry(305)={val}, CMD(351)={self.CMD_TCP_ROTATE_Y}")
+            print(f"[TCP ROTATE] Ry(305)={val} (×10→PRS÷10={angle:.1f}°), CMD={self.CMD_TCP_ROTATE_Y}")
             self.write_command(self.CMD_TCP_ROTATE_Y)
         elif axis.lower() == 'rz':
-            val = self.to_uint16(int(angle))
+            val = self.to_uint16(int(round(angle * 10)))
             self.write_register(self.REGISTER_POSE_RZ, val)
-            print(f"[TCP ROTATE] 레지스터: Rz(306)={val}, CMD(351)={self.CMD_TCP_ROTATE_Z}")
+            print(f"[TCP ROTATE] Rz(306)={val} (×10→PRS÷10={angle:.1f}°), CMD={self.CMD_TCP_ROTATE_Z}")
             self.write_command(self.CMD_TCP_ROTATE_Z)
         elif axis.lower() == 'rxryrz' and isinstance(angle, (list, tuple)):
-            rx_val = self.to_uint16(int(angle[0]))
-            ry_val = self.to_uint16(int(angle[1]))
-            rz_val = self.to_uint16(int(angle[2]))
-            # Rx, Ry, Rz 레지스터에 동시 쓰기
+            rx_val = self.to_uint16(int(round(angle[0] * 10)))
+            ry_val = self.to_uint16(int(round(angle[1] * 10)))
+            rz_val = self.to_uint16(int(round(angle[2] * 10)))
             self.write_registers(self.REGISTER_POSE_RX, [rx_val, ry_val, rz_val])
-            print(f"[TCP ROTATE] 레지스터: Rx={rx_val}, Ry={ry_val}, Rz={rz_val}, CMD(351)={self.CMD_TCP_ROTATE_RXRYRZ}")
+            print(f"[TCP ROTATE] Rx={rx_val},Ry={ry_val},Rz={rz_val} (×10→PRS÷10), CMD={self.CMD_TCP_ROTATE_RXRYRZ}")
             self.write_command(self.CMD_TCP_ROTATE_RXRYRZ)
         else:
             return False, "잘못된 축 지정 (rx/ry/rz/rxryrz) 또는 각도 형식"
@@ -588,7 +587,10 @@ class ModbusClient:
     def send_base_rotate(self, axis: str, angle: float, wait: bool = True,
                          process_events_callback=None) -> Tuple[bool, str]:
         """
-        베이스 좌표계 회전 (rotx, roty, rotz)
+        베이스 좌표계 Euler 각도 직접 변경 (movel 방식)
+
+        현재 TCP pose를 읽고, 해당 Euler 축 값에 angle을 더한 뒤
+        movel(CMD 20)로 절대 이동. Euler Rx/Ry/Rz 값이 직접 변경됨.
 
         Args:
             axis: 'rx', 'ry', 'rz'
@@ -596,41 +598,47 @@ class ModbusClient:
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
         """
-        # 회전 전 좌표 출력
-        before_pose = self.read_current_pose()
-        if before_pose:
-            print(f"[BASE ROTATE] 회전 전: X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, "
-                  f"Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
-        print(f"[BASE ROTATE] 명령: axis={axis}, angle={angle}deg")
-
-        if axis.lower() == 'rx':
-            val = self.to_uint16(int(angle))
-            self.write_register(self.REGISTER_POSE_RX, val)
-            print(f"[BASE ROTATE] 레지스터: Rx(304)={val}, CMD(351)={self.CMD_BASE_ROTATE_X}")
-            self.write_command(self.CMD_BASE_ROTATE_X)
-        elif axis.lower() == 'ry':
-            val = self.to_uint16(int(angle))
-            self.write_register(self.REGISTER_POSE_RY, val)
-            print(f"[BASE ROTATE] 레지스터: Ry(305)={val}, CMD(351)={self.CMD_BASE_ROTATE_Y}")
-            self.write_command(self.CMD_BASE_ROTATE_Y)
-        elif axis.lower() == 'rz':
-            val = self.to_uint16(int(angle))
-            self.write_register(self.REGISTER_POSE_RZ, val)
-            print(f"[BASE ROTATE] 레지스터: Rz(306)={val}, CMD(351)={self.CMD_BASE_ROTATE_Z}")
-            self.write_command(self.CMD_BASE_ROTATE_Z)
-        else:
+        axis_index = {'rx': 3, 'ry': 4, 'rz': 5}
+        if axis.lower() not in axis_index:
             return False, "잘못된 축 지정 (rx/ry/rz)"
+
+        # 1. 현재 pose 읽기
+        before_pose = self.read_current_pose()
+        if not before_pose:
+            return False, "현재 자세 읽기 실패"
+
+        print(f"[BASE ROTATE] 회전 전: X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}, "
+              f"Rx={before_pose[3]:.2f}, Ry={before_pose[4]:.2f}, Rz={before_pose[5]:.2f}")
+
+        # 2. 목표 pose 계산 (Euler 값 직접 수정)
+        target = list(before_pose)
+        idx = axis_index[axis.lower()]
+        target[idx] += angle
+
+        print(f"[BASE ROTATE] 명령: {axis.upper()} {'+' if angle > 0 else ''}{angle}° (movel 방식)")
+        print(f"[BASE ROTATE] 목표: X={target[0]:.2f}, Y={target[1]:.2f}, Z={target[2]:.2f}, "
+              f"Rx={target[3]:.2f}, Ry={target[4]:.2f}, Rz={target[5]:.2f}")
+
+        # 3. movel 전송 (×10 스케일, CMD 20)
+        regs = [
+            self.to_uint16(int(round(target[0] * 10))),
+            self.to_uint16(int(round(target[1] * 10))),
+            self.to_uint16(int(round(target[2] * 10))),
+            self.to_uint16(int(round(target[3] * 10))),
+            self.to_uint16(int(round(target[4] * 10))),
+            self.to_uint16(int(round(target[5] * 10))),
+        ]
+        self.write_registers(self.REGISTER_POSE_MAIN, regs)
+        self.write_command(self.CMD_MOVE_TO_POSE)
 
         if wait:
             result = self.wait_for_done(process_events_callback=process_events_callback)
-            # 회전 후 좌표 출력
             after_pose = self.read_current_pose()
             if after_pose:
                 print(f"[BASE ROTATE] 회전 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, "
                       f"Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
-                if before_pose:
-                    print(f"[BASE ROTATE] 변화량: dRx={after_pose[3]-before_pose[3]:.2f}, dRy={after_pose[4]-before_pose[4]:.2f}, "
-                          f"dRz={after_pose[5]-before_pose[5]:.2f}")
+                print(f"[BASE ROTATE] 변화량: dRx={after_pose[3]-before_pose[3]:.2f}, dRy={after_pose[4]-before_pose[4]:.2f}, "
+                      f"dRz={after_pose[5]-before_pose[5]:.2f}")
             return result
         return True, "명령 전송됨"
 

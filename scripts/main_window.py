@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         self.tabArucoReliability.set_camera_manager(self.camera_manager)
         self.tabArucoReliability.set_vision_manager(self.vision_manager)
 
+
         # 정렬 서비스 초기화
         self.alignment_service = AlignmentService(self.vision_manager)
         self.alignment_service.set_log_callback(self._log)
@@ -205,6 +206,8 @@ class MainWindow(QMainWindow):
         self.tabArucoReliability.camera_stop_requested.connect(self._on_stop_camera)
         self.tabArucoReliability.jog_move_requested.connect(self._on_jog_move_from_tab)
         self.tabArucoReliability.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
+        self.tabArucoReliability.align_parallel_requested.connect(self._on_ar_tag_align_parallel)
+        self.tabArucoReliability.align_single_axis_requested.connect(self._on_ar_tag_align_single_axis)
 
         # Eye in Hand 탭 시그널
         self.tabEyeInHand.log_message.connect(self._log)
@@ -717,6 +720,9 @@ class MainWindow(QMainWindow):
         # Motion Test 탭에 로봇 설정
         self.tabMotionTest.set_robot(self.robot)
 
+        # ArUco 신뢰성 검증 탭에 로봇 설정
+        self.tabArucoReliability.set_robot(self.robot)
+
         # Task 편집 탭의 연결 상태 업데이트
         self.tabTaskEdit.update_connection_status(True)
 
@@ -784,12 +790,27 @@ class MainWindow(QMainWindow):
         # Motion Test 탭 로봇 해제
         self.tabMotionTest.set_robot(None)
 
+        # ArUco 신뢰성 검증 탭 로봇 해제
+        self.tabArucoReliability.set_robot(None)
+
         # 타이머 정지
         self.status_timer.stop()
 
         # TabTaskEdit 연결 상태 업데이트
         self.tabTaskEdit.update_connection_status(False)
         self.statusbar.showMessage("연결 해제됨")
+
+    def _ensure_toolframe(self, tf: int) -> bool:
+        """지정 툴프레임 확인/설정. 성공 시 True 반환. PRS 클린업 대기 포함."""
+        if not self.robot or not self.robot.is_connected:
+            return False
+        success, msg = self.robot.send_set_toolframe(tf, wait=True)
+        if not success:
+            self._log(f"TF{tf} 설정 실패: {msg}")
+            return False
+        import time
+        time.sleep(0.2)  # PRS 클린업 대기 (레이스 컨디션 방지)
+        return True
 
     def _on_jog_move_from_tab(self, axis: str, distance: float):
         """조그 이동 요청 (TabTaskEdit 시그널 핸들러)"""
@@ -830,6 +851,119 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "오류", f"조그 회전 실패:\n{message}")
         else:
             self._log(f"조그 회전 완료: {axis.upper()} {'+' if angle > 0 else ''}{angle}deg")
+
+    def _on_ar_tag_align_single_axis(self, axis: str, angle: float):
+        """AR Tag TCP Align - 개별 축 tool.rot 테스트"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+        try:
+            dbg = self.tabArucoReliability.txtAlignDebug
+            import time
+            from PyQt5.QtWidgets import QApplication
+
+            # Vision→Robot 축 매핑 (카메라 마운트 기준)
+            axis_map = {'rx': 'ry', 'ry': 'rz', 'rz': 'rx'}
+            robot_axis = axis_map.get(axis.lower(), axis)
+
+            # TF4로 변경
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            if not success:
+                self._log(f"[AR Tag] TF4 설정 실패: {msg}")
+                return
+            self._log("[AR Tag] TF4 설정 완료")
+            time.sleep(0.2)
+
+            # 정렬 전 자세
+            before = self.robot.read_camera_pose()
+            if before:
+                dbg.append(f"── Vision {axis.upper()} → Robot {robot_axis.upper()} ({angle:.2f}°) ──")
+                dbg.append(f"  전) Rx={before[3]:.2f}, Ry={before[4]:.2f}, Rz={before[5]:.2f}")
+
+            self._log(f"[AR Tag] Vision {axis.upper()} → tool.rot{robot_axis[-1]}({angle:.2f}°) 실행")
+            success, msg = self.robot.send_tcp_rotate(
+                robot_axis, angle, wait=True,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                dbg.append(f"  실패: {msg}")
+                self._log(f"[AR Tag] {axis.upper()} 실패: {msg}")
+                return
+
+            # 정렬 후 자세
+            after = self.robot.read_camera_pose()
+            if after and before:
+                dbg.append(f"  후) Rx={after[3]:.2f}, Ry={after[4]:.2f}, Rz={after[5]:.2f}")
+                dbg.append(f"  Δ ) dRx={after[3]-before[3]:.2f}, dRy={after[4]-before[4]:.2f}, dRz={after[5]-before[5]:.2f}")
+
+            self._log(f"[AR Tag] {axis.upper()} 완료")
+            # TF3 복원 (조그용 기본 툴프레임)
+            self._ensure_toolframe(3)
+            self._update_statusbar()
+        except Exception as e:
+            self._log(f"[AR Tag] 오류: {e}")
+
+    def _on_ar_tag_align_parallel(self, drx: float, dry: float, drz: float):
+        """AR Tag TCP Align - TF4 기준 tool.rot 회전으로 마커 평행 정렬"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        try:
+            dbg = self.tabArucoReliability.txtAlignDebug
+            import time
+            from PyQt5.QtWidgets import QApplication
+
+            # TF4로 변경
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            if not success:
+                self._log(f"[AR Tag] TF4 설정 실패: {msg}")
+                QMessageBox.warning(self, "오류", f"TF4 설정 실패:\n{msg}")
+                return
+            self._log("[AR Tag] TF4 설정 완료")
+            time.sleep(0.2)  # PRS 클린업 대기
+
+            # 정렬 전 자세
+            before = self.robot.read_camera_pose()
+            if before:
+                dbg.append(f"══ 전체 정렬 (dRx={drx:.2f}, dRy={dry:.2f}, dRz={drz:.2f}) ══")
+                dbg.append(f"  전) X={before[0]:.1f}, Y={before[1]:.1f}, Z={before[2]:.1f}")
+                dbg.append(f"      Rx={before[3]:.2f}, Ry={before[4]:.2f}, Rz={before[5]:.2f}")
+
+            # Vision→Robot 축 매핑 적용 후 tool.rot 순차 실행
+            axis_map = {'rx': 'ry', 'ry': 'rz', 'rz': 'rx'}
+            self._log(f"[AR Tag] 회전 보정 실행: dRx={drx:.2f}, dRy={dry:.2f}, dRz={drz:.2f}°")
+            for vision_axis, angle in [('rx', drx), ('ry', dry), ('rz', drz)]:
+                if abs(angle) < 0.5:
+                    dbg.append(f"  Vision {vision_axis.upper()}={angle:.2f}° → 스킵 (<0.5)")
+                    continue
+                robot_axis = axis_map[vision_axis]
+                success, msg = self.robot.send_tcp_rotate(
+                    robot_axis, angle, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                if not success:
+                    dbg.append(f"  {axis.upper()} 실패: {msg}")
+                    self._log(f"[AR Tag] {axis.upper()} 회전 실패: {msg}")
+                    QMessageBox.warning(self, "오류", f"{axis.upper()} 회전 실패:\n{msg}")
+                    return
+                dbg.append(f"  {axis.upper()} → {round(angle, 1)}° 완료")
+                time.sleep(0.2)  # PRS 클린업 대기
+
+            # 정렬 후 자세
+            after = self.robot.read_camera_pose()
+            if after and before:
+                dbg.append(f"  후) X={after[0]:.1f}, Y={after[1]:.1f}, Z={after[2]:.1f}")
+                dbg.append(f"      Rx={after[3]:.2f}, Ry={after[4]:.2f}, Rz={after[5]:.2f}")
+                dbg.append(f"  Δ ) dRx={after[3]-before[3]:.2f}, dRy={after[4]-before[4]:.2f}, dRz={after[5]-before[5]:.2f}")
+                dbg.append("")
+
+            self._log("[AR Tag] 마커 평행 정렬 완료")
+            # TF3 복원 (조그용 기본 툴프레임)
+            self._ensure_toolframe(3)
+            self._update_statusbar()
+
+        except Exception as e:
+            self._log(f"[AR Tag] 정렬 오류: {e}")
+            QMessageBox.warning(self, "오류", f"정렬 실패:\n{e}")
 
     def _update_robot_status(self):
         """로봇 상태 업데이트 (TCP 위치, 레지스터 등)"""
@@ -912,6 +1046,7 @@ class MainWindow(QMainWindow):
             self.tabEyeInHand.radioArduCam.toggled.connect(
                 lambda checked: self._on_camera_type_changed(CAMERA_ARDUCAM) if checked else None
             )
+
 
     def _on_camera_type_changed(self, camera_type: str):
         """카메라 타입 변경 시 호출"""

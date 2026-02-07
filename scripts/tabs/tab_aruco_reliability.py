@@ -60,6 +60,8 @@ class TabArucoReliability(QWidget, JogMixin):
     camera_stop_requested = pyqtSignal()
     jog_move_requested = pyqtSignal(str, float)  # axis, distance(mm)
     jog_rotate_requested = pyqtSignal(str, float)  # axis, angle(deg)
+    align_parallel_requested = pyqtSignal(float, float, float)  # dRx, dRy, dRz
+    align_single_axis_requested = pyqtSignal(str, float)  # axis('rx'/'ry'/'rz'), angle(deg)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -205,7 +207,47 @@ class TabArucoReliability(QWidget, JogMixin):
             setattr(self, f'spinJogStep{name}', spin)
 
         ar_layout.addWidget(self.groupJogMove)
-        ar_layout.addStretch()
+
+        # 마커 평행 정렬 그룹
+        self.groupAlignParallel = QGroupBox("마커 평행 정렬 (TF4)")
+        align_layout = QVBoxLayout(self.groupAlignParallel)
+
+        # 현재 보정값 표시 라벨
+        self.labelAlignCorrection = QLabel("TCP 보정값: 검증 미완료")
+        self.labelAlignCorrection.setStyleSheet("color: gray;")
+        align_layout.addWidget(self.labelAlignCorrection)
+
+        # 개별 축 정렬 버튼
+        from PyQt5.QtWidgets import QHBoxLayout as _HBox
+        axis_btn_layout = _HBox()
+        self.btnAlignRx = QPushButton("Rx 정렬")
+        self.btnAlignRy = QPushButton("Ry 정렬")
+        self.btnAlignRz = QPushButton("Rz 정렬")
+        for btn in [self.btnAlignRx, self.btnAlignRy, self.btnAlignRz]:
+            btn.setEnabled(False)
+            btn.setStyleSheet("padding: 6px;")
+            axis_btn_layout.addWidget(btn)
+        self.btnAlignRx.clicked.connect(lambda: self._on_align_single_axis('rx'))
+        self.btnAlignRy.clicked.connect(lambda: self._on_align_single_axis('ry'))
+        self.btnAlignRz.clicked.connect(lambda: self._on_align_single_axis('rz'))
+        align_layout.addLayout(axis_btn_layout)
+
+        # 전체 정렬 실행 버튼
+        self.btnAlignParallel = QPushButton("전체 정렬 (RxRyRz CMD 17)")
+        self.btnAlignParallel.setStyleSheet("font-weight: bold; padding: 8px;")
+        self.btnAlignParallel.setEnabled(False)
+        self.btnAlignParallel.clicked.connect(self._on_align_parallel)
+        align_layout.addWidget(self.btnAlignParallel)
+
+        ar_layout.addWidget(self.groupAlignParallel)
+
+        # 정렬 디버그 로그
+        from PyQt5.QtWidgets import QTextEdit
+        self.txtAlignDebug = QTextEdit()
+        self.txtAlignDebug.setReadOnly(True)
+        self.txtAlignDebug.setStyleSheet("font-family: monospace; font-size: 11px; border: 1px solid #ccc;")
+        self.txtAlignDebug.setPlaceholderText("정렬 전후 자세 로그가 여기에 표시됩니다...")
+        ar_layout.addWidget(self.txtAlignDebug, 1)  # stretch=1로 남은 공간 채움
         self.rightTabWidget.addTab(self.widgetArTagTcpAlign, "ar tag tcp align")
 
         # QTabWidget을 메인 레이아웃에 추가
@@ -678,6 +720,18 @@ class TabArucoReliability(QWidget, JogMixin):
         self._update_statistics_ui_m1()
         self._update_plane_result_ui()
         self._clear_graphs()
+        # 정렬 UI 초기화
+        self._last_tcp_correction = None
+        self.labelAlignCorrection.setText("TCP 보정값: 검증 미완료")
+        self.labelAlignCorrection.setStyleSheet("color: gray;")
+        self.btnAlignRx.setText("Rx 정렬")
+        self.btnAlignRy.setText("Ry 정렬")
+        self.btnAlignRz.setText("Rz 정렬")
+        self.btnAlignRx.setEnabled(False)
+        self.btnAlignRy.setEnabled(False)
+        self.btnAlignRz.setEnabled(False)
+        self.btnAlignParallel.setEnabled(False)
+        self.txtAlignDebug.clear()
 
     def _on_load_csv(self):
         """CSV 파일 읽기"""
@@ -1474,6 +1528,20 @@ class TabArucoReliability(QWidget, JogMixin):
         # TCP 보정값 계산
         corrector = TCPCorrector(target_rx=0, target_ry=0, target_rz=0)
         correction = corrector.compute_correction(plane_pose)
+        self._last_tcp_correction = (correction.delta_rx, correction.delta_ry, correction.delta_rz)
+
+        # 정렬 버튼 활성화 및 보정값 표시
+        if hasattr(self, 'btnAlignParallel'):
+            self.btnAlignParallel.setEnabled(True)
+            self.btnAlignRx.setEnabled(True)
+            self.btnAlignRy.setEnabled(True)
+            self.btnAlignRz.setEnabled(True)
+            self.btnAlignRx.setText(f"Rx={correction.delta_rx:.1f}°")
+            self.btnAlignRy.setText(f"Ry={correction.delta_ry:.1f}°")
+            self.btnAlignRz.setText(f"Rz={correction.delta_rz:.1f}°")
+            self.labelAlignCorrection.setText(
+                f"TCP 보정: dRx={correction.delta_rx:.2f}, dRy={correction.delta_ry:.2f}, dRz={correction.delta_rz:.2f}°")
+            self.labelAlignCorrection.setStyleSheet("color: #e91e63; font-weight: bold;")
 
         # 로그 출력
         self._log(f"\n{'='*60}")
@@ -1511,6 +1579,27 @@ class TabArucoReliability(QWidget, JogMixin):
 
         # 현재 로봇 포즈 표시
         self._update_robot_pose_ui()
+
+    def _on_align_single_axis(self, axis: str):
+        """개별 축 정렬 버튼 핸들러"""
+        if not hasattr(self, '_last_tcp_correction') or self._last_tcp_correction is None:
+            QMessageBox.warning(self, "경고", "TCP 보정값이 없습니다.\n먼저 신뢰성 검증을 실행하세요.")
+            return
+        drx, dry, drz = self._last_tcp_correction
+        angle_map = {'rx': drx, 'ry': dry, 'rz': drz}
+        angle = angle_map.get(axis, 0)
+        self._log(f"개별 축 정렬 요청: {axis.upper()}={angle:.2f}°")
+        self.align_single_axis_requested.emit(axis, angle)
+
+    def _on_align_parallel(self):
+        """마커 평행 정렬 버튼 핸들러 - TF4 기준 tool.rot 회전"""
+        if not hasattr(self, '_last_tcp_correction') or self._last_tcp_correction is None:
+            QMessageBox.warning(self, "경고", "TCP 보정값이 없습니다.\n먼저 신뢰성 검증을 실행하세요.")
+            return
+
+        drx, dry, drz = self._last_tcp_correction
+        self._log(f"마커 평행 정렬 요청: dRx={drx:.2f}, dRy={dry:.2f}, dRz={drz:.2f}°")
+        self.align_parallel_requested.emit(drx, dry, drz)
 
     def _update_robot_pose_ui(self):
         """현재 로봇 포즈 UI 업데이트"""

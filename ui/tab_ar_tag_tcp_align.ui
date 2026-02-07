@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabArTagTcpAlign</class>
+ <widget class="QWidget" name="TabArTagTcpAlign">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutMain">
+
+   <!-- 좌측: 카메라 스트림 -->
+   <item>
+    <widget class="QGroupBox" name="groupCameraStream">
+     <property name="title">
+      <string>Camera Stream</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutCamera">
+      <item>
+       <widget class="QLabel" name="labelCameraStream">
+        <property name="minimumSize">
+         <size>
+          <width>640</width>
+          <height>480</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string>background-color: #1e1e1e; border: 1px solid #cccccc;</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="text">
+         <string>카메라 미연결</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutCameraSelect">
+        <item>
+         <widget class="QRadioButton" name="radioDS435">
+          <property name="text">
+           <string>DS435</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radioArduCam">
+          <property name="text">
+           <string>ArduCam</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacerCam">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnStartCamera">
+          <property name="text">
+           <string>카메라 시작</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnStopCamera">
+          <property name="text">
+           <string>카메라 정지</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- 우측: 설정 및 로그 -->
+   <item>
+    <widget class="QWidget" name="widgetRight">
+     <property name="maximumSize">
+      <size>
+       <width>500</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutRight">
+
+      <!-- 정렬 설정 -->
+      <item>
+       <widget class="QGroupBox" name="groupAlignSettings">
+        <property name="title">
+         <string>TCP 정렬 설정</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutAlignSettings">
+         <item>
+          <layout class="QFormLayout" name="formLayoutAlign">
+           <item row="0" column="0">
+            <widget class="QLabel" name="labelMarkerId">
+             <property name="text">
+              <string>마커 ID:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QSpinBox" name="spinMarkerId">
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>250</number>
+             </property>
+             <property name="value">
+              <number>0</number>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="labelMarkerSize">
+             <property name="text">
+              <string>마커 크기 (mm):</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QDoubleSpinBox" name="spinMarkerSize">
+             <property name="minimum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>500.000000000000000</double>
+             </property>
+             <property name="value">
+              <double>18.200000000000000</double>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 정렬 제어 -->
+      <item>
+       <widget class="QGroupBox" name="groupAlignControl">
+        <property name="title">
+         <string>정렬 제어</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutAlignControl">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutAlignButtons">
+           <item>
+            <widget class="QPushButton" name="btnDetect">
+             <property name="text">
+              <string>감지</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnAlign">
+             <property name="text">
+              <string>정렬 실행</string>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStop">
+             <property name="text">
+              <string>정지</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 현재 상태 -->
+      <item>
+       <widget class="QGroupBox" name="groupStatus">
+        <property name="title">
+         <string>현재 상태</string>
+        </property>
+        <layout class="QFormLayout" name="formLayoutStatus">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelStatusMarker">
+           <property name="text">
+            <string>마커 감지:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="labelStatusMarkerValue">
+           <property name="text">
+            <string>-</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelStatusTCP">
+           <property name="text">
+            <string>TCP 오프셋:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="labelStatusTCPValue">
+           <property name="text">
+            <string>-</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 조그 이동 -->
+      <item>
+       <widget class="QGroupBox" name="groupJogMove">
+        <property name="title">
+         <string>조그 이동</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutJog">
+         <!-- X축 -->
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelJogX">
+           <property name="text"><string>X:</string></property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QPushButton" name="btnJogXMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepX">
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>100.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>10.0</double></property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QPushButton" name="btnJogXPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Y축 -->
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelJogY">
+           <property name="text"><string>Y:</string></property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="btnJogYMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepY">
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>100.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>10.0</double></property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QPushButton" name="btnJogYPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Z축 -->
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelJogZ">
+           <property name="text"><string>Z:</string></property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QPushButton" name="btnJogZMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepZ">
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>100.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>10.0</double></property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QPushButton" name="btnJogZPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Rx축 -->
+         <item row="3" column="0">
+          <widget class="QLabel" name="labelJogRx">
+           <property name="text"><string>Rx:</string></property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QPushButton" name="btnJogRxMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="3" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepRx">
+           <property name="suffix"><string> deg</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>30.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>5.0</double></property>
+          </widget>
+         </item>
+         <item row="3" column="3">
+          <widget class="QPushButton" name="btnJogRxPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Ry축 -->
+         <item row="4" column="0">
+          <widget class="QLabel" name="labelJogRy">
+           <property name="text"><string>Ry:</string></property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QPushButton" name="btnJogRyMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="4" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepRy">
+           <property name="suffix"><string> deg</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>30.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>5.0</double></property>
+          </widget>
+         </item>
+         <item row="4" column="3">
+          <widget class="QPushButton" name="btnJogRyPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Rz축 -->
+         <item row="5" column="0">
+          <widget class="QLabel" name="labelJogRz">
+           <property name="text"><string>Rz:</string></property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QPushButton" name="btnJogRzMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="5" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepRz">
+           <property name="suffix"><string> deg</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>30.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>5.0</double></property>
+          </widget>
+         </item>
+         <item row="5" column="3">
+          <widget class="QPushButton" name="btnJogRzPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 로그 -->
+      <item>
+       <widget class="QGroupBox" name="groupLog">
+        <property name="title">
+         <string>로그</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutLog">
+         <item>
+          <widget class="QTextEdit" name="textLog">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="styleSheet">
+            <string>font-family: 'Consolas', 'Monaco', monospace; font-size: 11px;</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QLabel, QPushButton, QMessageBox, QInputDialog
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from .jog_mixin import JogMixin
 
 
 # UI 파일 경로
@@ -21,7 +22,7 @@ UI_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'ui')
 TAB_TASK_EDIT_UI = os.path.join(UI_DIR, 'tab_task_edit.ui')
 
 
-class TabTaskEdit(QWidget):
+class TabTaskEdit(QWidget, JogMixin):
     """Task 편집 탭 클래스"""
 
     # 시그널 정의
@@ -84,19 +85,8 @@ class TabTaskEdit(QWidget):
         # 로봇 연결
         self.btnConnect.clicked.connect(self._on_connect)
 
-        # 조그 이동 (베이스 좌표계)
-        self.btnJogXMinus.clicked.connect(lambda: self._on_jog_move('x', -1))
-        self.btnJogXPlus.clicked.connect(lambda: self._on_jog_move('x', 1))
-        self.btnJogYMinus.clicked.connect(lambda: self._on_jog_move('y', -1))
-        self.btnJogYPlus.clicked.connect(lambda: self._on_jog_move('y', 1))
-        self.btnJogZMinus.clicked.connect(lambda: self._on_jog_move('z', -1))
-        self.btnJogZPlus.clicked.connect(lambda: self._on_jog_move('z', 1))
-        self.btnJogRxMinus.clicked.connect(lambda: self._on_jog_rotate('rx', -1))
-        self.btnJogRxPlus.clicked.connect(lambda: self._on_jog_rotate('rx', 1))
-        self.btnJogRyMinus.clicked.connect(lambda: self._on_jog_rotate('ry', -1))
-        self.btnJogRyPlus.clicked.connect(lambda: self._on_jog_rotate('ry', 1))
-        self.btnJogRzMinus.clicked.connect(lambda: self._on_jog_rotate('rz', -1))
-        self.btnJogRzPlus.clicked.connect(lambda: self._on_jog_rotate('rz', 1))
+        # 조그 이동 (베이스 좌표계) - JogMixin
+        self._connect_jog_buttons()
 
     def _init_ui(self):
         """UI 초기화"""
@@ -613,39 +603,6 @@ class TabTaskEdit(QWidget):
         port = self.spinModbusPort.value()
         self.connect_requested.emit(ip, port)
 
-    # ==================== 조그 이동 ====================
-
-    def _on_jog_move(self, axis: str, direction: int):
-        """베이스 좌표계 조그 이동"""
-        # 스텝 크기 가져오기
-        if axis == 'x':
-            step = self.spinJogStepX.value()
-        elif axis == 'y':
-            step = self.spinJogStepY.value()
-        elif axis == 'z':
-            step = self.spinJogStepZ.value()
-        else:
-            return
-
-        distance = step * direction
-        self._log(f"조그 이동: {axis.upper()} {'+' if direction > 0 else ''}{distance}mm")
-        self.jog_move_requested.emit(axis, distance)
-
-    def _on_jog_rotate(self, axis: str, direction: int):
-        """베이스 좌표계 조그 회전"""
-        # 스텝 크기 가져오기
-        if axis == 'rx':
-            step = self.spinJogStepRx.value()
-        elif axis == 'ry':
-            step = self.spinJogStepRy.value()
-        elif axis == 'rz':
-            step = self.spinJogStepRz.value()
-        else:
-            return
-
-        angle = step * direction
-        self._log(f"조그 회전: {axis.upper()} {'+' if direction > 0 else ''}{angle}deg")
-        self.jog_rotate_requested.emit(axis, angle)
 
     # ==================== 외부 인터페이스 ====================
 

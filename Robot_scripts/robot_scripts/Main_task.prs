@@ -85,7 +85,7 @@ while true do
         if Rx > 32767 then
             Rx = Rx - 65536
         end
-        tool.rotx(Rx)
+        tool.rotx(Rx/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -96,7 +96,7 @@ while true do
         if Ry > 32767 then
             Ry = Ry - 65536
         end
-        tool.roty(Ry)
+        tool.roty(Ry/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -107,12 +107,12 @@ while true do
         if Rz > 32767 then
             Rz = Rz - 65536
         end
-        tool.rotz(Rz)
+        tool.rotz(Rz/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
 
-    -- command 17: 툴 좌표계 회전 RxRyRz
+    -- command 17: 툴 좌표계 회전 RxRyRz (×10 스케일, 0.1° 단위)
     elseif command == 17 then
         modserv.write_register('task_done', 1)
         Rx = modserv.read_register('Rx')
@@ -127,9 +127,9 @@ while true do
         if Rz > 32767 then
             Rz = Rz - 65536
         end
-        tool.rotx(Rx)
-        tool.roty(Ry)
-        tool.rotz(Rz)
+        tool.rotx(Rx/10)
+        tool.roty(Ry/10)
+        tool.rotz(Rz/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -326,14 +326,14 @@ while true do
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
 
-    -- command 54-56: 베이스 좌표계 회전 (rotx, roty, rotz)
+    -- command 54-56: 베이스 좌표계 회전 (rotx, roty, rotz) (×10 스케일, 0.1° 단위)
     elseif command == 54 then
         modserv.write_register('task_done', 1)
         Rx = modserv.read_register('Rx')
         if Rx > 32767 then
             Rx = Rx - 65536
         end
-        rotx(Rx)
+        rotx(Rx/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -344,7 +344,7 @@ while true do
         if Ry > 32767 then
             Ry = Ry - 65536
         end
-        roty(Ry)
+        roty(Ry/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -355,7 +355,7 @@ while true do
         if Rz > 32767 then
             Rz = Rz - 65536
         end
-        rotz(Rz)
+        rotz(Rz/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
