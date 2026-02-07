@@ -12,8 +12,10 @@ import numpy as np
 from datetime import datetime
 from PyQt5 import uic
 from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QVBoxLayout, QButtonGroup,
-                              QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout)
+                              QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout, QTabWidget)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+
+from .jog_mixin import JogMixin
 from PyQt5.QtGui import QPixmap, QImage
 
 # matplotlib 통합
@@ -49,7 +51,7 @@ DS435_CALIB_FILE = os.path.join(CONFIG_DIR, 'ds435_calibration.yaml')
 ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'arducam_calibration.yaml')
 
 
-class TabArucoReliability(QWidget):
+class TabArucoReliability(QWidget, JogMixin):
     """ArUco Tag 신뢰성 검증 탭 클래스"""
 
     # 시그널 정의
@@ -64,6 +66,9 @@ class TabArucoReliability(QWidget):
 
         # UI 로드
         uic.loadUi(TAB_ARUCO_RELIABILITY_UI, self)
+
+        # 오른쪽 패널을 서브탭으로 구성
+        self._setup_right_panel_tabs()
 
         # 카메라/비전 매니저 참조
         self.camera_manager = None
@@ -91,14 +96,31 @@ class TabArucoReliability(QWidget):
         # 수집된 데이터
         self.collected_data = []  # List of dicts: {timestamp, tag_id, detected, tvec, rvec, euler}
 
-        # matplotlib 그래프 설정
-        self.figure = Figure(figsize=(6, 3))
-        self.canvas = FigureCanvas(self.figure)
+        # matplotlib 그래프 설정 (서브탭: Raw Data / Outlier 제거)
+        self.graph_tab_widget = QTabWidget()
+
+        # Raw Data 탭
+        self.figure_raw = Figure(figsize=(6, 3))
+        self.canvas_raw = FigureCanvas(self.figure_raw)
+        raw_widget = QWidget()
+        raw_layout = QVBoxLayout(raw_widget)
+        raw_layout.setContentsMargins(0, 0, 0, 0)
+        raw_layout.addWidget(self.canvas_raw)
+        self.graph_tab_widget.addTab(raw_widget, "Raw Data")
+
+        # Outlier 제거 탭
+        self.figure_filtered = Figure(figsize=(6, 3))
+        self.canvas_filtered = FigureCanvas(self.figure_filtered)
+        filtered_widget = QWidget()
+        filtered_layout = QVBoxLayout(filtered_widget)
+        filtered_layout.setContentsMargins(0, 0, 0, 0)
+        filtered_layout.addWidget(self.canvas_filtered)
+        self.graph_tab_widget.addTab(filtered_widget, "Outlier 제거")
 
         # 그래프 캔버스를 UI에 추가
         layout = QVBoxLayout(self.widgetGraphCanvas)
-        layout.addWidget(self.canvas)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.graph_tab_widget)
 
         # 캡처 타이머
         self.capture_timer = QTimer()
@@ -123,6 +145,71 @@ class TabArucoReliability(QWidget):
 
         # 초기화
         self._init_ui()
+
+    def _setup_right_panel_tabs(self):
+        """오른쪽 패널을 서브탭(신뢰성 검증 설정 / ar tag tcp align)으로 구성"""
+        main_layout = self.horizontalLayoutArucoReliability
+
+        # groupControl을 메인 레이아웃에서 분리
+        main_layout.removeWidget(self.groupControl)
+
+        # QTabWidget 생성
+        self.rightTabWidget = QTabWidget()
+
+        # 기존 신뢰성 검증 설정을 첫 번째 서브탭으로
+        self.rightTabWidget.addTab(self.groupControl, "신뢰성 검증 설정")
+
+        # ar tag tcp align 서브탭 (조그 이동 컨트롤)
+        self.widgetArTagTcpAlign = QWidget()
+        ar_layout = QVBoxLayout(self.widgetArTagTcpAlign)
+
+        # 조그 이동 그룹
+        from PyQt5.QtWidgets import QGroupBox, QGridLayout, QPushButton
+        self.groupJogMove = QGroupBox("조그 이동")
+        jog_grid = QGridLayout(self.groupJogMove)
+
+        axes_config = [
+            (0, 'X', 'mm', 0.1, 100.0, 10.0),
+            (1, 'Y', 'mm', 0.1, 100.0, 10.0),
+            (2, 'Z', 'mm', 0.1, 100.0, 10.0),
+            (3, 'Rx', 'deg', 0.1, 30.0, 5.0),
+            (4, 'Ry', 'deg', 0.1, 30.0, 5.0),
+            (5, 'Rz', 'deg', 0.1, 30.0, 5.0),
+        ]
+
+        for row, name, suffix, min_val, max_val, default in axes_config:
+            label = QLabel(f"{name}:")
+            jog_grid.addWidget(label, row, 0)
+
+            btn_minus = QPushButton("-")
+            btn_minus.setMinimumWidth(30)
+            jog_grid.addWidget(btn_minus, row, 1)
+
+            spin = QDoubleSpinBox()
+            spin.setSuffix(f" {suffix}")
+            spin.setDecimals(1)
+            spin.setMinimum(min_val)
+            spin.setMaximum(max_val)
+            spin.setSingleStep(1.0)
+            spin.setValue(default)
+            jog_grid.addWidget(spin, row, 2)
+
+            btn_plus = QPushButton("+")
+            btn_plus.setMinimumWidth(30)
+            jog_grid.addWidget(btn_plus, row, 3)
+
+            # Set widget references for JogMixin
+            attr_name = name.replace('R', 'r') if name.startswith('R') else name.lower()
+            setattr(self, f'btnJog{name}Minus', btn_minus)
+            setattr(self, f'btnJog{name}Plus', btn_plus)
+            setattr(self, f'spinJogStep{name}', spin)
+
+        ar_layout.addWidget(self.groupJogMove)
+        ar_layout.addStretch()
+        self.rightTabWidget.addTab(self.widgetArTagTcpAlign, "ar tag tcp align")
+
+        # QTabWidget을 메인 레이아웃에 추가
+        main_layout.addWidget(self.rightTabWidget)
 
     def _setup_disambiguation_ui(self):
         """Disambiguation UI 요소 설정"""
@@ -154,25 +241,13 @@ class TabArucoReliability(QWidget):
         # Second row: Precision target controls
         self.precision_layout = QHBoxLayout()
 
-        # Iterative outlier checkbox
-        self.checkIterativeOutlier = QCheckBox("Iterative Outlier")
-        self.checkIterativeOutlier.setChecked(False)
-
-        # Target position std spinbox
-        self.spinTargetPosStd = QDoubleSpinBox()
-        self.spinTargetPosStd.setRange(0.1, 5.0)
-        self.spinTargetPosStd.setValue(0.5)
-        self.spinTargetPosStd.setSingleStep(0.1)
-        self.spinTargetPosStd.setDecimals(1)
-        self.spinTargetPosStd.setSuffix(" mm")
-
-        # Target rotation std spinbox
-        self.spinTargetRotStd = QDoubleSpinBox()
-        self.spinTargetRotStd.setRange(0.1, 5.0)
-        self.spinTargetRotStd.setValue(0.5)
-        self.spinTargetRotStd.setSingleStep(0.1)
-        self.spinTargetRotStd.setDecimals(1)
-        self.spinTargetRotStd.setSuffix(" deg")
+        # Sigma multiplier spinbox
+        self.spinSigmaMultiplier = QDoubleSpinBox()
+        self.spinSigmaMultiplier.setRange(1.5, 4.0)
+        self.spinSigmaMultiplier.setValue(2.0)
+        self.spinSigmaMultiplier.setSingleStep(0.5)
+        self.spinSigmaMultiplier.setDecimals(1)
+        self.spinSigmaMultiplier.setSuffix(" sigma")
 
         # Minimum samples spinbox
         self.spinMinSamples = QSpinBox()
@@ -181,11 +256,8 @@ class TabArucoReliability(QWidget):
         self.spinMinSamples.setSingleStep(1)
 
         # 레이아웃에 추가
-        self.precision_layout.addWidget(self.checkIterativeOutlier)
-        self.precision_layout.addWidget(QLabel("Target Pos Std:"))
-        self.precision_layout.addWidget(self.spinTargetPosStd)
-        self.precision_layout.addWidget(QLabel("Target Rot Std:"))
-        self.precision_layout.addWidget(self.spinTargetRotStd)
+        self.precision_layout.addWidget(QLabel("Sigma:"))
+        self.precision_layout.addWidget(self.spinSigmaMultiplier)
         self.precision_layout.addWidget(QLabel("Min Samples:"))
         self.precision_layout.addWidget(self.spinMinSamples)
         self.precision_layout.addStretch()
@@ -208,41 +280,80 @@ class TabArucoReliability(QWidget):
         stats_layout = self.groupStatistics.layout()
 
         # 구분선
-        separator = QLabel("─" * 40)
+        separator = QLabel("─" * 80)
         separator.setStyleSheet("color: gray; margin-top: 10px;")
         stats_layout.addWidget(separator)
 
-        # 평면 결과 헤더
+        # 좌우 배치용 수평 레이아웃
+        dual_layout = QHBoxLayout()
+
+        # ===== 왼쪽: 평면 결과 =====
+        left_layout = QVBoxLayout()
+
         plane_header = QLabel("📐 평면 결과 (Dual ArUco)")
         plane_header.setStyleSheet("font-weight: bold; font-size: 12px; color: #9C27B0; margin-top: 5px;")
-        stats_layout.addWidget(plane_header)
+        left_layout.addWidget(plane_header)
 
-        # 평면 위치 라벨
         plane_pos_layout = QHBoxLayout()
         plane_pos_layout.addWidget(QLabel("위치:"))
         self.labelPlanePosition = QLabel("-")
         self.labelPlanePosition.setStyleSheet("color: #2196F3;")
         plane_pos_layout.addWidget(self.labelPlanePosition)
         plane_pos_layout.addStretch()
-        stats_layout.addLayout(plane_pos_layout)
+        left_layout.addLayout(plane_pos_layout)
 
-        # 평면 자세 라벨
         plane_ori_layout = QHBoxLayout()
         plane_ori_layout.addWidget(QLabel("자세:"))
         self.labelPlaneOrientation = QLabel("-")
         self.labelPlaneOrientation.setStyleSheet("color: #4CAF50;")
         plane_ori_layout.addWidget(self.labelPlaneOrientation)
         plane_ori_layout.addStretch()
-        stats_layout.addLayout(plane_ori_layout)
+        left_layout.addLayout(plane_ori_layout)
 
-        # TCP 보정값 라벨
         tcp_corr_layout = QHBoxLayout()
         tcp_corr_layout.addWidget(QLabel("TCP 보정:"))
         self.labelTCPCorrection = QLabel("-")
         self.labelTCPCorrection.setStyleSheet("color: #FF5722;")
         tcp_corr_layout.addWidget(self.labelTCPCorrection)
         tcp_corr_layout.addStretch()
-        stats_layout.addLayout(tcp_corr_layout)
+        left_layout.addLayout(tcp_corr_layout)
+
+        left_layout.addStretch()
+        dual_layout.addLayout(left_layout)
+
+        # 세로 구분선
+        v_separator = QLabel("│\n│\n│\n│")
+        v_separator.setStyleSheet("color: gray; margin: 0 10px;")
+        v_separator.setAlignment(Qt.AlignCenter)
+        dual_layout.addWidget(v_separator)
+
+        # ===== 오른쪽: 현재 Robot Pose =====
+        right_layout = QVBoxLayout()
+
+        robot_header = QLabel("🤖 현재 Robot Pose")
+        robot_header.setStyleSheet("font-weight: bold; font-size: 12px; color: #E91E63; margin-top: 5px;")
+        right_layout.addWidget(robot_header)
+
+        robot_pos_layout = QHBoxLayout()
+        robot_pos_layout.addWidget(QLabel("위치:"))
+        self.labelRobotPosition = QLabel("-")
+        self.labelRobotPosition.setStyleSheet("color: #E91E63;")
+        robot_pos_layout.addWidget(self.labelRobotPosition)
+        robot_pos_layout.addStretch()
+        right_layout.addLayout(robot_pos_layout)
+
+        robot_ori_layout = QHBoxLayout()
+        robot_ori_layout.addWidget(QLabel("자세:"))
+        self.labelRobotOrientation = QLabel("-")
+        self.labelRobotOrientation.setStyleSheet("color: #E91E63;")
+        robot_ori_layout.addWidget(self.labelRobotOrientation)
+        robot_ori_layout.addStretch()
+        right_layout.addLayout(robot_ori_layout)
+
+        right_layout.addStretch()
+        dual_layout.addLayout(right_layout)
+
+        stats_layout.addLayout(dual_layout)
 
     def _connect_signals(self):
         """내부 시그널-슬롯 연결"""
@@ -260,19 +371,8 @@ class TabArucoReliability(QWidget):
         self.btnExportCSV.clicked.connect(self._on_export_csv)
         self.btnExportGraph.clicked.connect(self._on_export_graph)
 
-        # 조그 이동
-        self.btnJogXMinus.clicked.connect(lambda: self._on_jog_move('x', -1))
-        self.btnJogXPlus.clicked.connect(lambda: self._on_jog_move('x', 1))
-        self.btnJogYMinus.clicked.connect(lambda: self._on_jog_move('y', -1))
-        self.btnJogYPlus.clicked.connect(lambda: self._on_jog_move('y', 1))
-        self.btnJogZMinus.clicked.connect(lambda: self._on_jog_move('z', -1))
-        self.btnJogZPlus.clicked.connect(lambda: self._on_jog_move('z', 1))
-        self.btnJogRxMinus.clicked.connect(lambda: self._on_jog_rotate('rx', -1))
-        self.btnJogRxPlus.clicked.connect(lambda: self._on_jog_rotate('rx', 1))
-        self.btnJogRyMinus.clicked.connect(lambda: self._on_jog_rotate('ry', -1))
-        self.btnJogRyPlus.clicked.connect(lambda: self._on_jog_rotate('ry', 1))
-        self.btnJogRzMinus.clicked.connect(lambda: self._on_jog_rotate('rz', -1))
-        self.btnJogRzPlus.clicked.connect(lambda: self._on_jog_rotate('rz', 1))
+        # 조그 이동 (JogMixin)
+        self._connect_jog_buttons()
 
     def _init_ui(self):
         """UI 초기화"""
@@ -414,7 +514,6 @@ class TabArucoReliability(QWidget):
         self.spinTagID2.setEnabled(False)
         self.spinRepeatCount.setEnabled(False)
         self.spinStabilizationDelay.setEnabled(False)
-        self.groupJogMove.setEnabled(False)
         self.progressBar.setValue(0)
         self.progressBar.setMaximum(self.max_captures)
         self.textLog.clear()
@@ -436,7 +535,6 @@ class TabArucoReliability(QWidget):
         self.spinTagID2.setEnabled(True)
         self.spinRepeatCount.setEnabled(True)
         self.spinStabilizationDelay.setEnabled(True)
-        self.groupJogMove.setEnabled(True)
 
         self._log(f"캡처 중지됨 (총 {self.capture_count}/{self.max_captures}회)")
 
@@ -556,7 +654,6 @@ class TabArucoReliability(QWidget):
         self.spinTagID2.setEnabled(True)
         self.spinRepeatCount.setEnabled(True)
         self.spinStabilizationDelay.setEnabled(True)
-        self.groupJogMove.setEnabled(True)
 
         self._log(f"\n캡처 완료: 총 {self.capture_count}회")
 
@@ -860,7 +957,8 @@ class TabArucoReliability(QWidget):
             return
 
         try:
-            self.figure.savefig(file_path, dpi=300, bbox_inches='tight')
+            active_figure = self.figure_raw if self.graph_tab_widget.currentIndex() == 0 else self.figure_filtered
+            active_figure.savefig(file_path, dpi=300, bbox_inches='tight')
             self._log(f"그래프 저장 완료: {file_path}")
             QMessageBox.information(self, "성공", f"그래프가 저장되었습니다.\n{file_path}")
 
@@ -938,11 +1036,8 @@ class TabArucoReliability(QWidget):
             self._update_statistics_ui_m0()
             return
 
-        # tvec 데이터 추출 (X, Y, Z) - tvec을 flatten하여 처리 (TF1 좌표계, 미터 단위)
-        tvec_array = np.array([d['tvec'].flatten() for d in detected_data])
-
-        # Euler 각도 데이터 추출 (Rx, Ry, Rz)
-        euler_array = np.array([d['euler'] for d in detected_data if d['euler'] is not None])
+        # tvec + euler 데이터 추출 (aligned arrays)
+        tvec_array, euler_array = self._extract_aligned_arrays(detected_data)
 
         # 디버깅: Euler 데이터 확인
         self._log(f"\n검출된 데이터: {len(detected_data)}개")
@@ -955,40 +1050,26 @@ class TabArucoReliability(QWidget):
         x_mean_before = np.mean(x_mm_before)
         y_mean_before = np.mean(y_mm_before)
         z_mean_before = np.mean(z_mm_before)
-        x_std_before = np.std(x_mm_before)
-        y_std_before = np.std(y_mm_before)
-        z_std_before = np.std(z_mm_before)
+        x_std_before = np.std(x_mm_before, ddof=1)
+        y_std_before = np.std(y_mm_before, ddof=1)
+        z_std_before = np.std(z_mm_before, ddof=1)
 
-        # === 2σ Outlier 필터링 ===
-        # Z축 기준으로 outlier 탐지 (가장 민감)
-        z_threshold_low = z_mean_before - 2 * z_std_before
-        z_threshold_high = z_mean_before + 2 * z_std_before
-        valid_mask = (z_mm_before >= z_threshold_low) & (z_mm_before <= z_threshold_high)
-
-        # X, Y축도 추가 필터링
-        x_threshold_low = x_mean_before - 2 * x_std_before
-        x_threshold_high = x_mean_before + 2 * x_std_before
-        valid_mask &= (x_mm_before >= x_threshold_low) & (x_mm_before <= x_threshold_high)
-
-        y_threshold_low = y_mean_before - 2 * y_std_before
-        y_threshold_high = y_mean_before + 2 * y_std_before
-        valid_mask &= (y_mm_before >= y_threshold_low) & (y_mm_before <= y_threshold_high)
-
-        num_outliers = np.sum(~valid_mask)
+        # === Outlier 필터링 (unified) ===
+        sigma = self.spinSigmaMultiplier.value()
+        min_samples = self.spinMinSamples.value()
+        tvec_filtered, euler_filtered, valid_mask, removal_info = self._remove_outliers(
+            tvec_array, euler_array, sigma=sigma, min_samples=min_samples)
+        num_outliers = removal_info['total_removed']
         outlier_indices = np.where(~valid_mask)[0]
-
-        # 필터링된 데이터
-        tvec_filtered = tvec_array[valid_mask]
-        euler_filtered = euler_array[valid_mask] if len(euler_array) == len(tvec_array) else euler_array
 
         # === Outlier 필터링 후 통계 (After) ===
         x_mean = np.mean(tvec_filtered[:, 0]) * 1000.0
         y_mean = np.mean(tvec_filtered[:, 1]) * 1000.0
         z_mean = np.mean(tvec_filtered[:, 2]) * 1000.0
 
-        x_std = np.std(tvec_filtered[:, 0]) * 1000.0
-        y_std = np.std(tvec_filtered[:, 1]) * 1000.0
-        z_std = np.std(tvec_filtered[:, 2]) * 1000.0
+        x_std = np.std(tvec_filtered[:, 0], ddof=1) * 1000.0
+        y_std = np.std(tvec_filtered[:, 1], ddof=1) * 1000.0
+        z_std = np.std(tvec_filtered[:, 2], ddof=1) * 1000.0
 
         detection_rate = len(detected_data) / len(self.collected_data) * 100
 
@@ -996,23 +1077,23 @@ class TabArucoReliability(QWidget):
         rx_mean_raw = ry_mean_raw = rz_mean_raw = 0.0
         rx_std_raw = ry_std_raw = rz_std_raw = 0.0
         if len(euler_array) > 0:
-            rx_mean_raw = np.mean(euler_array[:, 0])
-            ry_mean_raw = np.mean(euler_array[:, 1])
-            rz_mean_raw = np.mean(euler_array[:, 2])
-            rx_std_raw = np.std(euler_array[:, 0])
-            ry_std_raw = np.std(euler_array[:, 1])
-            rz_std_raw = np.std(euler_array[:, 2])
+            rx_mean_raw = np.nanmean(euler_array[:, 0])
+            ry_mean_raw = np.nanmean(euler_array[:, 1])
+            rz_mean_raw = np.nanmean(euler_array[:, 2])
+            rx_std_raw = np.nanstd(euler_array[:, 0], ddof=1)
+            ry_std_raw = np.nanstd(euler_array[:, 1], ddof=1)
+            rz_std_raw = np.nanstd(euler_array[:, 2], ddof=1)
 
         # Euler 각도 통계 (필터링 후)
         rx_mean = ry_mean = rz_mean = 0.0
         rx_std = ry_std = rz_std = 0.0
         if len(euler_filtered) > 0:
-            rx_mean = np.mean(euler_filtered[:, 0])
-            ry_mean = np.mean(euler_filtered[:, 1])
-            rz_mean = np.mean(euler_filtered[:, 2])
-            rx_std = np.std(euler_filtered[:, 0])
-            ry_std = np.std(euler_filtered[:, 1])
-            rz_std = np.std(euler_filtered[:, 2])
+            rx_mean = np.nanmean(euler_filtered[:, 0])
+            ry_mean = np.nanmean(euler_filtered[:, 1])
+            rz_mean = np.nanmean(euler_filtered[:, 2])
+            rx_std = np.nanstd(euler_filtered[:, 0], ddof=1)
+            ry_std = np.nanstd(euler_filtered[:, 1], ddof=1)
+            rz_std = np.nanstd(euler_filtered[:, 2], ddof=1)
 
         # UI 업데이트 (필터링 후 + 전 값)
         self._update_statistics_ui_m0(
@@ -1038,7 +1119,7 @@ class TabArucoReliability(QWidget):
         self._log(f"\n--- Outlier 필터링 전 (Before) ---")
         self._log(f"위치: X={x_mean_before:.2f}±{x_std_before:.2f}, Y={y_mean_before:.2f}±{y_std_before:.2f}, Z={z_mean_before:.2f}±{z_std_before:.2f} mm")
 
-        self._log(f"\n--- Outlier 필터링 후 (After, 2σ) ---")
+        self._log(f"\n--- Outlier 필터링 후 (After, {sigma}σ) ---")
         self._log(f"유효 샘플: {np.sum(valid_mask)}개")
         self._log(f"위치: X={x_mean:.2f}±{x_std:.2f}, Y={y_mean:.2f}±{y_std:.2f}, Z={z_mean:.2f}±{z_std:.2f} mm")
         self._log(f"회전: Rx={rx_mean:.2f}±{rx_std:.2f}, Ry={ry_mean:.2f}±{ry_std:.2f}, Rz={rz_mean:.2f}±{rz_std:.2f}°")
@@ -1053,79 +1134,135 @@ class TabArucoReliability(QWidget):
 
         self._log(f"{'='*50}")
 
-    def iterative_outlier_removal(self, tvec_array, euler_array,
-                                   target_pos_std=0.5, target_rot_std=0.5,
-                                   min_samples=10, max_iterations=5):
+    # --- Unified outlier removal helpers ---
+    # Replaces 4 separate outlier removal paths (A: L935 inline, B: L1174 3-sigma, C: L1120 iterative, D: L1628 inline)
+
+    def _extract_aligned_arrays(self, detected_data, key_suffix=''):
         """
-        Iteratively remove outliers until precision targets met.
-        Returns: (filtered_tvec, filtered_euler, iterations_used, targets_met)
+        Extract aligned tvec and euler arrays from detected data.
+        Guarantees tvec_array and euler_array have the same number of rows
+        by replacing None euler entries with [NaN, NaN, NaN].
+
+        Args:
+            detected_data: list of dicts with 'tvec'/'euler' (or 'tvec2'/'euler2') keys
+            key_suffix: '' for marker1, '2' for marker2
+
+        Returns:
+            tuple: (tvec_array, euler_array)
+                   tvec_array: np.ndarray shape (N, 3) in meters
+                   euler_array: np.ndarray shape (N, 3) in degrees, with NaN for missing entries
         """
-        current_tvec = tvec_array.copy()
-        current_euler = euler_array.copy()
+        tvec_key = 'tvec' + key_suffix
+        euler_key = 'euler' + key_suffix
+
+        tvec_array = np.array([d[tvec_key].flatten() for d in detected_data])
+
+        euler_list = [d.get(euler_key) for d in detected_data]
+        if any(e is not None for e in euler_list):
+            euler_array = np.array([
+                e if e is not None else [np.nan, np.nan, np.nan]
+                for e in euler_list
+            ])
+        else:
+            euler_array = np.full((len(detected_data), 3), np.nan)
+
+        return tvec_array, euler_array
+
+    def _remove_outliers(self, tvec_array, euler_array,
+                         sigma=2.0, max_iterations=5, min_samples=5):
+        """
+        Unified iterative outlier removal across all 6 DOF.
+
+        Args:
+            tvec_array: np.ndarray shape (N, 3) in meters
+            euler_array: np.ndarray shape (N, 3) in degrees (may contain NaN)
+            sigma: float, number of standard deviations for threshold (default 2.0)
+            max_iterations: int, max removal passes (default 5)
+            min_samples: int, stop if fewer samples remain (default 5)
+
+        Returns:
+            tuple: (filtered_tvec, filtered_euler, valid_mask, removal_info)
+            valid_mask: boolean array relative to original input
+            removal_info: dict with keys 'total_removed', 'iterations_used',
+                          'per_iteration_removed', 'initial_count', 'final_count'
+        """
+        n = len(tvec_array)
+        valid_mask = np.ones(n, dtype=bool)
+        per_iteration_removed = []
 
         for iteration in range(max_iterations):
-            # Calculate current stats
-            pos_std = np.std(current_tvec, axis=0) * 1000  # mm
-            rot_std = np.std(current_euler, axis=0) if len(current_euler) > 0 else np.array([0, 0, 0])  # deg
+            current_tvec = tvec_array[valid_mask]
+            current_euler = euler_array[valid_mask]
+            current_n = len(current_tvec)
 
-            pos_ok = all(s <= target_pos_std for s in pos_std)
-            rot_ok = all(s <= target_rot_std for s in rot_std) if len(current_euler) > 0 else True
+            if current_n <= min_samples:
+                break
 
-            self._log(f"[Outlier] Iter {iteration}: pos_std={pos_std}, rot_std={rot_std}")
+            # Build outlier mask for this iteration (True = keep)
+            iter_mask = np.ones(current_n, dtype=bool)
 
-            if pos_ok and rot_ok:
-                self._log(f"[Outlier] Targets met at iteration {iteration}")
-                return current_tvec, current_euler, iteration, True
-
-            if len(current_tvec) <= min_samples:
-                self._log(f"[Outlier] Min samples reached at iteration {iteration}")
-                return current_tvec, current_euler, iteration, False
-
-            # 2-sigma outlier removal
-            mask = np.ones(len(current_tvec), dtype=bool)
+            # Position axes (X, Y, Z)
             for i in range(3):
-                mean_pos = np.mean(current_tvec[:, i])
-                std_pos = np.std(current_tvec[:, i])
-                if std_pos > 0:
-                    mask &= np.abs(current_tvec[:, i] - mean_pos) <= 2 * std_pos
+                col = current_tvec[:, i]
+                mean = np.mean(col)
+                std = np.std(col, ddof=1)
+                if std > 0:
+                    iter_mask &= (np.abs(col - mean) <= sigma * std)
 
-                if len(current_euler) > 0:
-                    mean_rot = np.mean(current_euler[:, i])
-                    std_rot = np.std(current_euler[:, i])
-                    if std_rot > 0:
-                        mask &= np.abs(current_euler[:, i] - mean_rot) <= 2 * std_rot
+            # Rotation axes (Rx, Ry, Rz) - skip if all NaN
+            for i in range(3):
+                col = current_euler[:, i]
+                if np.all(np.isnan(col)):
+                    continue
+                mean = np.nanmean(col)
+                std = np.nanstd(col, ddof=1)
+                if std > 0:
+                    # For NaN entries, keep them (don't mark as outlier)
+                    axis_mask = np.isnan(col) | (np.abs(col - mean) <= sigma * std)
+                    iter_mask &= axis_mask
 
-            removed = np.sum(~mask)
-            if removed == 0:
-                self._log(f"[Outlier] No outliers found at iteration {iteration}")
-                return current_tvec, current_euler, iteration, False
+            # Check minimum samples guard
+            remaining = np.sum(iter_mask)
+            if remaining < min_samples:
+                # Don't apply this iteration's removal
+                per_iteration_removed.append(0)
+                break
 
-            current_tvec = current_tvec[mask]
-            if len(current_euler) > 0:
-                current_euler = current_euler[mask]
-            self._log(f"[Outlier] Removed {removed} samples, {len(current_tvec)} remaining")
+            removed_this_iter = current_n - remaining
+            per_iteration_removed.append(removed_this_iter)
 
-        return current_tvec, current_euler, max_iterations, False
+            if removed_this_iter == 0:
+                break
+
+            # Map iter_mask back to valid_mask
+            current_indices = np.where(valid_mask)[0]
+            for j, idx in enumerate(current_indices):
+                if not iter_mask[j]:
+                    valid_mask[idx] = False
+
+        filtered_tvec = tvec_array[valid_mask]
+        filtered_euler = euler_array[valid_mask]
+        total_removed = n - np.sum(valid_mask)
+
+        removal_info = {
+            'total_removed': total_removed,
+            'iterations_used': len(per_iteration_removed),
+            'per_iteration_removed': per_iteration_removed,
+            'initial_count': n,
+            'final_count': np.sum(valid_mask)
+        }
+
+        return filtered_tvec, filtered_euler, valid_mask, removal_info
 
     def _calculate_marker_statistics(self, detected_data, marker_name, key_suffix=''):
-        """개별 마커의 통계 계산 및 로그 출력 (3σ 이상치 제거 전후 비교)"""
-        tvec_key = 'tvec' + key_suffix if key_suffix else 'tvec'
-        euler_key = 'euler' + key_suffix if key_suffix else 'euler'
-
+        """개별 마커의 통계 계산 및 로그 출력 (이상치 제거 전후 비교)"""
         if not detected_data:
             self._log(f"\n--- {marker_name} ---")
             self._log(f"검출된 데이터 없음")
             return None
 
-        # tvec 추출
-        tvec_array = np.array([d[tvec_key].flatten() for d in detected_data])
-
-        # euler 추출 - 인덱스 정렬 유지, None은 NaN으로 대체
-        euler_list = [d.get(euler_key) for d in detected_data]
-        if any(e is not None for e in euler_list):
-            euler_array = np.array([e if e is not None else [np.nan, np.nan, np.nan] for e in euler_list])
-        else:
-            euler_array = np.array([])
+        # tvec + euler 데이터 추출 (aligned arrays)
+        tvec_array, euler_array = self._extract_aligned_arrays(detected_data, key_suffix)
 
         # mm 단위 변환
         x_mm_all = tvec_array[:, 0] * 1000.0
@@ -1136,88 +1273,49 @@ class TabArucoReliability(QWidget):
         x_mean_raw = np.mean(x_mm_all)
         y_mean_raw = np.mean(y_mm_all)
         z_mean_raw = np.mean(z_mm_all)
-        x_std_raw = np.std(x_mm_all)
-        y_std_raw = np.std(y_mm_all)
-        z_std_raw = np.std(z_mm_all)
+        x_std_raw = np.std(x_mm_all, ddof=1)
+        y_std_raw = np.std(y_mm_all, ddof=1)
+        z_std_raw = np.std(z_mm_all, ddof=1)
 
         # Euler raw 통계 (모든 필터링 전)
         if len(euler_array) > 0:
             rx_mean_raw = np.nanmean(euler_array[:, 0])
             ry_mean_raw = np.nanmean(euler_array[:, 1])
             rz_mean_raw = np.nanmean(euler_array[:, 2])
-            rx_std_raw = np.nanstd(euler_array[:, 0])
-            ry_std_raw = np.nanstd(euler_array[:, 1])
-            rz_std_raw = np.nanstd(euler_array[:, 2])
+            rx_std_raw = np.nanstd(euler_array[:, 0], ddof=1)
+            ry_std_raw = np.nanstd(euler_array[:, 1], ddof=1)
+            rz_std_raw = np.nanstd(euler_array[:, 2], ddof=1)
         else:
             rx_mean_raw = ry_mean_raw = rz_mean_raw = 0
             rx_std_raw = ry_std_raw = rz_std_raw = 0
-
-        # === Iterative outlier removal if enabled ===
-        if hasattr(self, 'checkIterativeOutlier') and self.checkIterativeOutlier.isChecked():
-            target_pos = self.spinTargetPosStd.value()
-            target_rot = self.spinTargetRotStd.value()
-            min_samples = self.spinMinSamples.value()
-
-            tvec_array, euler_array, iterations, targets_met = self.iterative_outlier_removal(
-                tvec_array, euler_array, target_pos, target_rot, min_samples
-            )
-            self._log(f"[Stats] Iterative outlier ({marker_name}): {iterations} iterations, targets_met={targets_met}")
-
-            # Re-extract after filtering
-            x_mm_all = tvec_array[:, 0] * 1000.0
-            y_mm_all = tvec_array[:, 1] * 1000.0
-            z_mm_all = tvec_array[:, 2] * 1000.0
 
         # === 이상치 제거 전 통계 ===
         x_mean_before = np.mean(x_mm_all)
         y_mean_before = np.mean(y_mm_all)
         z_mean_before = np.mean(z_mm_all)
-        x_std_before = np.std(x_mm_all)
-        y_std_before = np.std(y_mm_all)
-        z_std_before = np.std(z_mm_all)
+        x_std_before = np.std(x_mm_all, ddof=1)
+        y_std_before = np.std(y_mm_all, ddof=1)
+        z_std_before = np.std(z_mm_all, ddof=1)
 
-        # === 3σ 이상치 감지 (X, Y, Z + Rx, Ry, Rz 모두 체크) ===
-        outlier_mask = np.zeros(len(x_mm_all), dtype=bool)
-
-        # 위치 기반 outlier 탐지
-        for axis_data, axis_mean, axis_std in [
-            (x_mm_all, x_mean_before, x_std_before),
-            (y_mm_all, y_mean_before, y_std_before),
-            (z_mm_all, z_mean_before, z_std_before)
-        ]:
-            if axis_std > 0:
-                outlier_mask |= (np.abs(axis_data - axis_mean) > 3.0 * axis_std)
-
-        # 회전 기반 outlier 탐지 (Rx, Ry, Rz)
-        if len(euler_array) == len(tvec_array) and len(euler_array) > 0:
-            for i, axis_name in enumerate(['Rx', 'Ry', 'Rz']):
-                axis_data = euler_array[:, i]
-                valid_rot = ~np.isnan(axis_data)
-                if np.sum(valid_rot) > 0:
-                    axis_mean = np.nanmean(axis_data)
-                    axis_std = np.nanstd(axis_data)
-                    if axis_std > 0:
-                        outlier_mask |= (np.abs(axis_data - axis_mean) > 3.0 * axis_std) & valid_rot
-
-        outlier_indices = np.where(outlier_mask)[0]
-        valid_mask = ~outlier_mask
+        # === Outlier 필터링 (unified) ===
+        sigma = self.spinSigmaMultiplier.value()
+        min_samples = self.spinMinSamples.value()
+        tvec_filtered, euler_filtered, valid_mask, removal_info = self._remove_outliers(
+            tvec_array, euler_array, sigma=sigma, min_samples=min_samples)
+        outlier_indices = np.where(~valid_mask)[0]
 
         # === 이상치 제거 후 데이터 ===
-        x_mm = x_mm_all[valid_mask]
-        y_mm = y_mm_all[valid_mask]
-        z_mm = z_mm_all[valid_mask]
-
-        # Euler 각도도 동일하게 필터링
-        if len(euler_array) == len(tvec_array):
-            euler_array = euler_array[valid_mask]
+        x_mm = tvec_filtered[:, 0] * 1000.0
+        y_mm = tvec_filtered[:, 1] * 1000.0
+        z_mm = tvec_filtered[:, 2] * 1000.0
 
         # === 이상치 제거 후 통계 ===
         x_mean = np.mean(x_mm)
         y_mean = np.mean(y_mm)
         z_mean = np.mean(z_mm)
-        x_std = np.std(x_mm)
-        y_std = np.std(y_mm)
-        z_std = np.std(z_mm)
+        x_std = np.std(x_mm, ddof=1)
+        y_std = np.std(y_mm, ddof=1)
+        z_std = np.std(z_mm, ddof=1)
 
         # === 로그 출력 ===
         self._log(f"\n{'='*60}")
@@ -1273,14 +1371,14 @@ class TabArucoReliability(QWidget):
             'z_mean_raw': z_mean_raw, 'z_std_raw': z_std_raw,
         }
 
-        # Euler 각도 통계 (NaN 무시)
-        if len(euler_array) > 0:
-            rx_mean = np.nanmean(euler_array[:, 0])
-            ry_mean = np.nanmean(euler_array[:, 1])
-            rz_mean = np.nanmean(euler_array[:, 2])
-            rx_std = np.nanstd(euler_array[:, 0])
-            ry_std = np.nanstd(euler_array[:, 1])
-            rz_std = np.nanstd(euler_array[:, 2])
+        # Euler 각도 통계 (NaN 무시, 이상치 제거 후)
+        if len(euler_filtered) > 0:
+            rx_mean = np.nanmean(euler_filtered[:, 0])
+            ry_mean = np.nanmean(euler_filtered[:, 1])
+            rz_mean = np.nanmean(euler_filtered[:, 2])
+            rx_std = np.nanstd(euler_filtered[:, 0], ddof=1)
+            ry_std = np.nanstd(euler_filtered[:, 1], ddof=1)
+            rz_std = np.nanstd(euler_filtered[:, 2], ddof=1)
 
             self._log(f"\n회전 (이상치 제거 후):")
             self._log(f"  Rx={rx_mean:6.2f}±{rx_std:5.2f}°, Ry={ry_mean:6.2f}±{ry_std:5.2f}°, Rz={rz_mean:6.2f}±{rz_std:5.2f}°")
@@ -1358,7 +1456,7 @@ class TabArucoReliability(QWidget):
             )
 
         # 표준편차 계산
-        center_std = np.std(centers, axis=0) * 1000.0  # mm
+        center_std = np.std(centers, axis=0, ddof=1) * 1000.0  # mm
 
         # PlanePose 생성
         plane_pose = PlanePose(
@@ -1410,6 +1508,36 @@ class TabArucoReliability(QWidget):
                 self.labelTCPCorrection.setText(
                     f"dRx={correction.delta_rx:.2f}, dRy={correction.delta_ry:.2f}, dRz={correction.delta_rz:.2f}°"
                 )
+
+        # 현재 로봇 포즈 표시
+        self._update_robot_pose_ui()
+
+    def _update_robot_pose_ui(self):
+        """현재 로봇 포즈 UI 업데이트"""
+        if not hasattr(self, 'labelRobotPosition'):
+            return
+
+        if self.robot is None:
+            self.labelRobotPosition.setText("로봇 미연결")
+            self.labelRobotOrientation.setText("-")
+            return
+
+        try:
+            pose = self.robot.read_camera_pose()
+            if pose is not None:
+                x, y, z, rx, ry, rz = pose
+                self.labelRobotPosition.setText(
+                    f"X={x:.2f}, Y={y:.2f}, Z={z:.2f} mm"
+                )
+                self.labelRobotOrientation.setText(
+                    f"Rx={rx:.2f}, Ry={ry:.2f}, Rz={rz:.2f}°"
+                )
+            else:
+                self.labelRobotPosition.setText("읽기 실패")
+                self.labelRobotOrientation.setText("-")
+        except Exception as e:
+            self.labelRobotPosition.setText(f"오류: {e}")
+            self.labelRobotOrientation.setText("-")
 
     def _update_statistics_ui_m0(self, x_mean=None, y_mean=None, z_mean=None,
                                x_std=None, y_std=None, z_std=None,
@@ -1501,95 +1629,88 @@ class TabArucoReliability(QWidget):
         """그래프 마커 선택 변경 시 그래프 다시 그리기"""
         self._plot_graphs()
 
+    def _draw_distribution(self, figure, canvas, tvec_array_mm, marker_label):
+        """scatter + histogram 2x3 서브플롯을 주어진 figure에 그림"""
+        figure.clear()
+
+        ax1 = figure.add_subplot(2, 3, 1)
+        ax2 = figure.add_subplot(2, 3, 2)
+        ax3 = figure.add_subplot(2, 3, 3)
+        ax4 = figure.add_subplot(2, 3, 4)
+        ax5 = figure.add_subplot(2, 3, 5)
+        ax6 = figure.add_subplot(2, 3, 6)
+
+        labels = ['X', 'Y', 'Z']
+        scatter_axes = [ax1, ax2, ax3]
+        hist_axes = [ax4, ax5, ax6]
+
+        for i, (sax, hax, label) in enumerate(zip(scatter_axes, hist_axes, labels)):
+            sax.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, i], alpha=0.5, s=10)
+            sax.axhline(np.mean(tvec_array_mm[:, i]), color='r', linestyle='--', linewidth=1)
+            sax.set_ylabel(f'{label} (mm)')
+            sax.set_title(f'{label} Position ({marker_label})')
+            sax.grid(True, alpha=0.3)
+
+            hax.hist(tvec_array_mm[:, i], bins=20, alpha=0.7, edgecolor='black')
+            hax.set_xlabel(f'{label} (mm)')
+            hax.set_ylabel('Count')
+            hax.grid(True, alpha=0.3)
+
+        figure.tight_layout()
+        canvas.draw()
+
     def _plot_graphs(self):
-        """분포 그래프 그리기 (선택된 마커 ID 기준)"""
+        """분포 그래프 그리기 (Raw Data + Outlier 제거)"""
         if not self.collected_data:
             self._clear_graphs()
             return
 
-        # 선택된 마커 확인 (0: ID0/마커1, 1: ID1/마커2)
+        # 선택된 마커 데이터 추출
         selected_marker = self.graph_marker_button_group.checkedId()
-
         if selected_marker == 0:
-            # 마커1 (ID0) 데이터
             detected_data = [d for d in self.collected_data if d['detected'] and d['tvec'] is not None]
-            tvec_key = 'tvec'
             marker_label = f"ID {self.spinTagID1.value()}"
         else:
-            # 마커2 (ID1) 데이터
             detected_data = [d for d in self.collected_data if d.get('detected2') and d.get('tvec2') is not None]
-            tvec_key = 'tvec2'
             marker_label = f"ID {self.spinTagID2.value()}"
 
         if not detected_data:
             self._clear_graphs()
             return
 
-        # tvec 데이터 추출 (tvec을 flatten하여 처리, TF1 좌표계, 미터 단위)
-        tvec_array = np.array([d[tvec_key].flatten() for d in detected_data])
-        # mm 단위로 변환
+        # tvec + euler 추출 (aligned arrays)
+        key_suffix = '' if selected_marker == 0 else '2'
+        tvec_array, euler_array = self._extract_aligned_arrays(detected_data, key_suffix)
         tvec_array_mm = tvec_array * 1000.0
 
-        # 그래프 초기화
-        self.figure.clear()
+        # === Raw Data 탭 ===
+        self._draw_distribution(self.figure_raw, self.canvas_raw, tvec_array_mm, marker_label)
 
-        # 2x3 서브플롯 생성 (X, Y, Z 각각 scatter + histogram)
-        ax1 = self.figure.add_subplot(2, 3, 1)
-        ax2 = self.figure.add_subplot(2, 3, 2)
-        ax3 = self.figure.add_subplot(2, 3, 3)
-        ax4 = self.figure.add_subplot(2, 3, 4)
-        ax5 = self.figure.add_subplot(2, 3, 5)
-        ax6 = self.figure.add_subplot(2, 3, 6)
+        # === Outlier 제거 탭 ===
+        sigma = self.spinSigmaMultiplier.value()
+        min_samples = self.spinMinSamples.value()
+        filtered_tvec, filtered_euler, valid_mask, removal_info = self._remove_outliers(
+            tvec_array, euler_array, sigma=sigma, min_samples=min_samples)
+        filtered_tvec_mm = filtered_tvec * 1000.0
+        removed_count = removal_info['total_removed']
 
-        # X 좌표 scatter plot
-        ax1.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, 0], alpha=0.5, s=10)
-        ax1.axhline(np.mean(tvec_array_mm[:, 0]), color='r', linestyle='--', linewidth=1)
-        ax1.set_ylabel('X (mm)')
-        ax1.set_title(f'X Position ({marker_label})')
-        ax1.grid(True, alpha=0.3)
+        if len(filtered_tvec_mm) > 0:
+            self._draw_distribution(self.figure_filtered, self.canvas_filtered,
+                                    filtered_tvec_mm, f"{marker_label} (filtered)")
+        else:
+            self.figure_filtered.clear()
+            self.canvas_filtered.draw()
 
-        # Y 좌표 scatter plot
-        ax2.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, 1], alpha=0.5, s=10)
-        ax2.axhline(np.mean(tvec_array_mm[:, 1]), color='r', linestyle='--', linewidth=1)
-        ax2.set_ylabel('Y (mm)')
-        ax2.set_title(f'Y Position ({marker_label})')
-        ax2.grid(True, alpha=0.3)
-
-        # Z 좌표 scatter plot
-        ax3.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, 2], alpha=0.5, s=10)
-        ax3.axhline(np.mean(tvec_array_mm[:, 2]), color='r', linestyle='--', linewidth=1)
-        ax3.set_ylabel('Z (mm)')
-        ax3.set_title(f'Z Position ({marker_label})')
-        ax3.grid(True, alpha=0.3)
-
-        # X 좌표 histogram
-        ax4.hist(tvec_array_mm[:, 0], bins=20, alpha=0.7, edgecolor='black')
-        ax4.set_xlabel('X (mm)')
-        ax4.set_ylabel('Count')
-        ax4.grid(True, alpha=0.3)
-
-        # Y 좌표 histogram
-        ax5.hist(tvec_array_mm[:, 1], bins=20, alpha=0.7, edgecolor='black')
-        ax5.set_xlabel('Y (mm)')
-        ax5.set_ylabel('Count')
-        ax5.grid(True, alpha=0.3)
-
-        # Z 좌표 histogram
-        ax6.hist(tvec_array_mm[:, 2], bins=20, alpha=0.7, edgecolor='black')
-        ax6.set_xlabel('Z (mm)')
-        ax6.set_ylabel('Count')
-        ax6.grid(True, alpha=0.3)
-
-        # 레이아웃 조정
-        self.figure.tight_layout()
-
-        # 캔버스 업데이트
-        self.canvas.draw()
+        # 탭 이름에 제거 수 표시
+        self.graph_tab_widget.setTabText(1, f"Outlier 제거 ({removed_count}개 제거)")
 
     def _clear_graphs(self):
         """그래프 초기화"""
-        self.figure.clear()
-        self.canvas.draw()
+        self.figure_raw.clear()
+        self.canvas_raw.draw()
+        self.figure_filtered.clear()
+        self.canvas_filtered.draw()
+        self.graph_tab_widget.setTabText(1, "Outlier 제거")
 
     def _rvec_to_euler(self, rvec):
         """Rotation vector를 Euler 각도로 변환 (Rx, Ry, Rz in degrees)"""
@@ -1615,23 +1736,6 @@ class TabArucoReliability(QWidget):
         # 라디안을 도로 변환
         return [np.degrees(rx), np.degrees(ry), np.degrees(rz)]
 
-    # TODO: Extract JogWidget as reusable component when adding to third tab
-
-    def _on_jog_move(self, axis: str, direction: int):
-        """베이스 좌표계 조그 이동"""
-        step_map = {'x': self.spinJogStepX, 'y': self.spinJogStepY, 'z': self.spinJogStepZ}
-        step = step_map[axis].value()
-        distance = step * direction
-        self._log(f"조그 이동: {axis.upper()} {'+' if direction > 0 else ''}{distance}mm")
-        self.jog_move_requested.emit(axis, distance)
-
-    def _on_jog_rotate(self, axis: str, direction: int):
-        """베이스 좌표계 조그 회전"""
-        step_map = {'rx': self.spinJogStepRx, 'ry': self.spinJogStepRy, 'rz': self.spinJogStepRz}
-        step = step_map[axis].value()
-        angle = step * direction
-        self._log(f"조그 회전: {axis.upper()} {'+' if direction > 0 else ''}{angle}°")
-        self.jog_rotate_requested.emit(axis, angle)
 
     def _log(self, message):
         """로그 출력"""
