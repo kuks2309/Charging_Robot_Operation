@@ -103,6 +103,16 @@ class TabCalibration(QWidget):
         self.calib_step_button_group.addButton(self.radioCalibStep5, 5)
         self.calib_step_button_group.addButton(self.radioCalibStep10, 10)
 
+        # 카메라 선택 버튼 그룹 (DS435/ArduCam)
+        self.camera_select_button_group = QButtonGroup(self)
+        self.camera_select_button_group.addButton(self.radioDS435, 0)
+        self.camera_select_button_group.addButton(self.radioArduCam, 1)
+
+        # 이미지 타입 버튼 그룹 (Color/Depth)
+        self.image_type_button_group = QButtonGroup(self)
+        self.image_type_button_group.addButton(self.radioColorImage, 0)
+        self.image_type_button_group.addButton(self.radioDepthImage, 1)
+
         # 시그널 연결
         self._connect_signals()
 
@@ -123,7 +133,6 @@ class TabCalibration(QWidget):
         self.btnCaptureCalibImage.clicked.connect(self._on_capture_calib_image)
         self.btnClearCalibImages.clicked.connect(self._on_clear_calib_images)
         self.btnRunCalibration.clicked.connect(self._on_run_calibration)
-        self.btnSaveCalibration.clicked.connect(self._on_save_calibration)
         self.btnLoadCalibration.clicked.connect(self._on_load_calibration)
 
         # 체스보드 로봇 정렬 버튼
@@ -563,30 +572,6 @@ class TabCalibration(QWidget):
 
         self._log(f"캘리브레이션 완료! RMS 오차: {ret:.4f}")
 
-    def _on_save_calibration(self):
-        """캘리브레이션 결과 저장"""
-        if self.camera_matrix is None:
-            QMessageBox.warning(self, "경고", "저장할 캘리브레이션 데이터가 없습니다.")
-            return
-
-        # 저장 경로
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"camera_calib_{timestamp}.npz"
-
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, "캘리브레이션 저장", default_name, "NumPy 파일 (*.npz);;All Files (*)"
-        )
-
-        if filepath:
-            np.savez(
-                filepath,
-                camera_matrix=self.camera_matrix,
-                dist_coeffs=self.dist_coeffs,
-                rms_error=self.rms_error
-            )
-            self._log(f"캘리브레이션 저장: {filepath}")
-            QMessageBox.information(self, "완료", f"캘리브레이션이 저장되었습니다.\n{filepath}")
-
     def _on_load_calibration(self):
         """캘리브레이션 결과 로드"""
         filepath, _ = QFileDialog.getOpenFileName(
@@ -672,8 +657,8 @@ class TabCalibration(QWidget):
 
     def update_current_toolframe(self, toolframe: int):
         """현재 툴프레임 업데이트 (외부에서 호출)"""
-        tf_names = {0: "TF0 (기본)", 1: "TF1 (비전)", 2: "TF2", 3: "TF3"}
-        tf_colors = {0: "#666666", 1: "#2196F3", 2: "#FF9800", 3: "#9C27B0"}
+        tf_names = {0: "TF0 (Eye-in-Hand)", 1: "TF1 (비전)", 2: "TF2 (충전)", 3: "TF3 (충전)", 4: "TF4", 5: "TF5 (Hand-Eye)"}
+        tf_colors = {0: "#666666", 1: "#2196F3", 2: "#FF9800", 3: "#9C27B0", 4: "#4CAF50", 5: "#E91E63"}
         name = tf_names.get(toolframe, f"TF{toolframe}")
         color = tf_colors.get(toolframe, "#000000")
         self.labelCalibToolframeValue.setText(name)

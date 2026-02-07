@@ -267,16 +267,18 @@ def generate_base_positions_with_rotation(
 
     base_x, base_y, base_z = base_pose[0], base_pose[1], base_pose[2]
 
-    # 독립 회전 자세 (9개 - 복합 회전 금지)
+    # 독립 회전 자세 (7개 - 복합 회전 금지, 중복 제거)
     rotation_poses = []
-    # Rx만 변화 (Ry=0, Rz=90 고정)
-    for rx in [90, 80, 100]:
+    # 기준 자세 (1개)
+    rotation_poses.append((90, 0, 90))
+    # Rx만 변화 (90 제외, 2개)
+    for rx in [80, 100]:
         rotation_poses.append((rx, 0, 90))
-    # Ry만 변화 (Rx=90, Rz=90 고정)
-    for ry in [-10, 0, 10]:
+    # Ry만 변화 (0 제외, 2개)
+    for ry in [-10, 10]:
         rotation_poses.append((90, ry, 90))
-    # Rz만 변화 (Rx=90, Ry=0 고정)
-    for rz in [80, 90, 100]:
+    # Rz만 변화 (90 제외, 2개)
+    for rz in [80, 100]:
         rotation_poses.append((90, 0, rz))
 
     # 각 회전 자세별로 보정된 기준점에서 32개 XYZ 생성

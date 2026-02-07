@@ -59,7 +59,7 @@ def send_command(client, cmd):
 
 def main():
     parser = argparse.ArgumentParser(description='툴프레임별 위치 테스트')
-    parser.add_argument('--frame', type=int, choices=[0, 1, 2, 3], help='특정 프레임만 테스트')
+    parser.add_argument('--frame', type=int, choices=[0, 1, 2, 3, 4, 5], help='특정 프레임만 테스트')
     args = parser.parse_args()
 
     print(f"로봇 연결 중... ({ROBOT_IP}:{ROBOT_PORT})")

@@ -420,6 +420,99 @@ class TabTaskEdit(QWidget):
             layout.addRow(label, widget)
             self.param_widgets[param_name] = widget
 
+        # 결과 표시 라벨 (has_result_display가 True인 경우)
+        if job_info.get('has_result_display', False):
+            # QLabel은 파일 상단에서 이미 import됨
+            # 구분선
+            separator = QLabel("─" * 30)
+            separator.setStyleSheet("color: gray;")
+            layout.addRow(separator)
+
+            # 결과 헤더
+            result_header = QLabel("📐 결과")
+            result_header.setStyleSheet("font-weight: bold; color: #9C27B0;")
+            layout.addRow(result_header)
+
+            # === 평면 중심 (X, Y, Z 별도 라인) ===
+            pos_header = QLabel("평면 중심")
+            pos_header.setStyleSheet("font-weight: bold; color: #2196F3;")
+            layout.addRow(pos_header)
+
+            label_pos_x = QLabel("-")
+            label_pos_x.setStyleSheet("color: #2196F3; margin-left: 10px;")
+            layout.addRow("  X", label_pos_x)
+            self.param_widgets['_result_pos_x'] = label_pos_x
+
+            label_pos_y = QLabel("-")
+            label_pos_y.setStyleSheet("color: #2196F3; margin-left: 10px;")
+            layout.addRow("  Y", label_pos_y)
+            self.param_widgets['_result_pos_y'] = label_pos_y
+
+            label_pos_z = QLabel("-")
+            label_pos_z.setStyleSheet("color: #2196F3; margin-left: 10px;")
+            layout.addRow("  Z", label_pos_z)
+            self.param_widgets['_result_pos_z'] = label_pos_z
+
+            # === 평면 자세 (Rx, Ry, Rz 별도 라인) ===
+            ori_header = QLabel("평면 자세")
+            ori_header.setStyleSheet("font-weight: bold; color: #4CAF50;")
+            layout.addRow(ori_header)
+
+            label_ori_rx = QLabel("-")
+            label_ori_rx.setStyleSheet("color: #4CAF50; margin-left: 10px;")
+            layout.addRow("  Rx", label_ori_rx)
+            self.param_widgets['_result_ori_rx'] = label_ori_rx
+
+            label_ori_ry = QLabel("-")
+            label_ori_ry.setStyleSheet("color: #4CAF50; margin-left: 10px;")
+            layout.addRow("  Ry", label_ori_ry)
+            self.param_widgets['_result_ori_ry'] = label_ori_ry
+
+            label_ori_rz = QLabel("-")
+            label_ori_rz.setStyleSheet("color: #4CAF50; margin-left: 10px;")
+            layout.addRow("  Rz", label_ori_rz)
+            self.param_widgets['_result_ori_rz'] = label_ori_rz
+
+            # === TCP 보정값 (dRx, dRy, dRz 별도 라인) ===
+            corr_header = QLabel("TCP 보정값")
+            corr_header.setStyleSheet("font-weight: bold; color: #FF5722;")
+            layout.addRow(corr_header)
+
+            label_corr_rx = QLabel("-")
+            label_corr_rx.setStyleSheet("color: #FF5722; margin-left: 10px;")
+            layout.addRow("  dRx", label_corr_rx)
+            self.param_widgets['_result_corr_rx'] = label_corr_rx
+
+            label_corr_ry = QLabel("-")
+            label_corr_ry.setStyleSheet("color: #FF5722; margin-left: 10px;")
+            layout.addRow("  dRy", label_corr_ry)
+            self.param_widgets['_result_corr_ry'] = label_corr_ry
+
+            label_corr_rz = QLabel("-")
+            label_corr_rz.setStyleSheet("color: #FF5722; margin-left: 10px;")
+            layout.addRow("  dRz", label_corr_rz)
+            self.param_widgets['_result_corr_rz'] = label_corr_rz
+
+            # === 최종 TCP (rx, ry, rz) ===
+            final_header = QLabel("최종 TCP")
+            final_header.setStyleSheet("font-weight: bold; color: #9C27B0;")
+            layout.addRow(final_header)
+
+            label_final_rx = QLabel("-")
+            label_final_rx.setStyleSheet("color: #9C27B0; margin-left: 10px;")
+            layout.addRow("  rx", label_final_rx)
+            self.param_widgets['_result_final_rx'] = label_final_rx
+
+            label_final_ry = QLabel("-")
+            label_final_ry.setStyleSheet("color: #9C27B0; margin-left: 10px;")
+            layout.addRow("  ry", label_final_ry)
+            self.param_widgets['_result_final_ry'] = label_final_ry
+
+            label_final_rz = QLabel("-")
+            label_final_rz.setStyleSheet("color: #9C27B0; margin-left: 10px;")
+            layout.addRow("  rz", label_final_rz)
+            self.param_widgets['_result_final_rz'] = label_final_rz
+
         # "현재 위치 읽기" 버튼 추가 (has_read_position 플래그가 있는 경우)
         if job_info.get('has_read_position', False):
             read_btn = QPushButton("현재 위치 읽기")
@@ -623,3 +716,55 @@ class TabTaskEdit(QWidget):
         """태스크 시퀀스 설정"""
         self.task_sequence = sequence
         self._refresh_task_list()
+
+    def update_plane_result(self, plane_pose, correction, current_tcp=None):
+        """평면 추출 결과 표시 업데이트
+
+        Args:
+            plane_pose: 평면 자세 정보
+            correction: TCP 보정 정보
+            current_tcp: 현재 로봇 TCP (x, y, z, rx, ry, rz) - 최종 TCP 계산용
+        """
+        # 평면 중심 (X, Y, Z)
+        if '_result_pos_x' in self.param_widgets:
+            self.param_widgets['_result_pos_x'].setText(f"{plane_pose.x:.2f} mm")
+        if '_result_pos_y' in self.param_widgets:
+            self.param_widgets['_result_pos_y'].setText(f"{plane_pose.y:.2f} mm")
+        if '_result_pos_z' in self.param_widgets:
+            self.param_widgets['_result_pos_z'].setText(f"{plane_pose.z:.2f} mm")
+
+        # 평면 자세 (Rx, Ry, Rz)
+        if '_result_ori_rx' in self.param_widgets:
+            self.param_widgets['_result_ori_rx'].setText(f"{plane_pose.rx:.2f}°")
+        if '_result_ori_ry' in self.param_widgets:
+            self.param_widgets['_result_ori_ry'].setText(f"{plane_pose.ry:.2f}°")
+        if '_result_ori_rz' in self.param_widgets:
+            self.param_widgets['_result_ori_rz'].setText(f"{plane_pose.rz:.2f}°")
+
+        # TCP 보정값 (dRx, dRy, dRz)
+        if '_result_corr_rx' in self.param_widgets:
+            self.param_widgets['_result_corr_rx'].setText(f"{correction.delta_rx:.2f}°")
+        if '_result_corr_ry' in self.param_widgets:
+            self.param_widgets['_result_corr_ry'].setText(f"{correction.delta_ry:.2f}°")
+        if '_result_corr_rz' in self.param_widgets:
+            self.param_widgets['_result_corr_rz'].setText(f"{correction.delta_rz:.2f}°")
+
+        # 최종 TCP (rx, ry, rz) - 회전 행렬 합성 방식 (정확한 계산)
+        if current_tcp is not None and len(current_tcp) >= 6:
+            from services.tcp_corrector import TCPCorrector
+            corrector = TCPCorrector()
+            final_tcp = corrector.compute_final_tcp(current_tcp, correction)
+            _, _, _, final_rx, final_ry, final_rz = final_tcp
+        elif correction.final_rx is not None:
+            final_rx = correction.final_rx
+            final_ry = correction.final_ry
+            final_rz = correction.final_rz
+        else:
+            final_rx = final_ry = final_rz = None
+
+        if '_result_final_rx' in self.param_widgets and final_rx is not None:
+            self.param_widgets['_result_final_rx'].setText(f"{final_rx:.2f}°")
+        if '_result_final_ry' in self.param_widgets and final_ry is not None:
+            self.param_widgets['_result_final_ry'].setText(f"{final_ry:.2f}°")
+        if '_result_final_rz' in self.param_widgets and final_rz is not None:
+            self.param_widgets['_result_final_rz'].setText(f"{final_rz:.2f}°")

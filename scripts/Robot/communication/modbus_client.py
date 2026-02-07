@@ -39,6 +39,11 @@ class ModbusClient:
     STATUS_DONE = 2
     STATUS_ERROR = 3
 
+    # 연결 검증 설정
+    VERIFICATION_TIMEOUT = 2.0  # 검증 타임아웃 (초)
+    VERIFICATION_RETRIES = 3    # 최대 재시도 횟수
+    VERIFICATION_DELAY = 0.5    # 재시도 간 대기 시간 (초)
+
     # 명령 코드 (Main_task.prs와 일치)
     CMD_GO_HOME = 1             # movep(var.p(100))
     CMD_SET_HOME = 2            # (에러 반환)
@@ -49,15 +54,18 @@ class ModbusClient:
     CMD_TCP_ROTATE_X = 14       # tool.rotx(rx) - 툴 좌표계 X축 회전
     CMD_TCP_ROTATE_Y = 15       # tool.roty(ry) - 툴 좌표계 Y축 회전
     CMD_TCP_ROTATE_Z = 16       # tool.rotz(rz) - 툴 좌표계 Z축 회전
+    CMD_TCP_ROTATE_RXRYRZ = 17  # tool.rotx/roty/rotz - 툴 좌표계 RxRyRz 회전
     CMD_MOVE_TO_POSE = 20       # movel(pose) - 절대 좌표 이동
     CMD_GRIPPER_OPEN = 30       # 그리퍼 열기
     CMD_GRIPPER_CLOSE = 31      # 그리퍼 닫기
     CMD_GRIPPER_HOME = 32       # 그리퍼 홈
-    CMD_TOOLFRAME_0 = 40        # toolframe(0)
-    CMD_TOOLFRAME_1 = 41        # toolframe(1)
-    CMD_TOOLFRAME_2 = 42        # toolframe(2)
-    CMD_TOOLFRAME_3 = 43        # toolframe(3)
+    CMD_TOOLFRAME_0 = 40        # toolframe(0) - DEPRECATED, Eye-in-Hand 전용
+    CMD_TOOLFRAME_1 = 41        # toolframe(1) - 비전/캘리브레이션
+    CMD_TOOLFRAME_2 = 42        # toolframe(2) - 충전 작업
+    CMD_TOOLFRAME_3 = 43        # toolframe(3) - 충전 작업
     CMD_WORKFRAME = 44          # workframe(0) - 워크프레임 설정
+    CMD_TOOLFRAME_4 = 45        # toolframe(4) - 추가 툴프레임
+    CMD_TOOLFRAME_5 = 46        # toolframe(5) - Hand-Eye Calibration
     CMD_BASEFRAME = 44          # alias (deprecated)
     CMD_BASE_LINEAR_X = 50      # transx(x) - 베이스 좌표계 X 이동
     CMD_BASE_LINEAR_Y = 51      # transy(y) - 베이스 좌표계 Y 이동
@@ -86,23 +94,98 @@ class ModbusClient:
         return self._connected and self._client is not None
 
     def connect(self) -> Tuple[bool, str]:
-        """로봇에 연결"""
+        """로봇에 연결 및 통신 검증"""
         try:
+            # Step 1: Modbus TCP 클라이언트 생성
             self._client = ModbusTcpClient(
                 host=self.ip,
                 port=self.port,
-                timeout=self.timeout
+                timeout=self.VERIFICATION_TIMEOUT  # 검증용 타임아웃 사용
             )
-            self._connected = self._client.connect()
 
-            if self._connected:
+            # Step 2: TCP 연결
+            print(f"[연결] TCP 연결 시도: {self.ip}:{self.port}")
+            if not self._client.connect():
+                self._connected = False
+                self._client = None
+                return False, f"TCP 연결 실패: {self.ip}:{self.port}"
+
+            print(f"[연결] TCP 연결 성공")
+
+            # Step 3: 통신 검증 (레지스터 읽기)
+            verified, verify_msg = self._verify_communication()
+
+            if verified:
+                # 검증 성공 -> 연결 완료
+                self._connected = True
+                # 타임아웃을 원래 값으로 복원 (향후 operation용)
+                self._client.timeout = self.timeout
                 return True, f"연결 성공: {self.ip}:{self.port}"
             else:
-                return False, f"연결 실패: {self.ip}:{self.port}"
+                # 검증 실패 -> 연결 정리
+                print(f"[연결] 통신 검증 실패, 연결 해제")
+                self._client.close()
+                self._client = None
+                self._connected = False
+                return False, verify_msg
 
         except Exception as e:
+            # 예외 발생 시 정리
             self._connected = False
+            if self._client:
+                try:
+                    self._client.close()
+                except:
+                    pass
+                self._client = None
             return False, f"연결 오류: {e}"
+
+    def _verify_communication(self) -> Tuple[bool, str]:
+        """
+        연결 후 통신 검증: Camera Pose 레지스터 읽기
+
+        Returns:
+            (success: bool, message: str)
+        """
+        import time
+
+        print(f"[통신 검증] 시작 (최대 {self.VERIFICATION_RETRIES}회 시도)")
+
+        for attempt in range(self.VERIFICATION_RETRIES):
+            try:
+                print(f"[통신 검증] 시도 {attempt + 1}/{self.VERIFICATION_RETRIES}")
+
+                # Camera Pose 레지스터 읽기 (직접 호출, is_connected 체크 없음)
+                result = self._client.read_holding_registers(
+                    address=self.REGISTER_CAM_POSE,
+                    count=12
+                )
+
+                # 성공 확인
+                if result and not result.isError():
+                    print(f"[통신 검증] 성공")
+                    return True, "통신 검증 성공"
+                else:
+                    error_msg = str(result) if result else "응답 없음"
+                    print(f"[통신 검증] 실패: {error_msg}")
+
+            except Exception as e:
+                print(f"[통신 검증] 예외: {e}")
+
+            # 재시도 대기 (마지막 시도가 아닌 경우)
+            if attempt < self.VERIFICATION_RETRIES - 1:
+                print(f"[통신 검증] {self.VERIFICATION_DELAY}초 후 재시도...")
+                time.sleep(self.VERIFICATION_DELAY)
+
+                # UI 응답성 유지 (QApplication이 있는 경우)
+                try:
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.processEvents()
+                except:
+                    pass
+
+        # 모든 재시도 실패
+        return False, f"통신 검증 실패: {self.VERIFICATION_RETRIES}회 시도 후 응답 없음"
 
     def disconnect(self) -> Tuple[bool, str]:
         """연결 해제"""
@@ -297,13 +380,13 @@ class ModbusClient:
             return self.wait_for_done(process_events_callback=process_events_callback)
         return True, "명령 전송됨"
 
-    def send_tcp_rotate(self, axis: str, angle: float, wait: bool = True, process_events_callback=None) -> Tuple[bool, str]:
+    def send_tcp_rotate(self, axis: str, angle, wait: bool = True, process_events_callback=None) -> Tuple[bool, str]:
         """
         TCP 상대 회전 (툴 좌표계)
 
         Args:
-            axis: 'rx', 'ry', 'rz'
-            angle: 회전 각도 (deg)
+            axis: 'rx', 'ry', 'rz', 'rxryrz'
+            angle: 회전 각도 (deg) 또는 (rx, ry, rz) 튜플
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
         """
@@ -329,8 +412,16 @@ class ModbusClient:
             self.write_register(self.REGISTER_POSE_RZ, val)
             print(f"[TCP ROTATE] 레지스터: Rz(306)={val}, CMD(351)={self.CMD_TCP_ROTATE_Z}")
             self.write_command(self.CMD_TCP_ROTATE_Z)
+        elif axis.lower() == 'rxryrz' and isinstance(angle, (list, tuple)):
+            rx_val = self.to_uint16(int(angle[0]))
+            ry_val = self.to_uint16(int(angle[1]))
+            rz_val = self.to_uint16(int(angle[2]))
+            # Rx, Ry, Rz 레지스터에 동시 쓰기
+            self.write_registers(self.REGISTER_POSE_RX, [rx_val, ry_val, rz_val])
+            print(f"[TCP ROTATE] 레지스터: Rx={rx_val}, Ry={ry_val}, Rz={rz_val}, CMD(351)={self.CMD_TCP_ROTATE_RXRYRZ}")
+            self.write_command(self.CMD_TCP_ROTATE_RXRYRZ)
         else:
-            return False, "잘못된 축 지정 (rx/ry/rz)"
+            return False, "잘못된 축 지정 (rx/ry/rz/rxryrz) 또는 각도 형식"
 
         if wait:
             result = self.wait_for_done(process_events_callback=process_events_callback)
@@ -401,10 +492,10 @@ class ModbusClient:
 
     def send_set_toolframe(self, frame: int, wait: bool = True, process_events_callback=None) -> Tuple[bool, str]:
         """
-        툴프레임 설정 (command 40-43)
+        툴프레임 설정 (command 40-43, 45-46)
 
         Args:
-            frame: 툴프레임 번호 (0-3)
+            frame: 툴프레임 번호 (0-5, 0은 Eye-in-Hand 전용, 5는 Hand-Eye Calibration)
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
         """
@@ -416,8 +507,12 @@ class ModbusClient:
             cmd = self.CMD_TOOLFRAME_2
         elif frame == 3:
             cmd = self.CMD_TOOLFRAME_3
+        elif frame == 4:
+            cmd = self.CMD_TOOLFRAME_4
+        elif frame == 5:
+            cmd = self.CMD_TOOLFRAME_5
         else:
-            return False, f"잘못된 툴프레임 번호: {frame} (0-3만 가능)"
+            return False, f"잘못된 툴프레임 번호: {frame} (0-5만 가능)"
 
         self.write_command(cmd)
         if wait:

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1200</width>
-    <height>800</height>
+    <height>700</height>
    </rect>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayoutArucoReliability">
@@ -101,6 +101,36 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
            <item>
+            <widget class="QRadioButton" name="radioDS435">
+             <property name="text">
+              <string>DS435</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioArduCam">
+             <property name="text">
+              <string>ArduCam</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerCameraSelect">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
             <widget class="QPushButton" name="btnStartCamera">
              <property name="text">
               <string>카메라 시작</string>
@@ -141,365 +171,247 @@
          <property name="bottomMargin">
           <number>4</number>
          </property>
-         <!-- Translation Statistics -->
+         <!-- Dual Marker Layout -->
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutTranslationStats">
+          <layout class="QHBoxLayout" name="horizontalLayoutDualStats">
+           <property name="spacing">
+            <number>4</number>
+           </property>
+           <!-- Marker1 Statistics Group -->
            <item>
-            <widget class="QLabel" name="labelTranslationTitle">
-             <property name="text">
-              <string>위치 (Translation):</string>
+            <widget class="QGroupBox" name="groupMarker1Stats">
+             <property name="title">
+              <string>마커1 (ID:0)</string>
              </property>
-             <property name="styleSheet">
-              <string>font-weight: bold;</string>
-             </property>
+             <layout class="QFormLayout" name="formLayoutMarker1">
+              <property name="horizontalSpacing">
+               <number>8</number>
+              </property>
+              <property name="verticalSpacing">
+               <number>2</number>
+              </property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelXM1">
+                <property name="text">
+                 <string>X:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLabel" name="labelXMeanValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelYM1">
+                <property name="text">
+                 <string>Y:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLabel" name="labelYMeanValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelZM1">
+                <property name="text">
+                 <string>Z:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLabel" name="labelZMeanValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="labelRxM1">
+                <property name="text">
+                 <string>Rx:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QLabel" name="labelRxMeanValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="labelRyM1">
+                <property name="text">
+                 <string>Ry:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QLabel" name="labelRyMeanValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="labelRzM1">
+                <property name="text">
+                 <string>Rz:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QLabel" name="labelRzMeanValue">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </widget>
            </item>
+           <!-- Marker2 Statistics Group -->
            <item>
-            <spacer name="horizontalSpacerTransStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
+            <widget class="QGroupBox" name="groupMarker2Stats">
+             <property name="title">
+              <string>마커2 (ID:1)</string>
              </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutXStats">
-           <item>
-            <widget class="QLabel" name="labelXMean">
-             <property name="text">
-              <string>X 평균:</string>
-             </property>
+             <layout class="QFormLayout" name="formLayoutMarker2">
+              <property name="horizontalSpacing">
+               <number>8</number>
+              </property>
+              <property name="verticalSpacing">
+               <number>2</number>
+              </property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="labelXM2">
+                <property name="text">
+                 <string>X:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLabel" name="labelXMeanValueM2">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="labelYM2">
+                <property name="text">
+                 <string>Y:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLabel" name="labelYMeanValueM2">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="labelZM2">
+                <property name="text">
+                 <string>Z:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLabel" name="labelZMeanValueM2">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="labelRxM2">
+                <property name="text">
+                 <string>Rx:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QLabel" name="labelRxMeanValueM2">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="labelRyM2">
+                <property name="text">
+                 <string>Ry:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QLabel" name="labelRyMeanValueM2">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="labelRzM2">
+                <property name="text">
+                 <string>Rz:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QLabel" name="labelRzMeanValueM2">
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="styleSheet">
+                 <string>font-weight: bold; color: #2196F3;</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelXMeanValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #2196F3;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelXStd">
-             <property name="text">
-              <string>X 표준편차:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelXStdValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #FF9800;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerXStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutYStats">
-           <item>
-            <widget class="QLabel" name="labelYMean">
-             <property name="text">
-              <string>Y 평균:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelYMeanValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #2196F3;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelYStd">
-             <property name="text">
-              <string>Y 표준편차:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelYStdValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #FF9800;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerYStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutZStats">
-           <item>
-            <widget class="QLabel" name="labelZMean">
-             <property name="text">
-              <string>Z 평균:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelZMeanValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #2196F3;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelZStd">
-             <property name="text">
-              <string>Z 표준편차:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelZStdValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #FF9800;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerZStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <!-- Rotation Statistics -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutRotationStats">
-           <item>
-            <widget class="QLabel" name="labelRotationTitle">
-             <property name="text">
-              <string>회전 (Rotation):</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerRotStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutRxStats">
-           <item>
-            <widget class="QLabel" name="labelRxMean">
-             <property name="text">
-              <string>Rx 평균:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRxMeanValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #2196F3;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRxStd">
-             <property name="text">
-              <string>Rx 표준편차:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRxStdValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #FF9800;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerRxStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutRyStats">
-           <item>
-            <widget class="QLabel" name="labelRyMean">
-             <property name="text">
-              <string>Ry 평균:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRyMeanValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #2196F3;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRyStd">
-             <property name="text">
-              <string>Ry 표준편차:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRyStdValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #FF9800;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerRyStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutRzStats">
-           <item>
-            <widget class="QLabel" name="labelRzMean">
-             <property name="text">
-              <string>Rz 평균:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRzMeanValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #2196F3;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRzStd">
-             <property name="text">
-              <string>Rz 표준편차:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelRzStdValue">
-             <property name="text">
-              <string>-</string>
-             </property>
-             <property name="styleSheet">
-              <string>font-weight: bold; color: #FF9800;</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerRzStats">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
            </item>
           </layout>
          </item>
@@ -575,18 +487,18 @@
       <property name="bottomMargin">
        <number>4</number>
       </property>
-      <!-- Settings (Tag ID, Repeat Count, Stabilization Delay) -->
+      <!-- Settings (Dual Tag ID, Repeat Count, Stabilization Delay) -->
       <item>
        <layout class="QHBoxLayout" name="horizontalLayoutSettings">
         <item>
-         <widget class="QLabel" name="labelTagID">
+         <widget class="QLabel" name="labelTagID1">
           <property name="text">
-           <string>Tag ID:</string>
+           <string>마커1 ID:</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QSpinBox" name="spinTagID">
+         <widget class="QSpinBox" name="spinTagID1">
           <property name="minimum">
            <number>0</number>
           </property>
@@ -599,9 +511,29 @@
          </widget>
         </item>
         <item>
+         <widget class="QLabel" name="labelTagID2">
+          <property name="text">
+           <string>마커2 ID:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinTagID2">
+          <property name="minimum">
+           <number>0</number>
+          </property>
+          <property name="maximum">
+           <number>1000</number>
+          </property>
+          <property name="value">
+           <number>1</number>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QLabel" name="labelRepeatCount">
           <property name="text">
-           <string>반복 횟수:</string>
+           <string>반복:</string>
           </property>
          </widget>
         </item>
@@ -647,6 +579,16 @@
           </property>
           <property name="suffix">
            <string>ms</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="checkSaveImages">
+          <property name="text">
+           <string>Save Images</string>
+          </property>
+          <property name="toolTip">
+           <string>캡처 시 이미지와 CSV를 타임스탬프 폴더에 저장</string>
           </property>
          </widget>
         </item>
@@ -733,6 +675,41 @@
          <property name="bottomMargin">
           <number>4</number>
          </property>
+         <!-- Graph Marker Selection -->
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutGraphSelect">
+           <item>
+            <widget class="QRadioButton" name="radioGraphID0">
+             <property name="text">
+              <string>ID 0</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioGraphID1">
+             <property name="text">
+              <string>ID 1</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerGraphSelect">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
          <item>
           <widget class="QWidget" name="widgetGraphCanvas">
            <property name="minimumSize">
@@ -750,6 +727,13 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayoutExport">
         <item>
+         <widget class="QPushButton" name="btnLoadCSV">
+          <property name="text">
+           <string>CSV 읽기</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QPushButton" name="btnExportCSV">
           <property name="text">
            <string>CSV 저장</string>
@@ -764,6 +748,184 @@
          </widget>
         </item>
        </layout>
+      </item>
+      <!-- 조그 이동 -->
+      <item>
+       <widget class="QGroupBox" name="groupJogMove">
+        <property name="title">
+         <string>조그 이동</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayoutJog">
+         <!-- X축 -->
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelJogX">
+           <property name="text"><string>X:</string></property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QPushButton" name="btnJogXMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepX">
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>100.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>10.0</double></property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QPushButton" name="btnJogXPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Y축 -->
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelJogY">
+           <property name="text"><string>Y:</string></property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="btnJogYMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepY">
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>100.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>10.0</double></property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QPushButton" name="btnJogYPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Z축 -->
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelJogZ">
+           <property name="text"><string>Z:</string></property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QPushButton" name="btnJogZMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepZ">
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>100.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>10.0</double></property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QPushButton" name="btnJogZPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Rx축 -->
+         <item row="3" column="0">
+          <widget class="QLabel" name="labelJogRx">
+           <property name="text"><string>Rx:</string></property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QPushButton" name="btnJogRxMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="3" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepRx">
+           <property name="suffix"><string> deg</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>30.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>5.0</double></property>
+          </widget>
+         </item>
+         <item row="3" column="3">
+          <widget class="QPushButton" name="btnJogRxPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Ry축 -->
+         <item row="4" column="0">
+          <widget class="QLabel" name="labelJogRy">
+           <property name="text"><string>Ry:</string></property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QPushButton" name="btnJogRyMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="4" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepRy">
+           <property name="suffix"><string> deg</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>30.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>5.0</double></property>
+          </widget>
+         </item>
+         <item row="4" column="3">
+          <widget class="QPushButton" name="btnJogRyPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <!-- Rz축 -->
+         <item row="5" column="0">
+          <widget class="QLabel" name="labelJogRz">
+           <property name="text"><string>Rz:</string></property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QPushButton" name="btnJogRzMinus">
+           <property name="text"><string>-</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+         <item row="5" column="2">
+          <widget class="QDoubleSpinBox" name="spinJogStepRz">
+           <property name="suffix"><string> deg</string></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="minimum"><double>0.1</double></property>
+           <property name="maximum"><double>30.0</double></property>
+           <property name="singleStep"><double>1.0</double></property>
+           <property name="value"><double>5.0</double></property>
+          </widget>
+         </item>
+         <item row="5" column="3">
+          <widget class="QPushButton" name="btnJogRzPlus">
+           <property name="text"><string>+</string></property>
+           <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </item>
       <!-- Log Area -->
       <item>

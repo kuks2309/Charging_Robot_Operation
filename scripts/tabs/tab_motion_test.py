@@ -38,11 +38,12 @@ class TabMotionTest(QWidget):
 
         # 버튼 그룹 생성
         self.toolframe_button_group = QButtonGroup(self)
-        self.toolframe_button_group.addButton(self.radioTF0, 0)
         self.toolframe_button_group.addButton(self.radioTF1, 1)
         self.toolframe_button_group.addButton(self.radioTF2, 2)
         self.toolframe_button_group.addButton(self.radioTF3, 3)
-        self.radioTF0.setChecked(True)
+        self.toolframe_button_group.addButton(self.radioTF4, 4)
+        self.toolframe_button_group.addButton(self.radioTF5, 5)
+        self.radioTF1.setChecked(True)
 
         self.step_button_group = QButtonGroup(self)
         self.step_button_group.addButton(self.radioStep01, 1)   # 0.1 -> id=1

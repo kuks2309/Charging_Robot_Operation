@@ -181,7 +181,7 @@ def main():
     parser.add_argument('--drx', type=float, default=0, help='Rx 회전량 (deg)')
     parser.add_argument('--dry', type=float, default=0, help='Ry 회전량 (deg)')
     parser.add_argument('--drz', type=float, default=0, help='Rz 회전량 (deg)')
-    parser.add_argument('--toolframe', type=int, choices=[0, 1, 2, 3], default=None, help='툴프레임 번호 (0-3)')
+    parser.add_argument('--toolframe', type=int, choices=[0, 1, 2, 3, 4, 5], default=None, help='툴프레임 번호 (0-5)')
     args = parser.parse_args()
 
     print(f"로봇 연결 중... ({ROBOT_IP}:{ROBOT_PORT})")

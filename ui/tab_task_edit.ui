@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1200</width>
-    <height>800</height>
+    <height>700</height>
    </rect>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayoutTask">
@@ -539,68 +539,6 @@
             <string>°</string>
            </property>
           </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-
-      <!-- Saved Poses -->
-      <item>
-       <widget class="QGroupBox" name="groupSavedPoses">
-        <property name="title">
-         <string>Saved Poses</string>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayoutSavedPoses">
-         <item>
-          <widget class="QListWidget" name="listSavedPoses">
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>150</height>
-            </size>
-           </property>
-           <property name="alternatingRowColors">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <layout class="QGridLayout" name="gridLayoutPoseButtons">
-           <item row="0" column="0">
-            <widget class="QPushButton" name="btnSavePose">
-             <property name="text">
-              <string>현재위치 저장</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QPushButton" name="btnDeletePose">
-             <property name="text">
-              <string>삭제</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QPushButton" name="btnMoveToPose">
-             <property name="text">
-              <string>선택위치 이동</string>
-             </property>
-             <property name="styleSheet">
-              <string>background-color: #4CAF50; color: white;</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QPushButton" name="btnApproachPose">
-             <property name="text">
-              <string>어프로치</string>
-             </property>
-             <property name="styleSheet">
-              <string>background-color: #2196F3; color: white;</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
          </item>
         </layout>
        </widget>

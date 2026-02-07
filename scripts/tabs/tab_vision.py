@@ -8,7 +8,7 @@ import os
 import cv2
 import numpy as np
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget, QMessageBox
+from PyQt5.QtWidgets import QWidget, QMessageBox, QButtonGroup
 from PyQt5.QtCore import pyqtSignal
 
 from utils import display_frame_on_label, save_snapshot, require_camera_running
@@ -45,6 +45,17 @@ class TabVision(QWidget):
         self.detected_markers = []
         self.current_pose_camera = None
         self.current_pose_world = None
+
+        # 카메라 선택 버튼 그룹 (DS435/ArduCam)
+        self.camera_select_button_group = QButtonGroup(self)
+        self.camera_select_button_group.addButton(self.radioDS435, 0)
+        self.camera_select_button_group.addButton(self.radioArduCam, 1)
+
+        # Vision Processor 버튼 그룹 (Gun/Port/Standard)
+        self.processor_button_group = QButtonGroup(self)
+        self.processor_button_group.addButton(self.radioProcessorGun, 0)
+        self.processor_button_group.addButton(self.radioProcessorPort, 1)
+        self.processor_button_group.addButton(self.radioProcessorStandard, 2)
 
         # 시그널 연결
         self._connect_signals()

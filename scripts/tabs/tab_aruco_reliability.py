@@ -6,10 +6,13 @@ ArUco 태그의 위치/자세 검출 신뢰성을 반복 측정하여 통계적�
 
 import os
 import csv
+import cv2
+import yaml
 import numpy as np
 from datetime import datetime
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget, QFileDialog, QMessageBox, QVBoxLayout
+from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QVBoxLayout, QButtonGroup,
+                              QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap, QImage
 
@@ -30,10 +33,20 @@ from utils.common import (
 # 좌표 변환 유틸리티
 from utils.ar_to_base_tf import camera_to_vision
 
+# 평면 추출 유틸리티
+from services.plane_extractor import PlaneExtractor
+from services.dual_aruco_detector import DualArucoDetector, PlanePose
+from services.tcp_corrector import TCPCorrector
+
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'ui')
 TAB_ARUCO_RELIABILITY_UI = os.path.join(UI_DIR, 'tab_aruco_reliability.ui')
+
+# 캘리브레이션 파일 경로
+CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
+DS435_CALIB_FILE = os.path.join(CONFIG_DIR, 'ds435_calibration.yaml')
+ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'arducam_calibration.yaml')
 
 
 class TabArucoReliability(QWidget):
@@ -43,6 +56,8 @@ class TabArucoReliability(QWidget):
     log_message = pyqtSignal(str)
     camera_start_requested = pyqtSignal()
     camera_stop_requested = pyqtSignal()
+    jog_move_requested = pyqtSignal(str, float)  # axis, distance(mm)
+    jog_rotate_requested = pyqtSignal(str, float)  # axis, angle(deg)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -53,14 +68,25 @@ class TabArucoReliability(QWidget):
         # 카메라/비전 매니저 참조
         self.camera_manager = None
         self.vision_manager = None
+        self.robot = None
 
         # 현재 프레임
         self.current_frame = None
+        self.undistorted_frame = None  # undistort 적용된 프레임
+
+        # 캘리브레이션 데이터
+        self.camera_matrix = None
+        self.dist_coeffs = None
+        self._current_camera_type = None  # 'ds435' or 'arducam'
 
         # 캡처 상태
         self.is_capturing = False
         self.capture_count = 0
         self.max_captures = 50
+
+        # 이미지 저장 설정
+        self.save_images = False
+        self.save_folder = None
 
         # 수집된 데이터
         self.collected_data = []  # List of dicts: {timestamp, tag_id, detected, tvec, rvec, euler}
@@ -78,11 +104,145 @@ class TabArucoReliability(QWidget):
         self.capture_timer = QTimer()
         self.capture_timer.timeout.connect(self._on_capture_next)
 
+        # 카메라 선택 버튼 그룹 (DS435/ArduCam)
+        self.camera_select_button_group = QButtonGroup(self)
+        self.camera_select_button_group.addButton(self.radioDS435, 0)
+        self.camera_select_button_group.addButton(self.radioArduCam, 1)
+
+        # 그래프 마커 선택 버튼 그룹 (ID0/ID1)
+        self.graph_marker_button_group = QButtonGroup(self)
+        self.graph_marker_button_group.addButton(self.radioGraphID0, 0)
+        self.graph_marker_button_group.addButton(self.radioGraphID1, 1)
+        self.graph_marker_button_group.buttonClicked.connect(self._on_graph_marker_changed)
+
+        # Disambiguation UI elements (프로그래매틱하게 추가)
+        self._setup_disambiguation_ui()
+
         # 시그널 연결
         self._connect_signals()
 
         # 초기화
         self._init_ui()
+
+    def _setup_disambiguation_ui(self):
+        """Disambiguation UI 요소 설정"""
+        # First row: Disambiguation controls
+        self.disambiguation_layout = QHBoxLayout()
+
+        # Disambiguation checkbox
+        self.checkUseDisambiguation = QCheckBox("Use Disambiguation")
+        self.checkUseDisambiguation.setChecked(True)
+
+        # Known distance spinbox
+        self.spinKnownDistance = QDoubleSpinBox()
+        self.spinKnownDistance.setRange(50.0, 500.0)
+        self.spinKnownDistance.setValue(130.39)
+        self.spinKnownDistance.setSingleStep(0.1)
+        self.spinKnownDistance.setDecimals(2)
+        self.spinKnownDistance.setSuffix(" mm")
+
+        # Distance error label
+        self.labelDistanceError = QLabel("Distance Error: -- mm")
+
+        # 레이아웃에 추가
+        self.disambiguation_layout.addWidget(self.checkUseDisambiguation)
+        self.disambiguation_layout.addWidget(QLabel("Known Distance:"))
+        self.disambiguation_layout.addWidget(self.spinKnownDistance)
+        self.disambiguation_layout.addWidget(self.labelDistanceError)
+        self.disambiguation_layout.addStretch()
+
+        # Second row: Precision target controls
+        self.precision_layout = QHBoxLayout()
+
+        # Iterative outlier checkbox
+        self.checkIterativeOutlier = QCheckBox("Iterative Outlier")
+        self.checkIterativeOutlier.setChecked(False)
+
+        # Target position std spinbox
+        self.spinTargetPosStd = QDoubleSpinBox()
+        self.spinTargetPosStd.setRange(0.1, 5.0)
+        self.spinTargetPosStd.setValue(0.5)
+        self.spinTargetPosStd.setSingleStep(0.1)
+        self.spinTargetPosStd.setDecimals(1)
+        self.spinTargetPosStd.setSuffix(" mm")
+
+        # Target rotation std spinbox
+        self.spinTargetRotStd = QDoubleSpinBox()
+        self.spinTargetRotStd.setRange(0.1, 5.0)
+        self.spinTargetRotStd.setValue(0.5)
+        self.spinTargetRotStd.setSingleStep(0.1)
+        self.spinTargetRotStd.setDecimals(1)
+        self.spinTargetRotStd.setSuffix(" deg")
+
+        # Minimum samples spinbox
+        self.spinMinSamples = QSpinBox()
+        self.spinMinSamples.setRange(5, 30)
+        self.spinMinSamples.setValue(10)
+        self.spinMinSamples.setSingleStep(1)
+
+        # 레이아웃에 추가
+        self.precision_layout.addWidget(self.checkIterativeOutlier)
+        self.precision_layout.addWidget(QLabel("Target Pos Std:"))
+        self.precision_layout.addWidget(self.spinTargetPosStd)
+        self.precision_layout.addWidget(QLabel("Target Rot Std:"))
+        self.precision_layout.addWidget(self.spinTargetRotStd)
+        self.precision_layout.addWidget(QLabel("Min Samples:"))
+        self.precision_layout.addWidget(self.spinMinSamples)
+        self.precision_layout.addStretch()
+
+        # groupControl 레이아웃에 disambiguation 컨트롤 추가
+        if hasattr(self, 'groupControl') and self.groupControl.layout() is not None:
+            group_layout = self.groupControl.layout()
+            group_layout.addLayout(self.disambiguation_layout)
+            group_layout.addLayout(self.precision_layout)
+
+        # 평면 결과 라벨들 생성 (프로그래매틱)
+        self._setup_plane_result_labels()
+
+    def _setup_plane_result_labels(self):
+        """평면 결과 표시 라벨 설정"""
+        # groupStatistics 레이아웃에 평면 결과 섹션 추가
+        if not hasattr(self, 'groupStatistics') or self.groupStatistics.layout() is None:
+            return
+
+        stats_layout = self.groupStatistics.layout()
+
+        # 구분선
+        separator = QLabel("─" * 40)
+        separator.setStyleSheet("color: gray; margin-top: 10px;")
+        stats_layout.addWidget(separator)
+
+        # 평면 결과 헤더
+        plane_header = QLabel("📐 평면 결과 (Dual ArUco)")
+        plane_header.setStyleSheet("font-weight: bold; font-size: 12px; color: #9C27B0; margin-top: 5px;")
+        stats_layout.addWidget(plane_header)
+
+        # 평면 위치 라벨
+        plane_pos_layout = QHBoxLayout()
+        plane_pos_layout.addWidget(QLabel("위치:"))
+        self.labelPlanePosition = QLabel("-")
+        self.labelPlanePosition.setStyleSheet("color: #2196F3;")
+        plane_pos_layout.addWidget(self.labelPlanePosition)
+        plane_pos_layout.addStretch()
+        stats_layout.addLayout(plane_pos_layout)
+
+        # 평면 자세 라벨
+        plane_ori_layout = QHBoxLayout()
+        plane_ori_layout.addWidget(QLabel("자세:"))
+        self.labelPlaneOrientation = QLabel("-")
+        self.labelPlaneOrientation.setStyleSheet("color: #4CAF50;")
+        plane_ori_layout.addWidget(self.labelPlaneOrientation)
+        plane_ori_layout.addStretch()
+        stats_layout.addLayout(plane_ori_layout)
+
+        # TCP 보정값 라벨
+        tcp_corr_layout = QHBoxLayout()
+        tcp_corr_layout.addWidget(QLabel("TCP 보정:"))
+        self.labelTCPCorrection = QLabel("-")
+        self.labelTCPCorrection.setStyleSheet("color: #FF5722;")
+        tcp_corr_layout.addWidget(self.labelTCPCorrection)
+        tcp_corr_layout.addStretch()
+        stats_layout.addLayout(tcp_corr_layout)
 
     def _connect_signals(self):
         """내부 시그널-슬롯 연결"""
@@ -96,14 +256,30 @@ class TabArucoReliability(QWidget):
         self.btnReset.clicked.connect(self._on_reset)
 
         # 내보내기 버튼
+        self.btnLoadCSV.clicked.connect(self._on_load_csv)
         self.btnExportCSV.clicked.connect(self._on_export_csv)
         self.btnExportGraph.clicked.connect(self._on_export_graph)
+
+        # 조그 이동
+        self.btnJogXMinus.clicked.connect(lambda: self._on_jog_move('x', -1))
+        self.btnJogXPlus.clicked.connect(lambda: self._on_jog_move('x', 1))
+        self.btnJogYMinus.clicked.connect(lambda: self._on_jog_move('y', -1))
+        self.btnJogYPlus.clicked.connect(lambda: self._on_jog_move('y', 1))
+        self.btnJogZMinus.clicked.connect(lambda: self._on_jog_move('z', -1))
+        self.btnJogZPlus.clicked.connect(lambda: self._on_jog_move('z', 1))
+        self.btnJogRxMinus.clicked.connect(lambda: self._on_jog_rotate('rx', -1))
+        self.btnJogRxPlus.clicked.connect(lambda: self._on_jog_rotate('rx', 1))
+        self.btnJogRyMinus.clicked.connect(lambda: self._on_jog_rotate('ry', -1))
+        self.btnJogRyPlus.clicked.connect(lambda: self._on_jog_rotate('ry', 1))
+        self.btnJogRzMinus.clicked.connect(lambda: self._on_jog_rotate('rz', -1))
+        self.btnJogRzPlus.clicked.connect(lambda: self._on_jog_rotate('rz', 1))
 
     def _init_ui(self):
         """UI 초기화"""
         self.progressBar.setValue(0)
         self.textLog.setPlainText("신뢰성 검증을 시작하려면 '캡처 시작' 버튼을 누르세요.")
-        self._update_statistics_ui()
+        self._update_statistics_ui_m0()
+        self._update_statistics_ui_m1()
 
     def set_camera_manager(self, camera_manager):
         """카메라 매니저 설정"""
@@ -113,40 +289,85 @@ class TabArucoReliability(QWidget):
         """비전 매니저 설정"""
         self.vision_manager = vision_manager
 
+    def set_robot(self, robot):
+        """로봇 클라이언트 설정"""
+        self.robot = robot
+
+    def _load_calibration(self, camera_type: str):
+        """카메라 캘리브레이션 파일 로드"""
+        if camera_type == self._current_camera_type and self.camera_matrix is not None:
+            return  # 이미 로드됨
+
+        calib_file = DS435_CALIB_FILE if camera_type == 'ds435' else ARDUCAM_CALIB_FILE
+
+        try:
+            with open(calib_file, 'r') as f:
+                data = yaml.safe_load(f)
+
+            # OpenCV YAML 형식 파싱 (rows, cols, data 구조)
+            cam_data = data['camera_matrix']
+            self.camera_matrix = np.array(cam_data['data'], dtype=np.float64).reshape(
+                cam_data['rows'], cam_data['cols']
+            )
+
+            dist_data = data['distortion_coefficients']
+            self.dist_coeffs = np.array(dist_data['data'], dtype=np.float64).reshape(
+                dist_data['rows'], dist_data['cols']
+            )
+
+            self._current_camera_type = camera_type
+            self._log(f"캘리브레이션 로드: {calib_file}")
+
+        except Exception as e:
+            self._log(f"캘리브레이션 로드 실패: {e}")
+            self.camera_matrix = None
+            self.dist_coeffs = None
+
     def update_frame(self, frame):
-        """카메라 프레임 업데이트"""
+        """카메라 프레임 업데이트 (Dual ArUco 지원, undistort 적용)"""
         if frame is None:
             return
 
         self.current_frame = frame.copy()
 
-        # ArUco 태그 검출 및 표시
+        # 카메라 타입에 따른 캘리브레이션 로드
+        camera_type = 'arducam' if self.radioArduCam.isChecked() else 'ds435'
+        self._load_calibration(camera_type)
+
+        # undistort 적용
+        if self.camera_matrix is not None and self.dist_coeffs is not None:
+            self.undistorted_frame = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
+        else:
+            self.undistorted_frame = frame.copy()
+
+        # ArUco 태그 검출 및 표시 (Dual 마커) - undistorted 프레임 사용
         if self.vision_manager:
-            tag_id = self.spinTagID.value()
-            _, markers = self.vision_manager.detect_markers(frame)
+            tag_id1 = self.spinTagID1.value()
+            tag_id2 = self.spinTagID2.value()
+            target_ids = {tag_id1, tag_id2}
+            _, markers = self.vision_manager.detect_markers(self.undistorted_frame)
+
+            # 마커별 색상 (ID1: 초록, ID2: 파랑)
+            colors = {tag_id1: (0, 255, 0), tag_id2: (255, 0, 0)}
 
             # 검출된 마커 그리기
             if markers:
                 for marker in markers:
-                    if marker['id'] == tag_id:
-                        # 마커 윤곽선 그리기
+                    if marker['id'] in target_ids:
                         corners = marker['corners']
-                        # corners shape이 (1, 4, 2)인 경우 (4, 2)로 변환
                         if len(corners.shape) == 3:
                             corners = corners[0]
 
+                        color = colors.get(marker['id'], (0, 255, 0))
                         for i in range(4):
                             pt1 = tuple(corners[i].astype(int))
                             pt2 = tuple(corners[(i + 1) % 4].astype(int))
-                            import cv2
-                            cv2.line(frame, pt1, pt2, (0, 255, 0), 2)
+                            cv2.line(frame, pt1, pt2, color, 2)
 
-                        # Tag ID 표시
                         center = tuple(corners.mean(axis=0).astype(int))
                         cv2.putText(frame, f"ID:{marker['id']}", center,
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        # 프레임 표시
         display_frame_on_label(frame, self.labelCameraView)
 
     def _on_start_camera(self):
@@ -175,16 +396,29 @@ class TabArucoReliability(QWidget):
         self.max_captures = self.spinRepeatCount.value()
         self.is_capturing = True
 
+        # 이미지 저장 설정
+        self.save_images = hasattr(self, 'checkSaveImages') and self.checkSaveImages.isChecked()
+        self.save_folder = None
+        if self.save_images:
+            # 타임스탬프 폴더 생성
+            base_dir = "/home/argoon/Project/Charging_Robot_Operation/aruco_analysis"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.save_folder = os.path.join(base_dir, timestamp)
+            os.makedirs(self.save_folder, exist_ok=True)
+            self._log(f"이미지 저장 폴더: {self.save_folder}")
+
         # UI 업데이트
         self.btnStartCapture.setEnabled(False)
         self.btnStopCapture.setEnabled(True)
-        self.spinTagID.setEnabled(False)
+        self.spinTagID1.setEnabled(False)
+        self.spinTagID2.setEnabled(False)
         self.spinRepeatCount.setEnabled(False)
         self.spinStabilizationDelay.setEnabled(False)
+        self.groupJogMove.setEnabled(False)
         self.progressBar.setValue(0)
         self.progressBar.setMaximum(self.max_captures)
         self.textLog.clear()
-        self._log(f"ArUco Tag {self.spinTagID.value()} 신뢰성 검증 시작 ({self.max_captures}회)")
+        self._log(f"Dual ArUco (ID:{self.spinTagID1.value()}, ID:{self.spinTagID2.value()}) 신뢰성 검증 시작 ({self.max_captures}회)")
 
         # 캡처 타이머 시작
         delay_ms = self.spinStabilizationDelay.value()
@@ -198,82 +432,117 @@ class TabArucoReliability(QWidget):
         # UI 업데이트
         self.btnStartCapture.setEnabled(True)
         self.btnStopCapture.setEnabled(False)
-        self.spinTagID.setEnabled(True)
+        self.spinTagID1.setEnabled(True)
+        self.spinTagID2.setEnabled(True)
         self.spinRepeatCount.setEnabled(True)
         self.spinStabilizationDelay.setEnabled(True)
+        self.groupJogMove.setEnabled(True)
 
         self._log(f"캡처 중지됨 (총 {self.capture_count}/{self.max_captures}회)")
 
     def _on_capture_next(self):
-        """다음 캡처 수행"""
+        """다음 캡처 수행 (Dual ArUco 검출, Disambiguation 지원)"""
         if not self.is_capturing or self.capture_count >= self.max_captures:
             self._on_capture_complete()
             return
 
-        # ArUco 태그 검출
-        tag_id = self.spinTagID.value()
+        tag_id1 = self.spinTagID1.value()
+        tag_id2 = self.spinTagID2.value()
         timestamp = datetime.now().isoformat()
 
-        if self.current_frame is None:
+        if self.undistorted_frame is None:
             self._log(f"[{self.capture_count + 1}/{self.max_captures}] 프레임 없음")
             self.capture_count += 1
             self.progressBar.setValue(self.capture_count)
             return
 
-        # 태그 검출
-        _, markers = self.vision_manager.detect_markers(self.current_frame)
+        # Disambiguation 체크 여부 확인
+        use_disambiguation = hasattr(self, 'checkUseDisambiguation') and self.checkUseDisambiguation.isChecked()
+        current_distance_error = None  # Track for logging
 
-        detected = False
-        tvec = None
-        rvec = None
-        euler = None
+        if use_disambiguation:
+            # Known distance 가져오기 (mm -> m)
+            known_distance_m = self.spinKnownDistance.value() / 1000.0
+            self._log(f"[Capture] Using disambiguation: True, known_distance={known_distance_m * 1000:.2f}mm")
+
+            # Disambiguation 방식으로 검출 (returns tuple)
+            vis_frame, marker1_pose, marker2_pose, measured_distance, distance_error = \
+                self.vision_manager.detect_markers_disambiguated(
+                    self.undistorted_frame,
+                    (tag_id1, tag_id2),
+                    known_distance_m
+                )
+
+            if marker1_pose is not None and marker2_pose is not None:
+                markers = [marker1_pose, marker2_pose]
+                current_distance_error = distance_error
+                # Distance error 표시
+                if hasattr(self, 'labelDistanceError'):
+                    self.labelDistanceError.setText(f"Distance Error: {distance_error * 1000:.2f} mm")
+            else:
+                markers = []
+                if hasattr(self, 'labelDistanceError'):
+                    self.labelDistanceError.setText("Distance Error: -- mm")
+        else:
+            # 기존 방식으로 검출
+            _, markers = self.vision_manager.detect_markers(self.undistorted_frame)
+
+        # Dual 마커 검출
+        marker1_data = None
+        marker2_data = None
 
         if markers:
             for marker in markers:
-                if marker['id'] == tag_id:
-                    detected = True
-                    tvec_cam = marker.get('tvec', None)
-                    rvec_cam = marker.get('rvec', None)
+                if marker['id'] == tag_id1:
+                    marker1_data = self._extract_marker_data(marker)
+                elif marker['id'] == tag_id2:
+                    marker2_data = self._extract_marker_data(marker)
 
-                    # Camera 좌표계 → TF1(Vision) 좌표계 변환
-                    if tvec_cam is not None and rvec_cam is not None:
-                        tvec, rvec = camera_to_vision(tvec_cam, rvec_cam)
+        # 두 마커 모두 검출 시 평면 정보 계산
+        both_detected = marker1_data is not None and marker2_data is not None
 
-                        # Euler 각도 계산 (TF1 좌표계 rvec에서)
-                        euler = self._rvec_to_euler(rvec)
-                        # 디버깅: Euler 각도 확인
-                        self._log(f"  TF1 좌표 - X:{tvec[0]*1000:.1f} Y:{tvec[1]*1000:.1f} Z:{tvec[2]*1000:.1f} mm")
-                        self._log(f"  Euler: Rx={euler[0]:.2f}° Ry={euler[1]:.2f}° Rz={euler[2]:.2f}°")
-                    else:
-                        tvec = None
-                        rvec = None
-                        euler = None
-                        self._log(f"  경고: tvec 또는 rvec이 None입니다")
-                    break
-
-        # 데이터 저장
+        # 데이터 저장 (마커1 기준, 마커2 정보도 포함)
         data_entry = {
             'timestamp': timestamp,
-            'tag_id': tag_id,
-            'detected': detected,
-            'tvec': tvec,
-            'rvec': rvec,
-            'euler': euler,
+            'tag_id': tag_id1,
+            'tag_id2': tag_id2,
+            'detected': marker1_data is not None,
+            'detected2': marker2_data is not None,
+            'both_detected': both_detected,
+            'tvec': marker1_data['tvec'] if marker1_data else None,
+            'rvec': marker1_data['rvec'] if marker1_data else None,
+            'euler': marker1_data['euler'] if marker1_data else None,
+            'tvec2': marker2_data['tvec'] if marker2_data else None,
+            'rvec2': marker2_data['rvec'] if marker2_data else None,
+            'euler2': marker2_data['euler'] if marker2_data else None,
         }
         self.collected_data.append(data_entry)
 
-        # 로그 출력
-        if detected and tvec is not None:
-            # tvec을 flatten하여 (3,) 형태로 변환 (TF1 좌표계, 미터 단위)
-            tvec_flat = tvec.flatten()
-            x, y, z = tvec_flat[0] * 1000.0, tvec_flat[1] * 1000.0, tvec_flat[2] * 1000.0  # m → mm
-            self._log(f"[{self.capture_count + 1}/{self.max_captures}] 검출 성공 (TF1) - X:{x:.1f} Y:{y:.1f} Z:{z:.1f} mm")
-        else:
-            self._log(f"[{self.capture_count + 1}/{self.max_captures}] 검출 실패")
+        # 이미지 저장
+        if self.save_images and self.save_folder and self.undistorted_frame is not None:
+            import cv2
+            img_filename = f"frame_{self.capture_count + 1:04d}.jpg"
+            img_path = os.path.join(self.save_folder, img_filename)
+            cv2.imwrite(img_path, self.undistorted_frame)
 
-        # 진행률 업데이트
+        # 로그
+        status1 = "O" if marker1_data else "X"
+        status2 = "O" if marker2_data else "X"
+        dist_err_str = f" distErr={current_distance_error*1000:.2f}mm" if current_distance_error is not None else ""
+        self._log(f"[{self.capture_count + 1}/{self.max_captures}] ID{tag_id1}:{status1} ID{tag_id2}:{status2}{dist_err_str}")
+
         self.capture_count += 1
         self.progressBar.setValue(self.capture_count)
+
+    def _extract_marker_data(self, marker):
+        """마커에서 tvec, rvec, euler 추출"""
+        tvec_cam = marker.get('tvec', None)
+        rvec_cam = marker.get('rvec', None)
+        if tvec_cam is None or rvec_cam is None:
+            return None
+        tvec, rvec = camera_to_vision(tvec_cam, rvec_cam)
+        euler = self._rvec_to_euler(rvec)
+        return {'tvec': tvec, 'rvec': rvec, 'euler': euler}
 
     def _on_capture_complete(self):
         """캡처 완료"""
@@ -283,9 +552,11 @@ class TabArucoReliability(QWidget):
         # UI 복원
         self.btnStartCapture.setEnabled(True)
         self.btnStopCapture.setEnabled(False)
-        self.spinTagID.setEnabled(True)
+        self.spinTagID1.setEnabled(True)
+        self.spinTagID2.setEnabled(True)
         self.spinRepeatCount.setEnabled(True)
         self.spinStabilizationDelay.setEnabled(True)
+        self.groupJogMove.setEnabled(True)
 
         self._log(f"\n캡처 완료: 총 {self.capture_count}회")
 
@@ -295,6 +566,10 @@ class TabArucoReliability(QWidget):
         # 그래프 그리기
         self._plot_graphs()
 
+        # 이미지 저장 모드일 때 CSV도 같은 폴더에 자동 저장
+        if self.save_images and self.save_folder:
+            self._auto_save_csv_to_folder()
+
     def _on_reset(self):
         """초기화"""
         self.collected_data = []
@@ -302,8 +577,135 @@ class TabArucoReliability(QWidget):
         self.progressBar.setValue(0)
         self.textLog.clear()
         self._log("초기화 완료")
-        self._update_statistics_ui()
+        self._update_statistics_ui_m0()
+        self._update_statistics_ui_m1()
+        self._update_plane_result_ui()
         self._clear_graphs()
+
+    def _on_load_csv(self):
+        """CSV 파일 읽기"""
+        # 파일 선택 대화상자
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "CSV 읽기", "", "CSV Files (*.csv)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            # 기존 데이터 초기화
+            self.collected_data = []
+            self.capture_count = 0
+            self.progressBar.setValue(0)
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+
+                # 헤더 읽기
+                header = next(reader)
+
+                # 헤더 검증
+                expected_header = ['Timestamp', 'Tag_ID', 'Detected', 'X_TF1(mm)', 'Y_TF1(mm)', 'Z_TF1(mm)', 'Rx_TF1(deg)', 'Ry_TF1(deg)', 'Rz_TF1(deg)']
+                if header != expected_header:
+                    QMessageBox.warning(
+                        self,
+                        "경고",
+                        f"CSV 파일 형식이 올바르지 않습니다.\n예상 헤더: {expected_header}\n실제 헤더: {header}"
+                    )
+                    return
+
+                # 데이터 읽기 (17컬럼: Dual 마커 포맷, 9컬럼: 레거시 단일 마커 포맷)
+                loaded_count = 0
+                for row in reader:
+                    if len(row) == 17:
+                        # 신규 Dual 마커 포맷
+                        timestamp = row[0]
+                        tag_id1 = int(row[1])
+                        detected1 = row[2].lower() in ('true', '1', 'yes')
+                        tag_id2 = int(row[9])
+                        detected2 = row[10].lower() in ('true', '1', 'yes')
+
+                        tvec, euler = None, None
+                        tvec2, euler2 = None, None
+
+                        if detected1:
+                            try:
+                                tvec = np.array([float(row[3]) / 1000.0, float(row[4]) / 1000.0, float(row[5]) / 1000.0])
+                                euler = [float(row[6]), float(row[7]), float(row[8])]
+                            except (ValueError, IndexError):
+                                detected1, tvec, euler = False, None, None
+
+                        if detected2:
+                            try:
+                                tvec2 = np.array([float(row[11]) / 1000.0, float(row[12]) / 1000.0, float(row[13]) / 1000.0])
+                                euler2 = [float(row[14]), float(row[15]), float(row[16])]
+                            except (ValueError, IndexError):
+                                detected2, tvec2, euler2 = False, None, None
+
+                        data_entry = {
+                            'timestamp': timestamp,
+                            'tag_id': tag_id1, 'tag_id2': tag_id2,
+                            'detected': detected1, 'detected2': detected2,
+                            'both_detected': detected1 and detected2,
+                            'tvec': tvec, 'rvec': None, 'euler': euler,
+                            'tvec2': tvec2, 'rvec2': None, 'euler2': euler2,
+                        }
+                    elif len(row) == 9:
+                        # 레거시 단일 마커 포맷
+                        timestamp = row[0]
+                        tag_id = int(row[1])
+                        detected = row[2].lower() in ('true', '1', 'yes')
+                        tvec, euler = None, None
+
+                        if detected:
+                            try:
+                                tvec = np.array([float(row[3]) / 1000.0, float(row[4]) / 1000.0, float(row[5]) / 1000.0])
+                                euler = [float(row[6]), float(row[7]), float(row[8])]
+                            except (ValueError, IndexError):
+                                detected, tvec, euler = False, None, None
+
+                        data_entry = {
+                            'timestamp': timestamp,
+                            'tag_id': tag_id,
+                            'detected': detected,
+                            'tvec': tvec, 'rvec': None, 'euler': euler,
+                        }
+                    else:
+                        continue
+
+                    self.collected_data.append(data_entry)
+                    loaded_count += 1
+
+                self._log(f"CSV 파일 읽기 완료: {file_path}")
+                self._log(f"총 {loaded_count}개 데이터 로드됨")
+
+                # Tag ID 업데이트 (첫 번째 데이터의 Tag ID 사용)
+                if self.collected_data:
+                    first_tag_id = self.collected_data[0]['tag_id']
+                    self.spinTagID1.setValue(first_tag_id)
+                    # tag_id2가 있으면 설정
+                    if 'tag_id2' in self.collected_data[0]:
+                        self.spinTagID2.setValue(self.collected_data[0]['tag_id2'])
+
+                # 진행률 바 업데이트
+                self.progressBar.setValue(loaded_count)
+                self.progressBar.setMaximum(loaded_count)
+
+                # 통계 계산 및 표시
+                self._calculate_and_display_statistics()
+
+                # 그래프 그리기
+                self._plot_graphs()
+
+                QMessageBox.information(
+                    self,
+                    "성공",
+                    f"CSV 파일을 성공적으로 읽었습니다.\n로드된 데이터: {loaded_count}개"
+                )
+
+        except Exception as e:
+            self._log(f"CSV 읽기 오류: {str(e)}")
+            QMessageBox.critical(self, "오류", f"CSV 파일 읽기 실패:\n{str(e)}")
 
     def _on_export_csv(self):
         """CSV 내보내기"""
@@ -311,11 +713,22 @@ class TabArucoReliability(QWidget):
             QMessageBox.warning(self, "경고", "저장할 데이터가 없습니다.")
             return
 
-        # 파일 저장 대화상자
-        tag_id = self.spinTagID.value()
-        default_name = f"aruco_reliability_id{tag_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        # 파일 저장 대화상자 (Dual ArUco)
+        tag_id1 = self.spinTagID1.value()
+        tag_id2 = self.spinTagID2.value()
+        default_name = f"aruco_dual_id{tag_id1}_{tag_id2}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+        # 이미지 저장 폴더가 있으면 해당 폴더 사용, 없으면 기본 aruco_analysis 폴더
+        if hasattr(self, 'save_folder') and self.save_folder and os.path.exists(self.save_folder):
+            default_dir = self.save_folder
+        else:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            default_dir = os.path.join(project_root, "aruco_analysis")
+            os.makedirs(default_dir, exist_ok=True)
+        default_path = os.path.join(default_dir, default_name)
+
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "CSV 저장", default_name, "CSV Files (*.csv)"
+            self, "CSV 저장", default_path, "CSV Files (*.csv)"
         )
 
         if not file_path:
@@ -325,23 +738,46 @@ class TabArucoReliability(QWidget):
             with open(file_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
 
-                # 헤더 (TF1 좌표계, 위치: mm, 회전: deg)
-                writer.writerow(['Timestamp', 'Tag_ID', 'Detected', 'X_TF1(mm)', 'Y_TF1(mm)', 'Z_TF1(mm)', 'Rx_TF1(deg)', 'Ry_TF1(deg)', 'Rz_TF1(deg)'])
+                # 헤더 (TF1 좌표계, 위치: mm, 회전: deg) - Dual 마커 지원
+                writer.writerow([
+                    'Timestamp',
+                    'Tag_ID1', 'Detected1', 'X1_TF1(mm)', 'Y1_TF1(mm)', 'Z1_TF1(mm)', 'Rx1_TF1(deg)', 'Ry1_TF1(deg)', 'Rz1_TF1(deg)',
+                    'Tag_ID2', 'Detected2', 'X2_TF1(mm)', 'Y2_TF1(mm)', 'Z2_TF1(mm)', 'Rx2_TF1(deg)', 'Ry2_TF1(deg)', 'Rz2_TF1(deg)'
+                ])
 
                 # 데이터
                 for entry in self.collected_data:
-                    row = [entry['timestamp'], entry['tag_id'], entry['detected']]
+                    row = [entry['timestamp']]
 
-                    if entry['detected'] and entry['tvec'] is not None:
-                        # tvec을 flatten하여 처리 (TF1 좌표계, 미터 → mm 변환)
+                    # 마커 1 데이터
+                    row.append(entry.get('tag_id', tag_id1))
+                    row.append(entry.get('detected', False))
+                    if entry.get('detected') and entry.get('tvec') is not None:
                         tvec_flat = entry['tvec'].flatten()
                         row.extend([
-                            tvec_flat[0] * 1000.0,  # m → mm
-                            tvec_flat[1] * 1000.0,  # m → mm
-                            tvec_flat[2] * 1000.0,  # m → mm
+                            tvec_flat[0] * 1000.0,
+                            tvec_flat[1] * 1000.0,
+                            tvec_flat[2] * 1000.0,
                         ])
-                        if entry['euler'] is not None:
+                        if entry.get('euler') is not None:
                             row.extend(entry['euler'])
+                        else:
+                            row.extend([None, None, None])
+                    else:
+                        row.extend([None, None, None, None, None, None])
+
+                    # 마커 2 데이터
+                    row.append(entry.get('tag_id2', tag_id2))
+                    row.append(entry.get('detected2', False))
+                    if entry.get('detected2') and entry.get('tvec2') is not None:
+                        tvec2_flat = entry['tvec2'].flatten()
+                        row.extend([
+                            tvec2_flat[0] * 1000.0,
+                            tvec2_flat[1] * 1000.0,
+                            tvec2_flat[2] * 1000.0,
+                        ])
+                        if entry.get('euler2') is not None:
+                            row.extend(entry['euler2'])
                         else:
                             row.extend([None, None, None])
                     else:
@@ -355,6 +791,58 @@ class TabArucoReliability(QWidget):
         except Exception as e:
             self._log(f"CSV 저장 실패: {str(e)}")
             QMessageBox.critical(self, "오류", f"CSV 저장 중 오류 발생:\n{str(e)}")
+
+    def _auto_save_csv_to_folder(self):
+        """이미지 저장 폴더에 CSV 자동 저장"""
+        if not self.collected_data or not self.save_folder:
+            return
+
+        try:
+            tag_id1 = self.spinTagID1.value()
+            tag_id2 = self.spinTagID2.value()
+            csv_filename = f"aruco_dual_id{tag_id1}_{tag_id2}.csv"
+            file_path = os.path.join(self.save_folder, csv_filename)
+
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+
+                # 헤더
+                writer.writerow([
+                    'Timestamp',
+                    'Tag_ID1', 'Detected1', 'X1_TF1(mm)', 'Y1_TF1(mm)', 'Z1_TF1(mm)', 'Rx1_TF1(deg)', 'Ry1_TF1(deg)', 'Rz1_TF1(deg)',
+                    'Tag_ID2', 'Detected2', 'X2_TF1(mm)', 'Y2_TF1(mm)', 'Z2_TF1(mm)', 'Rx2_TF1(deg)', 'Ry2_TF1(deg)', 'Rz2_TF1(deg)'
+                ])
+
+                # 데이터
+                for entry in self.collected_data:
+                    row = [entry['timestamp']]
+
+                    # 마커 1
+                    row.append(entry.get('tag_id', tag_id1))
+                    row.append(entry.get('detected', False))
+                    if entry.get('detected') and entry.get('tvec') is not None:
+                        tvec_flat = entry['tvec'].flatten()
+                        row.extend([tvec_flat[0] * 1000.0, tvec_flat[1] * 1000.0, tvec_flat[2] * 1000.0])
+                        row.extend(entry['euler'] if entry.get('euler') is not None else [None, None, None])
+                    else:
+                        row.extend([None, None, None, None, None, None])
+
+                    # 마커 2
+                    row.append(entry.get('tag_id2', tag_id2))
+                    row.append(entry.get('detected2', False))
+                    if entry.get('detected2') and entry.get('tvec2') is not None:
+                        tvec2_flat = entry['tvec2'].flatten()
+                        row.extend([tvec2_flat[0] * 1000.0, tvec2_flat[1] * 1000.0, tvec2_flat[2] * 1000.0])
+                        row.extend(entry['euler2'] if entry.get('euler2') is not None else [None, None, None])
+                    else:
+                        row.extend([None, None, None, None, None, None])
+
+                    writer.writerow(row)
+
+            self._log(f"CSV 자동 저장 완료: {file_path}")
+
+        except Exception as e:
+            self._log(f"CSV 자동 저장 실패: {str(e)}")
 
     def _on_export_graph(self):
         """그래프 이미지 저장"""
@@ -381,17 +869,73 @@ class TabArucoReliability(QWidget):
             QMessageBox.critical(self, "오류", f"그래프 저장 중 오류 발생:\n{str(e)}")
 
     def _calculate_and_display_statistics(self):
-        """통계 계산 및 UI 업데이트"""
+        """통계 계산 및 UI 업데이트 (2σ Outlier 필터링 포함, Dual 마커 지원)"""
         if not self.collected_data:
-            self._update_statistics_ui()
+            self._update_statistics_ui_m0()
+            self._update_statistics_ui_m1()
             return
 
-        # 검출 성공 데이터만 추출
-        detected_data = [d for d in self.collected_data if d['detected'] and d['tvec'] is not None]
+        # Dual 마커 통계 각각 계산
+        self._log(f"\n{'='*50}")
+        self._log(f"=== Dual ArUco 신뢰성 분석 리포트 ===")
+        self._log(f"{'='*50}")
+
+        # 마커1 통계
+        detected_data1 = [d for d in self.collected_data if d['detected'] and d['tvec'] is not None]
+        stats1 = self._calculate_marker_statistics(detected_data1, "마커1")
+
+        # 마커2 통계
+        detected_data2 = [d for d in self.collected_data if d.get('detected2') and d.get('tvec2') is not None]
+        stats2 = self._calculate_marker_statistics(detected_data2, "마커2", key_suffix='2')
+
+        # 둘 다 검출된 경우
+        both_detected = [d for d in self.collected_data if d.get('both_detected')]
+        self._log(f"\n양쪽 마커 동시 검출: {len(both_detected)}/{len(self.collected_data)}개 ({len(both_detected)/len(self.collected_data)*100:.1f}%)")
+
+        # UI 업데이트: 마커1과 마커2 각각
+        if stats1:
+            detection_rate1 = len(detected_data1) / len(self.collected_data) * 100
+            self._update_statistics_ui_m0(
+                stats1['x_mean'], stats1['y_mean'], stats1['z_mean'],
+                stats1['x_std'], stats1['y_std'], stats1['z_std'],
+                stats1.get('rx_mean', 0), stats1.get('ry_mean', 0), stats1.get('rz_mean', 0),
+                stats1.get('rx_std', 0), stats1.get('ry_std', 0), stats1.get('rz_std', 0),
+                detection_rate1,
+                stats1.get('x_mean_raw', 0), stats1.get('x_std_raw', 0),
+                stats1.get('y_mean_raw', 0), stats1.get('y_std_raw', 0),
+                stats1.get('z_mean_raw', 0), stats1.get('z_std_raw', 0),
+                stats1.get('rx_mean_raw', 0), stats1.get('rx_std_raw', 0),
+                stats1.get('ry_mean_raw', 0), stats1.get('ry_std_raw', 0),
+                stats1.get('rz_mean_raw', 0), stats1.get('rz_std_raw', 0)
+            )
+        else:
+            self._update_statistics_ui_m0()
+
+        if stats2:
+            self._update_statistics_ui_m1(
+                stats2['x_mean'], stats2['y_mean'], stats2['z_mean'],
+                stats2['x_std'], stats2['y_std'], stats2['z_std'],
+                stats2.get('rx_mean', 0), stats2.get('ry_mean', 0), stats2.get('rz_mean', 0),
+                stats2.get('rx_std', 0), stats2.get('ry_std', 0), stats2.get('rz_std', 0),
+                stats2.get('x_mean_raw', 0), stats2.get('x_std_raw', 0),
+                stats2.get('y_mean_raw', 0), stats2.get('y_std_raw', 0),
+                stats2.get('z_mean_raw', 0), stats2.get('z_std_raw', 0),
+                stats2.get('rx_mean_raw', 0), stats2.get('rx_std_raw', 0),
+                stats2.get('ry_mean_raw', 0), stats2.get('ry_std_raw', 0),
+                stats2.get('rz_mean_raw', 0), stats2.get('rz_std_raw', 0)
+            )
+        else:
+            self._update_statistics_ui_m1()
+
+        # 평면 결과 계산
+        self._calculate_plane_from_data()
+
+        # UI는 마커1 기준으로 표시 (기존 호환성)
+        detected_data = detected_data1
 
         if not detected_data:
             self._log("검출 성공한 데이터가 없습니다.")
-            self._update_statistics_ui()
+            self._update_statistics_ui_m0()
             return
 
         # tvec 데이터 추출 (X, Y, Z) - tvec을 flatten하여 처리 (TF1 좌표계, 미터 단위)
@@ -402,101 +946,587 @@ class TabArucoReliability(QWidget):
 
         # 디버깅: Euler 데이터 확인
         self._log(f"\n검출된 데이터: {len(detected_data)}개")
-        self._log(f"Euler 각도 데이터: {len(euler_array)}개")
-        if len(euler_array) == 0:
-            self._log("경고: Euler 각도 데이터가 없습니다!")
 
-        # 통계 계산 (미터 → mm 변환)
-        x_mean = np.mean(tvec_array[:, 0]) * 1000.0
-        y_mean = np.mean(tvec_array[:, 1]) * 1000.0
-        z_mean = np.mean(tvec_array[:, 2]) * 1000.0
+        # === Outlier 필터링 전 통계 (Before) ===
+        x_mm_before = tvec_array[:, 0] * 1000.0
+        y_mm_before = tvec_array[:, 1] * 1000.0
+        z_mm_before = tvec_array[:, 2] * 1000.0
 
-        x_std = np.std(tvec_array[:, 0]) * 1000.0
-        y_std = np.std(tvec_array[:, 1]) * 1000.0
-        z_std = np.std(tvec_array[:, 2]) * 1000.0
+        x_mean_before = np.mean(x_mm_before)
+        y_mean_before = np.mean(y_mm_before)
+        z_mean_before = np.mean(z_mm_before)
+        x_std_before = np.std(x_mm_before)
+        y_std_before = np.std(y_mm_before)
+        z_std_before = np.std(z_mm_before)
+
+        # === 2σ Outlier 필터링 ===
+        # Z축 기준으로 outlier 탐지 (가장 민감)
+        z_threshold_low = z_mean_before - 2 * z_std_before
+        z_threshold_high = z_mean_before + 2 * z_std_before
+        valid_mask = (z_mm_before >= z_threshold_low) & (z_mm_before <= z_threshold_high)
+
+        # X, Y축도 추가 필터링
+        x_threshold_low = x_mean_before - 2 * x_std_before
+        x_threshold_high = x_mean_before + 2 * x_std_before
+        valid_mask &= (x_mm_before >= x_threshold_low) & (x_mm_before <= x_threshold_high)
+
+        y_threshold_low = y_mean_before - 2 * y_std_before
+        y_threshold_high = y_mean_before + 2 * y_std_before
+        valid_mask &= (y_mm_before >= y_threshold_low) & (y_mm_before <= y_threshold_high)
+
+        num_outliers = np.sum(~valid_mask)
+        outlier_indices = np.where(~valid_mask)[0]
+
+        # 필터링된 데이터
+        tvec_filtered = tvec_array[valid_mask]
+        euler_filtered = euler_array[valid_mask] if len(euler_array) == len(tvec_array) else euler_array
+
+        # === Outlier 필터링 후 통계 (After) ===
+        x_mean = np.mean(tvec_filtered[:, 0]) * 1000.0
+        y_mean = np.mean(tvec_filtered[:, 1]) * 1000.0
+        z_mean = np.mean(tvec_filtered[:, 2]) * 1000.0
+
+        x_std = np.std(tvec_filtered[:, 0]) * 1000.0
+        y_std = np.std(tvec_filtered[:, 1]) * 1000.0
+        z_std = np.std(tvec_filtered[:, 2]) * 1000.0
 
         detection_rate = len(detected_data) / len(self.collected_data) * 100
 
-        # Euler 각도 통계
+        # Euler 각도 통계 (필터링 전)
+        rx_mean_raw = ry_mean_raw = rz_mean_raw = 0.0
+        rx_std_raw = ry_std_raw = rz_std_raw = 0.0
+        if len(euler_array) > 0:
+            rx_mean_raw = np.mean(euler_array[:, 0])
+            ry_mean_raw = np.mean(euler_array[:, 1])
+            rz_mean_raw = np.mean(euler_array[:, 2])
+            rx_std_raw = np.std(euler_array[:, 0])
+            ry_std_raw = np.std(euler_array[:, 1])
+            rz_std_raw = np.std(euler_array[:, 2])
+
+        # Euler 각도 통계 (필터링 후)
         rx_mean = ry_mean = rz_mean = 0.0
         rx_std = ry_std = rz_std = 0.0
+        if len(euler_filtered) > 0:
+            rx_mean = np.mean(euler_filtered[:, 0])
+            ry_mean = np.mean(euler_filtered[:, 1])
+            rz_mean = np.mean(euler_filtered[:, 2])
+            rx_std = np.std(euler_filtered[:, 0])
+            ry_std = np.std(euler_filtered[:, 1])
+            rz_std = np.std(euler_filtered[:, 2])
 
-        if len(euler_array) > 0:
-            rx_mean = np.mean(euler_array[:, 0])
-            ry_mean = np.mean(euler_array[:, 1])
-            rz_mean = np.mean(euler_array[:, 2])
-
-            rx_std = np.std(euler_array[:, 0])
-            ry_std = np.std(euler_array[:, 1])
-            rz_std = np.std(euler_array[:, 2])
-
-        # UI 업데이트
-        self._update_statistics_ui(
+        # UI 업데이트 (필터링 후 + 전 값)
+        self._update_statistics_ui_m0(
             x_mean, y_mean, z_mean, x_std, y_std, z_std,
             rx_mean, ry_mean, rz_mean, rx_std, ry_std, rz_std,
-            detection_rate
+            detection_rate,
+            x_mean_before, x_std_before, y_mean_before, y_std_before,
+            z_mean_before, z_std_before,
+            rx_mean_raw, rx_std_raw, ry_mean_raw, ry_std_raw,
+            rz_mean_raw, rz_std_raw
         )
 
-        # 로그 출력
-        self._log(f"\n=== 통계 결과 ===")
-        self._log(f"검출 성공률: {detection_rate:.1f}% ({len(detected_data)}/{len(self.collected_data)})")
-        self._log(f"위치 평균: X={x_mean:.2f}mm, Y={y_mean:.2f}mm, Z={z_mean:.2f}mm")
-        self._log(f"위치 표준편차: X={x_std:.2f}mm, Y={y_std:.2f}mm, Z={z_std:.2f}mm")
-        self._log(f"회전 평균: Rx={rx_mean:.2f}°, Ry={ry_mean:.2f}°, Rz={rz_mean:.2f}°")
-        self._log(f"회전 표준편차: Rx={rx_std:.2f}°, Ry={ry_std:.2f}°, Rz={rz_std:.2f}°")
+        # 로그 출력 - Before/After 비교 리포트
+        self._log(f"\n{'='*50}")
+        self._log(f"=== ArUco 신뢰성 분석 리포트 ===")
+        self._log(f"{'='*50}")
+        self._log(f"총 샘플: {len(self.collected_data)}개")
+        self._log(f"검출 성공: {len(detected_data)}개 ({detection_rate:.1f}%)")
+        self._log(f"Outlier: {num_outliers}개 ({num_outliers/len(detected_data)*100:.1f}%)")
+        if num_outliers > 0:
+            self._log(f"Outlier 인덱스: {outlier_indices.tolist()}")
 
-    def _update_statistics_ui(self, x_mean=None, y_mean=None, z_mean=None,
+        self._log(f"\n--- Outlier 필터링 전 (Before) ---")
+        self._log(f"위치: X={x_mean_before:.2f}±{x_std_before:.2f}, Y={y_mean_before:.2f}±{y_std_before:.2f}, Z={z_mean_before:.2f}±{z_std_before:.2f} mm")
+
+        self._log(f"\n--- Outlier 필터링 후 (After, 2σ) ---")
+        self._log(f"유효 샘플: {np.sum(valid_mask)}개")
+        self._log(f"위치: X={x_mean:.2f}±{x_std:.2f}, Y={y_mean:.2f}±{y_std:.2f}, Z={z_mean:.2f}±{z_std:.2f} mm")
+        self._log(f"회전: Rx={rx_mean:.2f}±{rx_std:.2f}, Ry={ry_mean:.2f}±{ry_std:.2f}, Rz={rz_mean:.2f}±{rz_std:.2f}°")
+
+        # 개선율 계산
+        if x_std_before > 0:
+            x_improve = (1 - x_std / x_std_before) * 100
+            y_improve = (1 - y_std / y_std_before) * 100
+            z_improve = (1 - z_std / z_std_before) * 100
+            self._log(f"\n--- 정밀도 개선율 ---")
+            self._log(f"X: {x_improve:.1f}%, Y: {y_improve:.1f}%, Z: {z_improve:.1f}%")
+
+        self._log(f"{'='*50}")
+
+    def iterative_outlier_removal(self, tvec_array, euler_array,
+                                   target_pos_std=0.5, target_rot_std=0.5,
+                                   min_samples=10, max_iterations=5):
+        """
+        Iteratively remove outliers until precision targets met.
+        Returns: (filtered_tvec, filtered_euler, iterations_used, targets_met)
+        """
+        current_tvec = tvec_array.copy()
+        current_euler = euler_array.copy()
+
+        for iteration in range(max_iterations):
+            # Calculate current stats
+            pos_std = np.std(current_tvec, axis=0) * 1000  # mm
+            rot_std = np.std(current_euler, axis=0) if len(current_euler) > 0 else np.array([0, 0, 0])  # deg
+
+            pos_ok = all(s <= target_pos_std for s in pos_std)
+            rot_ok = all(s <= target_rot_std for s in rot_std) if len(current_euler) > 0 else True
+
+            self._log(f"[Outlier] Iter {iteration}: pos_std={pos_std}, rot_std={rot_std}")
+
+            if pos_ok and rot_ok:
+                self._log(f"[Outlier] Targets met at iteration {iteration}")
+                return current_tvec, current_euler, iteration, True
+
+            if len(current_tvec) <= min_samples:
+                self._log(f"[Outlier] Min samples reached at iteration {iteration}")
+                return current_tvec, current_euler, iteration, False
+
+            # 2-sigma outlier removal
+            mask = np.ones(len(current_tvec), dtype=bool)
+            for i in range(3):
+                mean_pos = np.mean(current_tvec[:, i])
+                std_pos = np.std(current_tvec[:, i])
+                if std_pos > 0:
+                    mask &= np.abs(current_tvec[:, i] - mean_pos) <= 2 * std_pos
+
+                if len(current_euler) > 0:
+                    mean_rot = np.mean(current_euler[:, i])
+                    std_rot = np.std(current_euler[:, i])
+                    if std_rot > 0:
+                        mask &= np.abs(current_euler[:, i] - mean_rot) <= 2 * std_rot
+
+            removed = np.sum(~mask)
+            if removed == 0:
+                self._log(f"[Outlier] No outliers found at iteration {iteration}")
+                return current_tvec, current_euler, iteration, False
+
+            current_tvec = current_tvec[mask]
+            if len(current_euler) > 0:
+                current_euler = current_euler[mask]
+            self._log(f"[Outlier] Removed {removed} samples, {len(current_tvec)} remaining")
+
+        return current_tvec, current_euler, max_iterations, False
+
+    def _calculate_marker_statistics(self, detected_data, marker_name, key_suffix=''):
+        """개별 마커의 통계 계산 및 로그 출력 (3σ 이상치 제거 전후 비교)"""
+        tvec_key = 'tvec' + key_suffix if key_suffix else 'tvec'
+        euler_key = 'euler' + key_suffix if key_suffix else 'euler'
+
+        if not detected_data:
+            self._log(f"\n--- {marker_name} ---")
+            self._log(f"검출된 데이터 없음")
+            return None
+
+        # tvec 추출
+        tvec_array = np.array([d[tvec_key].flatten() for d in detected_data])
+
+        # euler 추출 - 인덱스 정렬 유지, None은 NaN으로 대체
+        euler_list = [d.get(euler_key) for d in detected_data]
+        if any(e is not None for e in euler_list):
+            euler_array = np.array([e if e is not None else [np.nan, np.nan, np.nan] for e in euler_list])
+        else:
+            euler_array = np.array([])
+
+        # mm 단위 변환
+        x_mm_all = tvec_array[:, 0] * 1000.0
+        y_mm_all = tvec_array[:, 1] * 1000.0
+        z_mm_all = tvec_array[:, 2] * 1000.0
+
+        # === 진짜 raw 통계 (모든 필터링 전) ===
+        x_mean_raw = np.mean(x_mm_all)
+        y_mean_raw = np.mean(y_mm_all)
+        z_mean_raw = np.mean(z_mm_all)
+        x_std_raw = np.std(x_mm_all)
+        y_std_raw = np.std(y_mm_all)
+        z_std_raw = np.std(z_mm_all)
+
+        # Euler raw 통계 (모든 필터링 전)
+        if len(euler_array) > 0:
+            rx_mean_raw = np.nanmean(euler_array[:, 0])
+            ry_mean_raw = np.nanmean(euler_array[:, 1])
+            rz_mean_raw = np.nanmean(euler_array[:, 2])
+            rx_std_raw = np.nanstd(euler_array[:, 0])
+            ry_std_raw = np.nanstd(euler_array[:, 1])
+            rz_std_raw = np.nanstd(euler_array[:, 2])
+        else:
+            rx_mean_raw = ry_mean_raw = rz_mean_raw = 0
+            rx_std_raw = ry_std_raw = rz_std_raw = 0
+
+        # === Iterative outlier removal if enabled ===
+        if hasattr(self, 'checkIterativeOutlier') and self.checkIterativeOutlier.isChecked():
+            target_pos = self.spinTargetPosStd.value()
+            target_rot = self.spinTargetRotStd.value()
+            min_samples = self.spinMinSamples.value()
+
+            tvec_array, euler_array, iterations, targets_met = self.iterative_outlier_removal(
+                tvec_array, euler_array, target_pos, target_rot, min_samples
+            )
+            self._log(f"[Stats] Iterative outlier ({marker_name}): {iterations} iterations, targets_met={targets_met}")
+
+            # Re-extract after filtering
+            x_mm_all = tvec_array[:, 0] * 1000.0
+            y_mm_all = tvec_array[:, 1] * 1000.0
+            z_mm_all = tvec_array[:, 2] * 1000.0
+
+        # === 이상치 제거 전 통계 ===
+        x_mean_before = np.mean(x_mm_all)
+        y_mean_before = np.mean(y_mm_all)
+        z_mean_before = np.mean(z_mm_all)
+        x_std_before = np.std(x_mm_all)
+        y_std_before = np.std(y_mm_all)
+        z_std_before = np.std(z_mm_all)
+
+        # === 3σ 이상치 감지 (X, Y, Z + Rx, Ry, Rz 모두 체크) ===
+        outlier_mask = np.zeros(len(x_mm_all), dtype=bool)
+
+        # 위치 기반 outlier 탐지
+        for axis_data, axis_mean, axis_std in [
+            (x_mm_all, x_mean_before, x_std_before),
+            (y_mm_all, y_mean_before, y_std_before),
+            (z_mm_all, z_mean_before, z_std_before)
+        ]:
+            if axis_std > 0:
+                outlier_mask |= (np.abs(axis_data - axis_mean) > 3.0 * axis_std)
+
+        # 회전 기반 outlier 탐지 (Rx, Ry, Rz)
+        if len(euler_array) == len(tvec_array) and len(euler_array) > 0:
+            for i, axis_name in enumerate(['Rx', 'Ry', 'Rz']):
+                axis_data = euler_array[:, i]
+                valid_rot = ~np.isnan(axis_data)
+                if np.sum(valid_rot) > 0:
+                    axis_mean = np.nanmean(axis_data)
+                    axis_std = np.nanstd(axis_data)
+                    if axis_std > 0:
+                        outlier_mask |= (np.abs(axis_data - axis_mean) > 3.0 * axis_std) & valid_rot
+
+        outlier_indices = np.where(outlier_mask)[0]
+        valid_mask = ~outlier_mask
+
+        # === 이상치 제거 후 데이터 ===
+        x_mm = x_mm_all[valid_mask]
+        y_mm = y_mm_all[valid_mask]
+        z_mm = z_mm_all[valid_mask]
+
+        # Euler 각도도 동일하게 필터링
+        if len(euler_array) == len(tvec_array):
+            euler_array = euler_array[valid_mask]
+
+        # === 이상치 제거 후 통계 ===
+        x_mean = np.mean(x_mm)
+        y_mean = np.mean(y_mm)
+        z_mean = np.mean(z_mm)
+        x_std = np.std(x_mm)
+        y_std = np.std(y_mm)
+        z_std = np.std(z_mm)
+
+        # === 로그 출력 ===
+        self._log(f"\n{'='*60}")
+        self._log(f"[{marker_name}]")
+        self._log(f"{'='*60}")
+
+        # 이상치 제거 전
+        self._log(f"\n📊 이상치 제거 전 (샘플 수: {len(x_mm_all)})")
+        self._log(f"{'-'*60}")
+        self._log(f"  X: Mean={x_mean_before:8.2f}mm  Std={x_std_before:6.3f}mm")
+        self._log(f"  Y: Mean={y_mean_before:8.2f}mm  Std={y_std_before:6.3f}mm")
+        self._log(f"  Z: Mean={z_mean_before:8.2f}mm  Std={z_std_before:6.3f}mm")
+
+        # 이상치 정보
+        if len(outlier_indices) > 0:
+            self._log(f"\n⚠️  이상치 감지: {len(outlier_indices)}개")
+            self._log(f"{'-'*60}")
+            for idx in outlier_indices[:5]:  # 최대 5개만 표시
+                self._log(f"  Index {idx}: X={x_mm_all[idx]:7.2f}mm, Y={y_mm_all[idx]:7.2f}mm, Z={z_mm_all[idx]:7.2f}mm")
+            if len(outlier_indices) > 5:
+                self._log(f"  ... 외 {len(outlier_indices)-5}개")
+        else:
+            self._log(f"\n✅ 이상치 없음")
+
+        # 이상치 제거 후
+        self._log(f"\n✨ 이상치 제거 후 (샘플 수: {len(x_mm)})")
+        self._log(f"{'-'*60}")
+        self._log(f"  X: Mean={x_mean:8.2f}mm  Std={x_std:6.3f}mm")
+        self._log(f"  Y: Mean={y_mean:8.2f}mm  Std={y_std:6.3f}mm")
+        self._log(f"  Z: Mean={z_mean:8.2f}mm  Std={z_std:6.3f}mm")
+
+        # 개선 효과
+        if len(outlier_indices) > 0:
+            self._log(f"\n📈 개선 효과")
+            self._log(f"{'-'*60}")
+
+            for axis_name, std_before, std_after in [
+                ('X', x_std_before, x_std),
+                ('Y', y_std_before, y_std),
+                ('Z', z_std_before, z_std)
+            ]:
+                improvement = (std_before - std_after) / std_before * 100 if std_before > 0 else 0
+                status = "✅" if std_after < 1.0 else "⚠️" if std_after < 3.0 else "❌"
+                self._log(f"  {axis_name} Std: {std_before:6.3f}mm → {std_after:6.3f}mm  (개선: {improvement:5.1f}%) {status}")
+
+        stats = {
+            'x_mean': x_mean, 'x_std': x_std,
+            'y_mean': y_mean, 'y_std': y_std,
+            'z_mean': z_mean, 'z_std': z_std,
+            # 이상치 제거 전 값 (진짜 raw - 모든 필터링 전)
+            'x_mean_raw': x_mean_raw, 'x_std_raw': x_std_raw,
+            'y_mean_raw': y_mean_raw, 'y_std_raw': y_std_raw,
+            'z_mean_raw': z_mean_raw, 'z_std_raw': z_std_raw,
+        }
+
+        # Euler 각도 통계 (NaN 무시)
+        if len(euler_array) > 0:
+            rx_mean = np.nanmean(euler_array[:, 0])
+            ry_mean = np.nanmean(euler_array[:, 1])
+            rz_mean = np.nanmean(euler_array[:, 2])
+            rx_std = np.nanstd(euler_array[:, 0])
+            ry_std = np.nanstd(euler_array[:, 1])
+            rz_std = np.nanstd(euler_array[:, 2])
+
+            self._log(f"\n회전 (이상치 제거 후):")
+            self._log(f"  Rx={rx_mean:6.2f}±{rx_std:5.2f}°, Ry={ry_mean:6.2f}±{ry_std:5.2f}°, Rz={rz_mean:6.2f}±{rz_std:5.2f}°")
+
+            stats.update({
+                'rx_mean': rx_mean, 'rx_std': rx_std,
+                'ry_mean': ry_mean, 'ry_std': ry_std,
+                'rz_mean': rz_mean, 'rz_std': rz_std,
+                # 이상치 제거 전 회전 값 (raw)
+                'rx_mean_raw': rx_mean_raw, 'rx_std_raw': rx_std_raw,
+                'ry_mean_raw': ry_mean_raw, 'ry_std_raw': ry_std_raw,
+                'rz_mean_raw': rz_mean_raw, 'rz_std_raw': rz_std_raw,
+            })
+
+        return stats
+
+    def _calculate_plane_from_data(self):
+        """수집된 Dual 마커 데이터로 평면 계산"""
+        # 양쪽 마커 모두 검출된 데이터만 추출
+        both_detected = [d for d in self.collected_data
+                        if d.get('both_detected') and d.get('tvec') is not None and d.get('tvec2') is not None]
+
+        if len(both_detected) < 3:
+            self._log(f"평면 계산 불가: 유효 샘플 {len(both_detected)}개 (최소 3개 필요)")
+            self._update_plane_result_ui()
+            return
+
+        # 중심점 계산 (두 마커의 중간점)
+        centers = []
+        for d in both_detected:
+            tvec1 = d['tvec'].flatten()
+            tvec2 = d['tvec2'].flatten()
+            center = (tvec1 + tvec2) / 2.0
+            centers.append(center)
+
+        centers = np.array(centers)
+
+        # 평균 중심점 (mm 단위로 변환)
+        avg_center = np.mean(centers, axis=0) * 1000.0  # m -> mm
+
+        # 수평 벡터 (마커1 -> 마커2)
+        horizontals = []
+        for d in both_detected:
+            tvec1 = d['tvec'].flatten()
+            tvec2 = d['tvec2'].flatten()
+            h = tvec2 - tvec1
+            h = h / np.linalg.norm(h)
+            horizontals.append(h)
+
+        avg_horizontal = np.mean(horizontals, axis=0)
+        avg_horizontal = avg_horizontal / np.linalg.norm(avg_horizontal)
+
+        # 법선 벡터 계산 (Euler 각도에서 추출)
+        # 두 마커의 평균 자세를 사용하여 법선 계산
+        from services.plane_utils import normal_horizontal_to_euler
+
+        # 마커들의 평균 자세에서 법선 추정 (간단히 Z축 방향 사용)
+        # 실제로는 rvec에서 계산해야 하지만, 데이터에 rvec이 없을 수 있으므로
+        # Euler 각도에서 역으로 법선 추정
+        euler1_list = [d['euler'] for d in both_detected if d.get('euler') is not None]
+        euler2_list = [d['euler2'] for d in both_detected if d.get('euler2') is not None]
+
+        if euler1_list and euler2_list:
+            # 평균 Euler 각도
+            avg_euler1 = np.mean(euler1_list, axis=0)
+            avg_euler2 = np.mean(euler2_list, axis=0)
+            avg_euler = (avg_euler1 + avg_euler2) / 2.0
+
+            rx, ry, rz = avg_euler[0], avg_euler[1], avg_euler[2]
+        else:
+            # Euler 데이터가 없으면 수평 벡터에서 추정
+            rx, ry, rz = normal_horizontal_to_euler(
+                np.array([0, 0, -1]),  # 기본 법선 (카메라 방향)
+                avg_horizontal
+            )
+
+        # 표준편차 계산
+        center_std = np.std(centers, axis=0) * 1000.0  # mm
+
+        # PlanePose 생성
+        plane_pose = PlanePose(
+            x=avg_center[0],
+            y=avg_center[1],
+            z=avg_center[2],
+            rx=rx,
+            ry=ry,
+            rz=rz,
+            valid_samples=len(both_detected),
+            total_attempts=len(self.collected_data),
+            std_position_mm=(center_std[0], center_std[1], center_std[2])
+        )
+
+        # TCP 보정값 계산
+        corrector = TCPCorrector(target_rx=0, target_ry=0, target_rz=0)
+        correction = corrector.compute_correction(plane_pose)
+
+        # 로그 출력
+        self._log(f"\n{'='*60}")
+        self._log(f"📐 평면 결과 (Dual ArUco)")
+        self._log(f"{'='*60}")
+        self._log(f"유효 샘플: {len(both_detected)}/{len(self.collected_data)}개")
+        self._log(f"평면 중심: X={plane_pose.x:.2f}, Y={plane_pose.y:.2f}, Z={plane_pose.z:.2f} mm")
+        self._log(f"평면 자세: Rx={plane_pose.rx:.2f}, Ry={plane_pose.ry:.2f}, Rz={plane_pose.rz:.2f}°")
+        self._log(f"위치 Std: X={center_std[0]:.3f}, Y={center_std[1]:.3f}, Z={center_std[2]:.3f} mm")
+        self._log(f"TCP 보정: dRx={correction.delta_rx:.2f}, dRy={correction.delta_ry:.2f}, dRz={correction.delta_rz:.2f}°")
+
+        # UI 업데이트
+        self._update_plane_result_ui(plane_pose, correction)
+
+    def _update_plane_result_ui(self, plane_pose=None, correction=None):
+        """평면 결과 UI 업데이트"""
+        if not hasattr(self, 'labelPlanePosition'):
+            return
+
+        if plane_pose is None:
+            self.labelPlanePosition.setText("-")
+            self.labelPlaneOrientation.setText("-")
+            self.labelTCPCorrection.setText("-")
+        else:
+            self.labelPlanePosition.setText(
+                f"X={plane_pose.x:.2f}, Y={plane_pose.y:.2f}, Z={plane_pose.z:.2f} mm"
+            )
+            self.labelPlaneOrientation.setText(
+                f"Rx={plane_pose.rx:.2f}, Ry={plane_pose.ry:.2f}, Rz={plane_pose.rz:.2f}°"
+            )
+            if correction:
+                self.labelTCPCorrection.setText(
+                    f"dRx={correction.delta_rx:.2f}, dRy={correction.delta_ry:.2f}, dRz={correction.delta_rz:.2f}°"
+                )
+
+    def _update_statistics_ui_m0(self, x_mean=None, y_mean=None, z_mean=None,
                                x_std=None, y_std=None, z_std=None,
                                rx_mean=None, ry_mean=None, rz_mean=None,
                                rx_std=None, ry_std=None, rz_std=None,
-                               detection_rate=None):
-        """통계 UI 업데이트"""
+                               detection_rate=None,
+                               x_mean_raw=None, x_std_raw=None,
+                               y_mean_raw=None, y_std_raw=None,
+                               z_mean_raw=None, z_std_raw=None,
+                               rx_mean_raw=None, rx_std_raw=None,
+                               ry_mean_raw=None, ry_std_raw=None,
+                               rz_mean_raw=None, rz_std_raw=None):
+        """통계 UI 업데이트 (마커1) - filtered / raw(outlier) 형식"""
         if x_mean is None:
             # 초기화
             self.labelXMeanValue.setText("-")
             self.labelYMeanValue.setText("-")
             self.labelZMeanValue.setText("-")
-            self.labelXStdValue.setText("-")
-            self.labelYStdValue.setText("-")
-            self.labelZStdValue.setText("-")
             self.labelRxMeanValue.setText("-")
             self.labelRyMeanValue.setText("-")
             self.labelRzMeanValue.setText("-")
-            self.labelRxStdValue.setText("-")
-            self.labelRyStdValue.setText("-")
-            self.labelRzStdValue.setText("-")
             self.labelDetectionRateValue.setText("-")
         else:
-            # 값 설정
-            self.labelXMeanValue.setText(f"{x_mean:.2f} mm")
-            self.labelYMeanValue.setText(f"{y_mean:.2f} mm")
-            self.labelZMeanValue.setText(f"{z_mean:.2f} mm")
-            self.labelXStdValue.setText(f"{x_std:.2f} mm")
-            self.labelYStdValue.setText(f"{y_std:.2f} mm")
-            self.labelZStdValue.setText(f"{z_std:.2f} mm")
-            self.labelRxMeanValue.setText(f"{rx_mean:.2f}°")
-            self.labelRyMeanValue.setText(f"{ry_mean:.2f}°")
-            self.labelRzMeanValue.setText(f"{rz_mean:.2f}°")
-            self.labelRxStdValue.setText(f"{rx_std:.2f}°")
-            self.labelRyStdValue.setText(f"{ry_std:.2f}°")
-            self.labelRzStdValue.setText(f"{rz_std:.2f}°")
+            # 값 설정: filtered / raw(outlier) 형식
+            # 색상: filtered mean=#4CAF50(녹색), filtered std=#FF9800, raw=#9E9E9E (회색)
+            self.labelXMeanValue.setText(
+                f'<span style="color:#2196F3">{x_mean:.2f}</span> <span style="color:#FF9800">± {x_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {x_mean_raw:.2f} ± {x_std_raw:.2f}</span> mm')
+            self.labelYMeanValue.setText(
+                f'<span style="color:#2196F3">{y_mean:.2f}</span> <span style="color:#FF9800">± {y_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {y_mean_raw:.2f} ± {y_std_raw:.2f}</span> mm')
+            self.labelZMeanValue.setText(
+                f'<span style="color:#2196F3">{z_mean:.2f}</span> <span style="color:#FF9800">± {z_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {z_mean_raw:.2f} ± {z_std_raw:.2f}</span> mm')
+            # 회전: 강조색 (녹색 #4CAF50)
+            self.labelRxMeanValue.setText(
+                f'<span style="color:#4CAF50">{rx_mean:.2f}</span> <span style="color:#FF9800">± {rx_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {rx_mean_raw:.2f} ± {rx_std_raw:.2f}</span>°')
+            self.labelRyMeanValue.setText(
+                f'<span style="color:#4CAF50">{ry_mean:.2f}</span> <span style="color:#FF9800">± {ry_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {ry_mean_raw:.2f} ± {ry_std_raw:.2f}</span>°')
+            self.labelRzMeanValue.setText(
+                f'<span style="color:#4CAF50">{rz_mean:.2f}</span> <span style="color:#FF9800">± {rz_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {rz_mean_raw:.2f} ± {rz_std_raw:.2f}</span>°')
             self.labelDetectionRateValue.setText(f"{detection_rate:.1f}%")
 
+    def _update_statistics_ui_m1(self, x_mean=None, y_mean=None, z_mean=None,
+                                  x_std=None, y_std=None, z_std=None,
+                                  rx_mean=None, ry_mean=None, rz_mean=None,
+                                  rx_std=None, ry_std=None, rz_std=None,
+                                  x_mean_raw=None, x_std_raw=None,
+                                  y_mean_raw=None, y_std_raw=None,
+                                  z_mean_raw=None, z_std_raw=None,
+                                  rx_mean_raw=None, rx_std_raw=None,
+                                  ry_mean_raw=None, ry_std_raw=None,
+                                  rz_mean_raw=None, rz_std_raw=None):
+        """통계 UI 업데이트 (마커2) - filtered / raw(outlier) 형식"""
+        if x_mean is None:
+            # 초기화
+            self.labelXMeanValueM2.setText("-")
+            self.labelYMeanValueM2.setText("-")
+            self.labelZMeanValueM2.setText("-")
+            self.labelRxMeanValueM2.setText("-")
+            self.labelRyMeanValueM2.setText("-")
+            self.labelRzMeanValueM2.setText("-")
+        else:
+            # 값 설정: filtered / raw(outlier) 형식
+            self.labelXMeanValueM2.setText(
+                f'<span style="color:#2196F3">{x_mean:.2f}</span> <span style="color:#FF9800">± {x_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {x_mean_raw:.2f} ± {x_std_raw:.2f}</span> mm')
+            self.labelYMeanValueM2.setText(
+                f'<span style="color:#2196F3">{y_mean:.2f}</span> <span style="color:#FF9800">± {y_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {y_mean_raw:.2f} ± {y_std_raw:.2f}</span> mm')
+            self.labelZMeanValueM2.setText(
+                f'<span style="color:#2196F3">{z_mean:.2f}</span> <span style="color:#FF9800">± {z_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {z_mean_raw:.2f} ± {z_std_raw:.2f}</span> mm')
+            # 회전: 강조색 (녹색 #4CAF50)
+            self.labelRxMeanValueM2.setText(
+                f'<span style="color:#4CAF50">{rx_mean:.2f}</span> <span style="color:#FF9800">± {rx_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {rx_mean_raw:.2f} ± {rx_std_raw:.2f}</span>°')
+            self.labelRyMeanValueM2.setText(
+                f'<span style="color:#4CAF50">{ry_mean:.2f}</span> <span style="color:#FF9800">± {ry_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {ry_mean_raw:.2f} ± {ry_std_raw:.2f}</span>°')
+            self.labelRzMeanValueM2.setText(
+                f'<span style="color:#4CAF50">{rz_mean:.2f}</span> <span style="color:#FF9800">± {rz_std:.2f}</span> '
+                f'<span style="color:#9E9E9E">/ {rz_mean_raw:.2f} ± {rz_std_raw:.2f}</span>°')
+
+    def _on_graph_marker_changed(self):
+        """그래프 마커 선택 변경 시 그래프 다시 그리기"""
+        self._plot_graphs()
+
     def _plot_graphs(self):
-        """분포 그래프 그리기"""
+        """분포 그래프 그리기 (선택된 마커 ID 기준)"""
         if not self.collected_data:
             self._clear_graphs()
             return
 
-        # 검출 성공 데이터만 추출
-        detected_data = [d for d in self.collected_data if d['detected'] and d['tvec'] is not None]
+        # 선택된 마커 확인 (0: ID0/마커1, 1: ID1/마커2)
+        selected_marker = self.graph_marker_button_group.checkedId()
+
+        if selected_marker == 0:
+            # 마커1 (ID0) 데이터
+            detected_data = [d for d in self.collected_data if d['detected'] and d['tvec'] is not None]
+            tvec_key = 'tvec'
+            marker_label = f"ID {self.spinTagID1.value()}"
+        else:
+            # 마커2 (ID1) 데이터
+            detected_data = [d for d in self.collected_data if d.get('detected2') and d.get('tvec2') is not None]
+            tvec_key = 'tvec2'
+            marker_label = f"ID {self.spinTagID2.value()}"
 
         if not detected_data:
             self._clear_graphs()
             return
 
         # tvec 데이터 추출 (tvec을 flatten하여 처리, TF1 좌표계, 미터 단위)
-        tvec_array = np.array([d['tvec'].flatten() for d in detected_data])
+        tvec_array = np.array([d[tvec_key].flatten() for d in detected_data])
         # mm 단위로 변환
         tvec_array_mm = tvec_array * 1000.0
 
@@ -515,21 +1545,21 @@ class TabArucoReliability(QWidget):
         ax1.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, 0], alpha=0.5, s=10)
         ax1.axhline(np.mean(tvec_array_mm[:, 0]), color='r', linestyle='--', linewidth=1)
         ax1.set_ylabel('X (mm)')
-        ax1.set_title('X Position (TF1)')
+        ax1.set_title(f'X Position ({marker_label})')
         ax1.grid(True, alpha=0.3)
 
         # Y 좌표 scatter plot
         ax2.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, 1], alpha=0.5, s=10)
         ax2.axhline(np.mean(tvec_array_mm[:, 1]), color='r', linestyle='--', linewidth=1)
         ax2.set_ylabel('Y (mm)')
-        ax2.set_title('Y Position (TF1)')
+        ax2.set_title(f'Y Position ({marker_label})')
         ax2.grid(True, alpha=0.3)
 
         # Z 좌표 scatter plot
         ax3.scatter(range(len(tvec_array_mm)), tvec_array_mm[:, 2], alpha=0.5, s=10)
         ax3.axhline(np.mean(tvec_array_mm[:, 2]), color='r', linestyle='--', linewidth=1)
         ax3.set_ylabel('Z (mm)')
-        ax3.set_title('Z Position (TF1)')
+        ax3.set_title(f'Z Position ({marker_label})')
         ax3.grid(True, alpha=0.3)
 
         # X 좌표 histogram
@@ -584,6 +1614,24 @@ class TabArucoReliability(QWidget):
 
         # 라디안을 도로 변환
         return [np.degrees(rx), np.degrees(ry), np.degrees(rz)]
+
+    # TODO: Extract JogWidget as reusable component when adding to third tab
+
+    def _on_jog_move(self, axis: str, direction: int):
+        """베이스 좌표계 조그 이동"""
+        step_map = {'x': self.spinJogStepX, 'y': self.spinJogStepY, 'z': self.spinJogStepZ}
+        step = step_map[axis].value()
+        distance = step * direction
+        self._log(f"조그 이동: {axis.upper()} {'+' if direction > 0 else ''}{distance}mm")
+        self.jog_move_requested.emit(axis, distance)
+
+    def _on_jog_rotate(self, axis: str, direction: int):
+        """베이스 좌표계 조그 회전"""
+        step_map = {'rx': self.spinJogStepRx, 'ry': self.spinJogStepRy, 'rz': self.spinJogStepRz}
+        step = step_map[axis].value()
+        angle = step * direction
+        self._log(f"조그 회전: {axis.upper()} {'+' if direction > 0 else ''}{angle}°")
+        self.jog_rotate_requested.emit(axis, angle)
 
     def _log(self, message):
         """로그 출력"""

@@ -38,3 +38,24 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tool state (OMC, Serena)
+.omc/
+.serena/
+scripts/.omc/
+
+# Output data
+aruco_analysis/
+calibration/
+data/
+cap_%d
+
+# CSV data files
+scripts/aruco_reliability_*.csv
+
+# Calibration config files
+config/arducam_calibration_*.yaml
+config/ds435_calibration_*.yaml
+
+# Java bridge (generated)
+charging_robot/share/py4j/

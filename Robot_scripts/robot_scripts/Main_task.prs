@@ -112,6 +112,28 @@ while true do
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
 
+    -- command 17: 툴 좌표계 회전 RxRyRz
+    elseif command == 17 then
+        modserv.write_register('task_done', 1)
+        Rx = modserv.read_register('Rx')
+        Ry = modserv.read_register('Ry')
+        Rz = modserv.read_register('Rz')
+        if Rx > 32767 then
+            Rx = Rx - 65536
+        end
+        if Ry > 32767 then
+            Ry = Ry - 65536
+        end
+        if Rz > 32767 then
+            Rz = Rz - 65536
+        end
+        tool.rotx(Rx)
+        tool.roty(Ry)
+        tool.rotz(Rz)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
     elseif command == 20 then
         modserv.write_register('task_done', 1)
         x = modserv.read_register('x')
@@ -206,14 +228,8 @@ while true do
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
 
-    -- command 40-43: 툴프레임 변경
-    elseif command == 40 then
-        modserv.write_register('task_done', 1)
-        toolframe(0)
-        modserv.write_register('task_done', 2)
-        modserv.write_register('task_number', 0)
-        modserv.write_register('task_done', 0)
-
+    -- command 41-43, 45-46: 툴프레임 변경 (TF1-TF5)
+    -- command 40 (TF0)은 Eye-in-Hand 전용으로 제거됨
     elseif command == 41 then
         modserv.write_register('task_done', 1)
         toolframe(1)
@@ -231,6 +247,20 @@ while true do
     elseif command == 43 then
         modserv.write_register('task_done', 1)
         toolframe(3)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 45 then
+        modserv.write_register('task_done', 1)
+        toolframe(4)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 46 then
+        modserv.write_register('task_done', 1)
+        toolframe(5)  -- TF5: Hand-Eye Calibration 결과
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)

@@ -62,6 +62,10 @@ class VisionManager(QObject):
         """로그 콜백 설정"""
         self._log_callback = callback
 
+    def set_camera_manager(self, camera_manager):
+        """카메라 매니저 변경"""
+        self.camera_manager = camera_manager
+
     def _log(self, message: str):
         """로그 출력"""
         if self._log_callback:
@@ -98,6 +102,57 @@ class VisionManager(QObject):
         else:
             self._last_result = None
             return frame, None
+
+    def detect_markers_disambiguated(
+        self,
+        frame: np.ndarray,
+        target_ids: tuple,
+        known_distance_m: float
+    ) -> tuple:
+        """
+        Detect dual markers with pose disambiguation using known inter-marker distance.
+
+        Args:
+            frame: BGR image frame
+            target_ids: Tuple of two marker IDs (e.g., (0, 1))
+            known_distance_m: Known distance between markers in meters
+
+        Returns:
+            Tuple of (vis_frame, marker1_dict, marker2_dict, measured_distance, distance_error)
+            marker_dict contains: {'id', 'tvec', 'rvec', 'corners'} or None if not detected
+        """
+        if self.aruco_detector is None or self.camera_manager.intrinsics is None:
+            return (frame, None, None, 0, float('inf'))
+
+        # Debug logging: method called
+        print(f"[VisionManager] Disambiguation called for IDs {target_ids}, known_distance={known_distance_m*1000:.2f}mm")
+
+        # Call the disambiguation method
+        result = self.aruco_detector.detect_and_estimate_pose_dual_disambiguated(
+            frame,
+            self.camera_manager.intrinsics,
+            target_ids,
+            known_distance_m
+        )
+
+        marker1_pose, marker2_pose, measured_distance, distance_error, combo_idx = result
+
+        if marker1_pose is None or marker2_pose is None:
+            print("[VisionManager] Disambiguation result: fail, markers not detected")
+            return (frame, None, None, 0, float('inf'))
+
+        # Debug logging: result summary
+        print(f"[VisionManager] Disambiguation result: success, error={distance_error*1000:.2f}mm")
+
+        # Create visualization
+        vis_frame = self.aruco_detector.visualize_markers(
+            frame,
+            self.camera_manager.intrinsics,
+            [marker1_pose, marker2_pose],
+            show_info=True
+        )
+
+        return (vis_frame, marker1_pose, marker2_pose, measured_distance, distance_error)
 
     def detect_tag(self, tag_id: int, timeout: float = 10.0,
                    num_samples: int = 10) -> Optional[Dict]:
