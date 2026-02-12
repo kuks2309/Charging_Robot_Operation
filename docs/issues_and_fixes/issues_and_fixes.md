@@ -120,3 +120,183 @@
 - 3축보호장치 미작동
 
 **결론:** tool.rot 명령은 반드시 **×1 스케일링** 사용. TF4에서 안전하게 동작 확인됨.
+
+---
+
+## 2026-02-12 | GUI ArUco 신뢰성 탭 시각화 이상 — test_arducam_dual_aruco.py와 코드 정밀 비교
+
+**증상:** ArUco 신뢰성 탭(GUI)에서 ID:1 마커 주변에 비정상적인 큰 빨간 사각형 표시. 동일 카메라·동일 마커에서 `test_arducam_dual_aruco.py`는 정상 동작.
+
+### 정밀 코드 비교
+
+#### 1. DetectorParameters — 기본값 vs 커스텀
+
+| 파라미터 | test script (기본값) | GUI aruco_detector.py |
+|----------|---------------------|----------------------|
+| `cornerRefinementMethod` | `CORNER_REFINE_NONE` | `CORNER_REFINE_SUBPIX` |
+| `cornerRefinementWinSize` | 5 | 7 |
+| `cornerRefinementMaxIterations` | 30 | 50 |
+| `cornerRefinementMinAccuracy` | 0.1 | 0.01 |
+| `minMarkerPerimeterRate` | 0.03 | **0.01** |
+| `minCornerDistanceRate` | 0.05 | **0.01** |
+| `minDistanceToBorder` | 3 | **1** |
+| `minMarkerDistanceRate` | 0.05 | **0.01** |
+
+- test: `test_arducam_dual_aruco.py:108` — `cv2.aruco.DetectorParameters()`
+- GUI: `Sensor/aruco/aruco_detector.py:32-60` — 커스텀
+
+#### 2. 좌표계 불일치 버그 (Critical)
+
+**test script (정상):**
+```
+frame → gray → detectMarkers(gray) → corners
+동일 frame에 drawDetectedMarkers(frame, corners) → 좌표 일치 ✓
+```
+- `test_arducam_dual_aruco.py:194-195,243`
+
+**GUI 탭 (버그):**
+```
+frame(distorted) → cv2.undistort() → undistorted_frame
+undistorted_frame에서 detectMarkers → corners (undistorted 좌표계)
+distorted frame에 cv2.line(frame, corners) → 좌표 불일치 ✗
+```
+- `tab_aruco_reliability.py:481` : undistort 적용
+- `tab_aruco_reliability.py:490` : undistorted에서 검출
+- `tab_aruco_reliability.py:507` : **distorted frame에 그리기**
+- `tab_aruco_reliability.py:513` : distorted frame 표시
+
+#### 3. 시각화 파이프라인 차이
+
+**test script:** 검출·시각화 모두 동일 frame.
+
+**GUI 탭:** `visualize_markers` 결과(`vis_frame`)를 버리고(`_`), undistorted 좌표를 distorted frame에 직접 그림.
+- `tab_aruco_reliability.py:490` : `_, markers = detect_markers(undistorted_frame)`
+- `tab_aruco_reliability.py:507` : `cv2.line(frame, corners)` — 좌표계 불일치
+
+#### 4. Disambiguation 로직 — 동일
+
+양쪽 모두 Z축 법선 기준(`R[2,2] < 0`) + LM refinement. 차이 없음.
+
+#### 5. 빨간 박스 출처 조사
+
+전체 파이프라인 코드 추적 결과:
+- `tab_aruco_reliability.py`: `(0,0,255)` 또는 `cv2.rectangle` 호출 없음
+- 탭 색상(`line 493`): tag_id1→`(0,255,0)` 초록, tag_id2→`(255,0,0)` 파랑(BGR)
+- `visualize_markers`: `image.copy()` 기반, 원본 미수정
+- `detect_and_estimate_pose`: 입력 이미지 그리기 없음
+- 전체 `scripts/` 검색: 해당 파이프라인에서 빨간 사각형 코드 미발견
+
+**현재 코드에서 빨간 박스 출처 특정 불가.** `git status`에서 `aruco_detector.py` 수정 상태 — 스크린샷 시점 코드와 다를 가능성.
+
+### 수정 방향
+
+1. **좌표계 통일**: undistorted frame에서 검출 → undistorted frame에 시각화 → undistorted frame 표시
+2. **DetectorParameters**: `minMarkerPerimeterRate` 등 기본값 수준 복원
+
+---
+
+## 2026-02-12 | ArUco Euler rx 방향 불일치 + ±180° 정규화 누락 (Critical)
+
+**증상:** `test_arducam_dual_aruco.py`는 ArUco rx가 카메라 TCP rx와 일치하지만, 메인 앱 여러 모듈에서 rx 방향이 반전되거나 ±180° 경계에서 부호 불일치.
+
+### 문제 1: R vs R.T — Euler 추출 방향 불일치
+
+`solvePnP` → `R = cv2.Rodrigues(rvec)` → R은 **마커→카메라** 변환.
+`aruco_detector.py`에서 `camera_rotation = R.T` (카메라→마커)도 저장.
+
+| 파일 | 사용 값 | 좌표계 | 비고 |
+|------|---------|--------|------|
+| `test_arducam_dual_aruco.py:231` | `R` | 마커→카메라 | **기준 (정상)** |
+| `tab_aruco_reliability.py:1809` | `R` (rvec→R) | 마커→카메라 | 정상 |
+| `main_window.py:1142` | `rotation_matrix` = `R` | 마커→카메라 | 정상 |
+| `aruco_detector.py:764` (시각화) | `camera_rotation` = **R.T** | 카메라→마커 | **반전** |
+| `data_collector.py:130` | `camera_rotation` = **R.T** | 카메라→마커 | **반전** |
+| `alignment_service.py:204,295,383` | `camera_rotation` = **R.T** | 카메라→마커 | **반전** |
+
+### 문제 2: rx ±180° 정규화 누락
+
+마커가 카메라를 향할 때 rx ≈ ±180°. 정규화 없이 -172°와 +194°가 혼재:
+- 통계(mean/std) 무의미 (평균≈+10°, 표준편차≈180°)
+- outlier 제거에서 wrapping을 이상치로 오판
+- 정렬 보정량 부호 오류 가능
+
+### 반영 안 된 근본 원인
+
+`aruco_detector.py`가 `camera_rotation`(R.T)과 `rotation_matrix`(R) **두 가지를 모두 반환**하는데, 소비측이 어떤 것을 써야 하는지 규칙이 없었음. 시각화는 R.T를, 정렬도 R.T를 그대로 가져다 씀. 실제 로봇 보정에 필요한 것은 R → **용도별 좌표계 규칙 부재**가 근본 원인.
+
+### 수정 방향
+
+1. **R.T → R 통일**: euler 추출 시 `rotation_matrix`(R) 사용으로 통일
+2. **rx 정규화**: euler 추출 후 `rx = rx % 360` (양수 방향 보장)
+3. **규칙 명문화**: IPPE Z축 disambiguation + rx 양수 정규화 = 카메라 TCP rx 일치
+
+---
+
+## 2026-02-12 | IPPE Bimodal 문제 — Z축 disambiguation만으로 불충분 (Critical)
+
+**증상:** `test_arducam_dual_aruco.py` 50회 연속 측정에서 ID1 마커의 rx가 두 값 사이를 프레임마다 점프.
+
+### 실측 데이터 (로봇 고정, 마커 고정)
+
+| 마커 | 축 | 안정성 | 값 |
+|------|-----|--------|-----|
+| ID0 | rx | 안정 | ~189° (184.9~192.3°) |
+| ID0 | ry | 약간 산포 | ~5° (2.3~8.3°) |
+| ID1 | rx | **bimodal** | 모드A: ~166° / 모드B: ~193° |
+| ID1 | ry | **bimodal** | 모드A: ~13° / 모드B: ~6° |
+
+- ID0는 안정, ID1만 28° 점프 (166° ↔ 193°)
+- 물리적으로 동일 평면 → ID1도 ID0처럼 ~190°가 정답
+- 모드A(166°)는 **틀린 IPPE 해**, 모드B(193°)가 **맞는 해**
+
+### 원인
+
+현재 disambiguation: `R[2,2] < 0` (Z축이 카메라를 향하는 해 선택).
+ID1의 두 IPPE 해 **모두** `R[2,2] < 0` 조건을 만족 → 구별 불가 → solution[0]을 그대로 사용 → 프레임마다 sol0/sol1이 뒤바뀌며 점프.
+
+ID0는 카메라 중앙에 가까워 disambiguation 성공, ID1은 가장자리에 위치하여 실패.
+
+**참고:** 이 문제는 `rx % 360` 정규화와 별개. 두 값 모두 양수(166°, 193°)이므로 정규화로는 해결 불가.
+
+### 다중 알고리즘 비교 검증 (50프레임)
+
+3개 알고리즘(IPPE_SQUARE, SQPNP, ITERATIVE)을 동일 프레임에서 비교한 결과:
+
+| 알고리즘 | 솔루션 수 | ID1 rx 값 | 비고 |
+|----------|-----------|-----------|------|
+| IPPE_SQUARE | 2 | 166° / 193° | 기본 |
+| SQPNP | 2 | 166° / 193° | 동일 bimodal |
+| ITERATIVE | 1 (가끔 2) | 166° 또는 193° | 가끔 3번째 로컬 미니멈(170.5°) |
+
+**결론**: Bimodal은 IPPE 고유 문제가 아님. **solvePnP 공통 문제**.
+
+### 듀얼 마커 거리 제약 검증
+
+IPPE 2해 × 2마커 = 4가지 조합의 마커 간 거리 비교:
+
+| 조합 [ID0솔, ID1솔] | 거리 | 비고 |
+|---------------------|------|------|
+| [0,0] | ~59mm | 동일 |
+| [0,1] | ~59mm | 동일 |
+| [1,0] | ~59mm | 동일 |
+| [1,1] | ~59mm | 동일 |
+
+**결론**: IPPE 두 해는 **tvec이 거의 동일**하고 rvec만 다름. 거리 제약으로 disambiguation **불가능**.
+
+### KNOWN_MARKER_DISTANCE 오류 발견
+
+- 기존 `KNOWN_MARKER_DISTANCE = 0.055` (55mm) → 실측 **59mm**
+- Raw IPPE tvec로 계산한 거리 ~59mm가 정확, LM refinement 후 ~55mm는 **과보정**
+- `solvePnPRefineLM()`이 tvec을 ~4mm 이동시킴 → LM이 오히려 정확도 저하
+
+### reproj_error 검증
+
+- "틀린" 해가 "맞는" 해보다 낮은 reproj_error를 보이는 프레임 다수 존재
+- reproj_error 기반 disambiguation **신뢰 불가**
+
+### 해결 방향 (업데이트)
+
+1. ~~reproj_error 비교~~ → **신뢰 불가 확인**
+2. ~~듀얼 마커 거리 제약~~ → **tvec 동일하여 불가능**
+3. **Coplanarity 제약**: 두 마커 동일 평면 → rx 차이 최소인 조합 선택
+4. **Temporal consistency**: 이전 프레임 해와 가까운 해 선택 (rx 점프 방지)

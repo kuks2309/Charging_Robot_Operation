@@ -7,7 +7,7 @@ class ArucoCameraPoseEstimator:
     Estimate camera pose relative to ArUco markers and ChArUco boards
     """
     
-    def __init__(self, marker_size_meters=0.0423334, dictionary_type=aruco.DICT_6X6_250):
+    def __init__(self, marker_size_meters=0.015, dictionary_type=aruco.DICT_5X5_50):
         """
         Initialize ArUco pose estimator
 
@@ -149,8 +149,8 @@ class ArucoCameraPoseEstimator:
             ], dtype=np.float32)
 
             for i, marker_id in enumerate(ids.flatten()):
-                # Use solvePnP for each marker (estimatePoseSingleMarkers deprecated in OpenCV 4.8+)
-                success, rvec, tvec = cv2.solvePnP(
+                # solvePnPGeneric로 IPPE 2개 해 획득 후 Z축 disambiguation
+                n_solutions, rvecs_all, tvecs_all, reproj_errors = cv2.solvePnPGeneric(
                     obj_points,
                     corners[i].reshape(-1, 2),
                     camera_matrix,
@@ -158,17 +158,28 @@ class ArucoCameraPoseEstimator:
                     flags=cv2.SOLVEPNP_IPPE_SQUARE
                 )
 
-                if not success:
+                if n_solutions == 0:
                     continue
 
-                # LM refinement for higher precision (matching OpenCV 4.5.4 quality)
+                # Z축 법선 기준 disambiguation: z_axis.z < 0 인 해 선택
+                rvec = rvecs_all[0].flatten()
+                tvec = tvecs_all[0].flatten()
+                for s in range(n_solutions):
+                    rv = rvecs_all[s].flatten()
+                    R_check, _ = cv2.Rodrigues(rv)
+                    if R_check[2, 2] < 0:  # z_axis.z < 0
+                        rvec = rv
+                        tvec = tvecs_all[s].flatten()
+                        break
+
+                # LM refinement
                 rvec, tvec = cv2.solvePnPRefineLM(
                     obj_points,
                     corners[i].reshape(-1, 2),
                     camera_matrix,
                     dist_coeffs,
-                    rvec,
-                    tvec
+                    rvec.reshape(3, 1),
+                    tvec.reshape(3, 1)
                 )
 
                 rvec = rvec.flatten()

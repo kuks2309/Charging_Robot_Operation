@@ -140,11 +140,11 @@ def camera_to_vision(tvec, rvec):
         vision_tvec: 위치 벡터 (3,) - Vision 좌표계
         vision_rvec: 회전 벡터 (3,) Rodrigues - Vision 좌표계
     """
-    # 변환 행렬 (1, -1, -1)
+    # 변환 행렬 (1, -1, 1) - 카메라 Z+와 Tool Z+가 같은 방향
     R_cam_to_vision = np.array([
         [1, 0, 0],
         [0, -1, 0],
-        [0, 0, -1]
+        [0, 0, 1]
     ])
 
     # 위치 변환

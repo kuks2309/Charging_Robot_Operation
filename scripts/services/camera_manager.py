@@ -45,23 +45,37 @@ class Intrinsics:
 
     @classmethod
     def from_yaml(cls, filepath: str) -> Optional['Intrinsics']:
-        """YAML 캘리브레이션 파일에서 로드"""
+        """YAML 캘리브레이션 파일에서 로드 (camera_matrix.data 형식 지원)"""
         try:
             with open(filepath, 'r') as f:
                 data = yaml.safe_load(f)
 
-            return cls(
-                fx=data['fx'],
-                fy=data['fy'],
-                ppx=data['cx'],
-                ppy=data['cy'],
-                coeffs=[
+            # camera_matrix.data 배열 형식 (OpenCV 표준)
+            if 'camera_matrix' in data and 'data' in data['camera_matrix']:
+                cam = data['camera_matrix']['data']
+                fx, fy = cam[0], cam[4]
+                ppx, ppy = cam[2], cam[5]
+            else:
+                fx = data['fx']
+                fy = data['fy']
+                ppx = data['cx']
+                ppy = data['cy']
+
+            # distortion_coefficients.data 배열 형식
+            if 'distortion_coefficients' in data and 'data' in data['distortion_coefficients']:
+                coeffs = data['distortion_coefficients']['data']
+            else:
+                coeffs = [
                     data.get('k1', 0.0),
                     data.get('k2', 0.0),
                     data.get('p1', 0.0),
                     data.get('p2', 0.0),
                     data.get('k3', 0.0)
-                ],
+                ]
+
+            return cls(
+                fx=fx, fy=fy, ppx=ppx, ppy=ppy,
+                coeffs=coeffs,
                 width=data.get('image_width', 1280),
                 height=data.get('image_height', 720)
             )
