@@ -19,7 +19,7 @@ from job_types import JOB_TYPES
 # 카메라 타입 상수
 CAMERA_DS435 = "DS435"
 CAMERA_ARDUCAM = "ArduCam"
-from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
@@ -167,6 +167,10 @@ class MainWindow(QMainWindow):
         self.tabMotionTest = TabMotionTest(self)
         self.tabWidget.insertTab(5, self.tabMotionTest, "모션 테스트")
 
+        # 레이저 캘리브레이션 탭 (인덱스 6에 삽입)
+        self.tabLaserCalibration = TabLaserCalibration(self)
+        self.tabWidget.insertTab(6, self.tabLaserCalibration, "레이저 캘리브레이션")
+
         # 탭 시그널 연결
         self._connect_tab_signals()
 
@@ -209,6 +213,8 @@ class MainWindow(QMainWindow):
         self.tabArucoReliability.align_parallel_requested.connect(self._on_ar_tag_align_parallel)
         self.tabArucoReliability.align_single_axis_requested.connect(self._on_ar_tag_align_single_axis)
         self.tabArucoReliability.align_base_ry_requested.connect(self._on_ar_tag_align_base_ry)
+        self.tabArucoReliability.align_base_rz_requested.connect(self._on_ar_tag_align_base_rz)
+        self.tabArucoReliability.align_base_y_requested.connect(self._on_ar_tag_align_base_y)
 
         # Eye in Hand 탭 시그널
         self.tabEyeInHand.log_message.connect(self._log)
@@ -217,6 +223,14 @@ class MainWindow(QMainWindow):
 
         # Motion Test 탭 시그널
         self.tabMotionTest.log_message.connect(self._log)
+
+        # 레이저 캘리브레이션 탭 시그널
+        self.tabLaserCalibration.log_message.connect(self._log)
+        self.tabLaserCalibration.camera_start_requested.connect(self._on_start_camera)
+        self.tabLaserCalibration.camera_stop_requested.connect(self._on_stop_camera)
+        self.tabLaserCalibration.arducam_required.connect(
+            lambda: self._on_camera_type_changed(CAMERA_ARDUCAM)
+        )
 
         # 카메라 선택 라디오 버튼 시그널 연결
         self._connect_camera_selection_signals()
@@ -880,6 +894,138 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log(f"[ArUco] Base Ry 보정 오류: {e}")
 
+    def _on_ar_tag_align_base_rz(self, angle: float, distance: float):
+        """ArUco 정렬 탭 - Robot base 기준 Rz movel + Y 보정"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+        try:
+            import math
+            from PyQt5.QtWidgets import QApplication
+
+            current_pose = self.robot.read_current_pose()
+            if current_pose is None:
+                self._log("[ArUco] 현재 자세 읽기 실패")
+                return
+
+            x, y, z, rx, ry, rz = current_pose
+            new_rz = rz + angle
+            # Y 보정: ΔY = D × tan(ΔRz)
+            dy = distance * math.tan(math.radians(angle))
+            new_y = y - dy
+
+            self._log(f"[ArUco] Rz 보정: ΔRz={angle:.2f}°, D={distance:.0f}mm, ΔY={dy:.2f}mm")
+            self._log(f"[ArUco] 현재: Y={y:.1f}, Rz={rz:.1f} → 목표: Y={new_y:.1f}, Rz={new_rz:.1f}")
+
+            success, msg = self.robot.send_move_to_pose(
+                x, new_y, z, rx, ry, new_rz,
+                wait=True, process_events_callback=QApplication.processEvents)
+            if success:
+                self._log(f"[ArUco] Rz + Y 보정 완료")
+            else:
+                self._log(f"[ArUco] Rz + Y 보정 실패: {msg}")
+            self._update_statusbar()
+        except Exception as e:
+            self._log(f"[ArUco] Rz + Y 보정 오류: {e}")
+
+    def _on_ar_tag_align_base_y(self, dy_px: float):
+        """ArUco 정렬 탭 - 적응형 Base Y 위치 보정 (2단계)
+
+        1단계: 5mm 테스트 이동 → 픽셀 변화율 산출
+        2단계: 잔여 오프셋 보정
+        """
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+        if abs(dy_px) < 3:
+            self._log("[ArUco] Base Y: 오프셋 3px 미만, 보정 불필요")
+            return
+        try:
+            import time
+            from PyQt5.QtWidgets import QApplication
+
+            test_mm = 5.0
+            # 부호: dY<0 → robot Y+, dY>0 → robot Y-
+            sign = -1.0 if dy_px > 0 else 1.0
+
+            self._log(f"[ArUco] Base Y 보정 시작: dY={dy_px:.1f}px")
+
+            # 1단계: 테스트 이동
+            self._log(f"[ArUco] 1단계: {sign * test_mm:.1f}mm 테스트 이동")
+            success, msg = self.robot.send_base_translate(
+                'y', int(sign * test_mm), wait=True,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                self._log(f"[ArUco] 테스트 이동 실패: {msg}")
+                return
+
+            # 새 프레임으로 dY' 측정
+            time.sleep(0.5)  # 카메라 프레임 안정화
+            QApplication.processEvents()
+
+            new_dy_px = self._measure_marker_dy_px()
+            if new_dy_px is None:
+                self._log("[ArUco] 테스트 이동 후 마커 감지 실패, 복귀")
+                self.robot.send_base_translate(
+                    'y', int(-sign * test_mm), wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            pixel_change = dy_px - new_dy_px
+            self._log(f"[ArUco] 테스트 결과: dY'={new_dy_px:.1f}px, 변화={pixel_change:.1f}px")
+
+            if abs(pixel_change) < 2:
+                self._log("[ArUco] 픽셀 변화 없음 (< 2px), 부호 확인 필요")
+                return
+
+            # 2단계: 비율 계산 후 잔여 이동
+            mm_per_px = (sign * test_mm) / pixel_change  # 실제 이동 방향 반영
+            remaining_mm = new_dy_px * mm_per_px
+            self._log(f"[ArUco] 비율: {abs(mm_per_px):.3f} mm/px, 잔여: {remaining_mm:.1f}mm")
+
+            if abs(remaining_mm) > 50:
+                self._log(f"[ArUco] 잔여 이동 과대 ({remaining_mm:.1f}mm > 50mm), 안전 중단")
+                return
+
+            success, msg = self.robot.send_base_translate(
+                'y', int(round(remaining_mm)), wait=True,
+                process_events_callback=QApplication.processEvents)
+            if success:
+                self._log(f"[ArUco] Base Y 보정 완료 (총 {sign * test_mm + remaining_mm:.1f}mm)")
+            else:
+                self._log(f"[ArUco] 잔여 이동 실패: {msg}")
+            self._update_statusbar()
+        except Exception as e:
+            self._log(f"[ArUco] Base Y 보정 오류: {e}")
+
+    def _measure_marker_dy_px(self):
+        """현재 카메라 프레임에서 마커 중점의 dY 픽셀 오프셋 측정"""
+        try:
+            frame = self.camera_manager.get_frame()
+            if frame is None:
+                return None
+
+            tag_id1 = self.tabArucoReliability.spinTagID1.value()
+            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+
+            markers = self.vision_manager.detect_marker_centers(frame)
+            m1, m2 = None, None
+            for m in markers:
+                if m['id'] == tag_id1:
+                    m1 = m
+                elif m['id'] == tag_id2:
+                    m2 = m
+
+            if m1 is None or m2 is None:
+                return None
+
+            h, w = frame.shape[:2]
+            mid_px_x = (m1['center'][0] + m2['center'][0]) / 2.0
+            return mid_px_x - w / 2.0  # 양수=오른쪽
+        except Exception as e:
+            self._log(f"[ArUco] 마커 측정 오류: {e}")
+            return None
+
     def _on_ar_tag_align_single_axis(self, axis: str, angle: float):
         """AR Tag TCP Align - 개별 축 tool.rot 테스트"""
         if not self.robot or not self.robot.is_connected:
@@ -1220,6 +1366,10 @@ class MainWindow(QMainWindow):
             processed_frame = self.tabEyeInHand.process_frame(frame)
             self.tabEyeInHand.display_frame(processed_frame)
 
+        # 레이저 캘리브레이션 탭이 활성화된 경우
+        elif current_tab == 6:  # 레이저 캘리브레이션 탭
+            self.tabLaserCalibration.update_frame(frame)
+
     def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
         """특정 Aruco 태그 감지 (VisionManager 위임)"""
         return self.vision_manager.detect_tag(tag_id, timeout, num_samples)
@@ -1537,6 +1687,9 @@ class MainWindow(QMainWindow):
                     self._log(f"Tool Frame 설정 오류: {e}")
             else:
                 print(f"[DEBUG] 로봇 미연결 - robot={self.robot}, is_connected={self.robot.is_connected if self.robot else 'N/A'}")
+        # 레이저 캘리브레이션 탭 (인덱스 6) → ArduCam 강제 전환
+        elif index == 6:
+            self._on_camera_type_changed(CAMERA_ARDUCAM)
         else:
             # 다른 탭으로 변경 시에도 상태바 업데이트
             if self.robot and self.robot.is_connected:
