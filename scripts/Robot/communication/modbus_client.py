@@ -142,11 +142,13 @@ class ModbusClient:
 
     def _verify_communication(self) -> Tuple[bool, str]:
         """
-        연결 후 통신 검증: Camera Pose 레지스터 읽기
+        연결 후 통신 검증: TCP 좌표 읽기 또는 상태 레지스터 확인
 
         Returns:
             (success: bool, message: str)
         """
+        import struct
+        import math
         import time
 
         print(f"[통신 검증] 시작 (최대 {self.VERIFICATION_RETRIES}회 시도)")
@@ -155,19 +157,45 @@ class ModbusClient:
             try:
                 print(f"[통신 검증] 시도 {attempt + 1}/{self.VERIFICATION_RETRIES}")
 
-                # Camera Pose 레지스터 읽기 (직접 호출, is_connected 체크 없음)
+                # 방법 1: TCP 포즈 레지스터 읽기 (158~169, float32)
                 result = self._client.read_holding_registers(
                     address=self.REGISTER_CAM_POSE,
                     count=12
                 )
 
-                # 성공 확인
                 if result and not result.isError():
-                    print(f"[통신 검증] 성공")
-                    return True, "통신 검증 성공"
-                else:
-                    error_msg = str(result) if result else "응답 없음"
-                    print(f"[통신 검증] 실패: {error_msg}")
+                    # float32 파싱하여 유효한 좌표인지 확인
+                    regs = result.registers
+                    values = []
+                    valid = True
+                    for i in range(0, 12, 2):
+                        raw = struct.pack('<HH', regs[i], regs[i + 1])
+                        val = struct.unpack('<f', raw)[0]
+                        if math.isnan(val) or math.isinf(val):
+                            valid = False
+                            break
+                        values.append(val)
+
+                    if valid and len(values) == 6:
+                        x, y, z, rx, ry, rz = values
+                        pose_str = (f"X={x:.1f} Y={y:.1f} Z={z:.1f} "
+                                    f"Rx={rx:.1f} Ry={ry:.1f} Rz={rz:.1f}")
+                        print(f"[통신 검증] TCP 좌표 확인 성공: {pose_str}")
+                        return True, f"통신 검증 성공 (TCP: {pose_str})"
+
+                # 방법 2: 상태 레지스터(352) 읽기 (TCP 좌표 실패 시 대체)
+                status_result = self._client.read_holding_registers(
+                    address=self.REGISTER_STATUS,
+                    count=1
+                )
+
+                if status_result and not status_result.isError():
+                    status_val = status_result.registers[0]
+                    print(f"[통신 검증] 상태 레지스터 확인 성공: status={status_val}")
+                    return True, f"통신 검증 성공 (상태: {status_val})"
+
+                error_msg = "TCP 좌표 및 상태 레지스터 읽기 실패"
+                print(f"[통신 검증] 실패: {error_msg}")
 
             except Exception as e:
                 print(f"[통신 검증] 예외: {e}")

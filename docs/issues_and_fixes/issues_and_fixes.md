@@ -300,3 +300,145 @@ IPPE 2해 × 2마커 = 4가지 조합의 마커 간 거리 비교:
 2. ~~듀얼 마커 거리 제약~~ → **tvec 동일하여 불가능**
 3. **Coplanarity 제약**: 두 마커 동일 평면 → rx 차이 최소인 조합 선택
 4. **Temporal consistency**: 이전 프레임 해와 가까운 해 선택 (rx 점프 방지)
+
+---
+
+## 2026-02-13 | ArUco 탭 Set Detection Pose 구현 및 TF5 보호정지 재발
+
+**증상:** ArUco 신뢰성 검증 탭에 Set Detection Pose 버튼 기능 추가 시, TF5 설정으로 3축 보호정지 재발. movel 절대 이동 시 4축 오류 추가 발생.
+
+**경위:**
+1. 사용자 요청으로 ArUco 탭에 TF5 설정 → 조그(tool.rot)에서 3축 보호정지
+2. `send_move_to_pose`로 절대 이동 시도 → 4축 한계 오류
+3. 증분 `send_base_rotate` 시도 → 사용자 의도와 불일치 (절대 이동 원함)
+4. `set_rz.py` 참조 후 직접 레지스터 쓰기 방식으로 해결
+
+**근본 원인 (반복 실수):**
+- 작업 시작 전 `issues_and_fixes.md` 미참조 (2026-02-07 TF5→TF4 이력 무시)
+- MEMORY.md 경고 사항 미적용 ("TF5 → 3축 보호정지, TF4 사용")
+- 기존 검증 코드(`set_rz.py`) 미분석, 시행착오 접근
+
+**수정 파일:** `scripts/tabs/tab_aruco_reliability.py`, `scripts/main_window.py`, `scripts/Robot/communication/modbus_client.py`
+
+**수정 내용:**
+
+1. **Set Detection Pose 구현** (`tab_aruco_reliability.py`):
+   - `btnSetDetectionPose` 시그널 연결 + `_on_set_detection_pose()` 핸들러
+   - Detection Pose UI: Rx/Ry/Rz 스핀박스 (기본값 90/0/90°, 편집 가능)
+   - `set_rz.py` 방식: TF3 전환 → `read_current_pose()` → 레지스터 301~306 직접 쓰기 → CMD 20 → TF4 복귀
+
+2. **ArUco 탭 TF: TF5 → TF4** (`main_window.py`):
+   - `_on_tab_changed()`: ArUco 탭 선택 시 TF4
+   - `_setup_robot_connection()`: 연결 시 초기 TF4
+
+3. **로봇 연결 검증 개선** (`modbus_client.py`):
+   - `_verify_communication()`: TCP 포즈 float32 파싱 + NaN/Inf 검증
+   - 대체: 상태 레지스터(352) 읽기 폴백
+
+4. **캘리브레이션 파일 교체**: `config/arducam_calibration.yaml` → 2026-02-13 신규 캘리브레이션
+
+**교훈 (재발 방지):**
+- **작업 시작 전 `issues_and_fixes.md` 필수 참조**
+- **MEMORY.md 경고와 사용자 요청 교차 검증** (TF5 요청 시 즉시 경고)
+- **기존 작동 코드 먼저 분석** (`set_rz.py` 등 레퍼런스 확인 후 동일 패턴 적용)
+- **API 메서드 존재 여부 사전 확인** (`read_tcp_pose` 미존재 → `read_current_pose` 사용)
+
+---
+
+## 2026-02-14 | main.py에서 오른쪽 ArUco 마커 인식 실패 (DetectorParameters 원인)
+
+**증상:** `python main.py` (ArduCam 선택)에서 오른쪽 ArUco 마커(ID:1) 인식 불가. `python scripts/test_arducam_dual_aruco.py`에서는 양쪽 모두 정상 인식. 02-12부터 반복 보고된 이슈.
+
+**근본 원인:** `ArucoCameraPoseEstimator`의 커스텀 `DetectorParameters`가 이미지 가장자리 마커 검출 실패 유발. 특히 `CORNER_REFINE_SUBPIX`가 핵심 원인.
+
+### 관련 이력 (반복 이슈)
+
+| 날짜 | 이슈 | 관련 원인 |
+|------|------|-----------|
+| 02-07 | marker_size 오설정 → Z축 부정확 | ArUco 설정 문제 시작 |
+| 02-12 | GUI에서 ID:1 비정상 큰 사각형 | undistort 좌표 ↔ distorted frame 불일치 |
+| 02-12 | DetectorParameters 차이 최초 발견 | CORNER_REFINE_SUBPIX 지목했으나 미수정 |
+| 02-14 | 오른쪽 마커 인식 실패 (본 이슈) | DetectorParameters 근본 수정 |
+
+### 테스트 스크립트 vs 메인 앱 파이프라인 비교
+
+| 파라미터 | test_arducam (정상) | ArucoCameraPoseEstimator (실패) | 영향 |
+|----------|--------------------|---------------------------------|------|
+| cornerRefinementMethod | CORNER_REFINE_NONE (기본) | **CORNER_REFINE_SUBPIX** | **가장자리 코너 검출 실패** |
+| polygonalApproxAccuracyRate | 0.03 (기본) | **0.05** | 마커 윤곽 근사 느슨 |
+| minMarkerPerimeterRate | 0.03 (기본) | **0.01** | 너무 작은 후보 허용 |
+| minCornerDistanceRate | 0.05 (기본) | **0.01** | 코너 간 거리 제약 약화 |
+| minDistanceToBorder | 3 (기본) | **1** | 가장자리 허용하지만 SUBPIX가 실패 |
+| solvePnP 알고리즘 | IPPE_SQUARE + Z축 disambig + LM | **동일** | 차이 없음 |
+
+### 디버깅 과정
+
+#### 시도 1: undistort 제거 — 실패
+
+```
+가설: cv2.undistort()가 극단적 왜곡 계수(k2=9.89, k3=-218.6)로
+      가장자리 이미지를 파괴 → 오른쪽 마커 검출 실패
+수정: tab_aruco_reliability.py에서 undistorted_frame → frame (원본 프레임으로 검출)
+결과: 실패. 여전히 오른쪽 마커 미검출
+실패 원인: undistort는 부차적 문제. 근본 원인은 DetectorParameters
+```
+
+#### 시도 2: tab에 직접 검출기 구현 (vision_manager 우회) — 검출 성공, 설계 불량
+
+```
+가설: ArucoCameraPoseEstimator의 커스텀 DetectorParameters가 원인
+수정: tab_aruco_reliability.py에 DEFAULT DetectorParameters 검출기를 직접 구현
+      (_init_direct_detector, _detect_markers_direct 메서드 추가)
+결과: 검출 성공! 양쪽 마커 모두 인식됨
+문제: vision_manager를 우회하는 구조 → 코드 중복, 유지보수 불량
+      같은 검출기가 ArucoCameraPoseEstimator + tab 두 곳에 존재
+```
+
+#### 시도 3: ArucoCameraPoseEstimator 근본 수정 — 최종 성공
+
+```
+수정: ArucoCameraPoseEstimator.__init__에서 커스텀 파라미터 20줄 전체 제거
+      → cv2.aruco.DetectorParameters() DEFAULT 사용
+      → tab의 우회 코드(_init_direct_detector, _detect_markers_direct) 제거
+      → vision_manager 정상 경로 복원
+결과: 성공. ArucoCameraPoseEstimator를 사용하는 모든 곳에서 자동 적용
+```
+
+### 수정 파일
+
+1. `scripts/Sensor/aruco/aruco_detector.py` — 근본 수정
+2. `scripts/tabs/tab_aruco_reliability.py` — vision_manager 복원
+
+### 수정 내용
+
+1. **`ArucoCameraPoseEstimator.__init__`**: 커스텀 DetectorParameters 전체 제거 → `cv2.aruco.DetectorParameters()` DEFAULT 사용
+2. **`tab_aruco_reliability.py`**: 우회 코드 제거, `vision_manager.detect_markers()` 정상 사용 복원
+
+**핵심 결론:** `CORNER_REFINE_SUBPIX`가 이미지 가장자리 마커의 서브픽셀 코너 보정 시 실패. DEFAULT 파라미터(`CORNER_REFINE_NONE`)를 사용하면 해결됨. solvePnP 알고리즘(IPPE_SQUARE + Z축 disambiguation + LM refinement)은 이미 테스트 스크립트와 동일하므로 변경 불필요.
+
+**교훈:** 02-12에 DetectorParameters 차이를 이미 발견했지만, undistort 문제에만 집중하여 근본 원인 수정이 지연됨. 증상이 아닌 원인을 추적할 것.
+
+---
+
+## 2026-02-14 | DetectorParameters 수정 복원 누락 (복원 후 재발)
+
+**증상:** 02-14 수정 이후 코드 복원(git checkout 등) 과정에서 `aruco_detector.py`의 커스텀 DetectorParameters가 되돌려짐. 메인 앱에서 오른쪽 마커(ID:1) 검출 실패 재발. `test_arducam_dual_aruco.py`는 정상.
+
+**원인:** 복원 과정에서 02-14 수정(커스텀 DetectorParameters 제거)이 반영되지 않아 `CORNER_REFINE_SUBPIX` 등 커스텀 파라미터가 다시 적용됨.
+
+**수정 파일:** `scripts/Sensor/aruco/aruco_detector.py`
+
+**수정 내용:**
+- `ArucoCameraPoseEstimator.__init__`: 커스텀 DetectorParameters 28줄 제거 → `cv2.aruco.DetectorParameters()` DEFAULT 사용 (02-14 수정 재적용)
+- AprilTag 분기(`CORNER_REFINE_APRILTAG`)만 유지
+
+**검증:** Python import 성공
+
+**기존 수정 적용 상태 확인:**
+- `marker_size_meters=0.015`: 적용됨 (vision_manager.py, aruco_detector.py)
+- `self._dictionary_type` in `update_marker_size()`: 적용됨 (vision_manager.py)
+- `arducam_calibration.yaml` 신규 캘리브레이션: 적용됨 (staged)
+
+**교훈:** 코드 복원/체크아웃 후 반드시 `issues_and_fixes.md`의 최근 수정 사항 전체를 재검증할 것.
+
+---

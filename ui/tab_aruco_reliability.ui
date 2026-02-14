@@ -70,21 +70,21 @@
          <item>
           <widget class="QLabel" name="labelCameraView">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>640</width>
-             <height>480</height>
+             <width>320</width>
+             <height>400</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>640</width>
-             <height>480</height>
+             <width>16777215</width>
+             <height>400</height>
             </size>
            </property>
            <property name="styleSheet">
@@ -114,6 +114,13 @@
             <widget class="QRadioButton" name="radioArduCam">
              <property name="text">
               <string>ArduCam</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnSetDetectionPose">
+             <property name="text">
+              <string>Set Detection Pose</string>
              </property>
             </widget>
            </item>

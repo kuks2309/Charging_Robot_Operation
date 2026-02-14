@@ -12,7 +12,8 @@ import numpy as np
 from datetime import datetime
 from PyQt5 import uic
 from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QVBoxLayout, QButtonGroup,
-                              QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout, QTabWidget)
+                              QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout, QTabWidget,
+                              QGroupBox, QGridLayout)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 
 from .jog_mixin import JogMixin
@@ -158,7 +159,40 @@ class TabArucoReliability(QWidget, JogMixin):
         # QTabWidget 생성
         self.rightTabWidget = QTabWidget()
 
-        # 기존 신뢰성 검증 설정을 첫 번째 서브탭으로
+        # aruco 정렬 탭
+        self.widgetArucoAlign = QWidget()
+        align_tab_layout = QVBoxLayout(self.widgetArucoAlign)
+
+        # 왼쪽/오른쪽 마커를 가로로 나란히 배치
+        marker_row = QHBoxLayout()
+
+        # --- 왼쪽 마커 ---
+        group_marker1 = QGroupBox("왼쪽")
+        grid1 = QGridLayout(group_marker1)
+        grid1.addWidget(QLabel("X (px)"), 0, 0)
+        self.labelM1CenterX = QLabel("-")
+        grid1.addWidget(self.labelM1CenterX, 0, 1)
+        grid1.addWidget(QLabel("Y (px)"), 1, 0)
+        self.labelM1CenterY = QLabel("-")
+        grid1.addWidget(self.labelM1CenterY, 1, 1)
+        marker_row.addWidget(group_marker1)
+
+        # --- 오른쪽 마커 ---
+        group_marker2 = QGroupBox("오른쪽")
+        grid2 = QGridLayout(group_marker2)
+        grid2.addWidget(QLabel("X (px)"), 0, 0)
+        self.labelM2CenterX = QLabel("-")
+        grid2.addWidget(self.labelM2CenterX, 0, 1)
+        grid2.addWidget(QLabel("Y (px)"), 1, 0)
+        self.labelM2CenterY = QLabel("-")
+        grid2.addWidget(self.labelM2CenterY, 1, 1)
+        marker_row.addWidget(group_marker2)
+
+        align_tab_layout.addLayout(marker_row)
+        align_tab_layout.addStretch()
+        self.rightTabWidget.addTab(self.widgetArucoAlign, "aruco 정렬")
+
+        # 기존 신뢰성 검증 설정을 두 번째 서브탭으로
         self.rightTabWidget.addTab(self.groupControl, "신뢰성 검증 설정")
 
         # ar tag tcp align 서브탭 (조그 이동 컨트롤)
@@ -166,7 +200,7 @@ class TabArucoReliability(QWidget, JogMixin):
         ar_layout = QVBoxLayout(self.widgetArTagTcpAlign)
 
         # 조그 이동 그룹
-        from PyQt5.QtWidgets import QGroupBox, QGridLayout, QPushButton
+        from PyQt5.QtWidgets import QPushButton
         self.groupJogMove = QGroupBox("조그 이동")
         jog_grid = QGridLayout(self.groupJogMove)
 
@@ -241,6 +275,23 @@ class TabArucoReliability(QWidget, JogMixin):
 
         ar_layout.addWidget(self.groupAlignParallel)
 
+        # Detection Pose 그룹 (Rx, Ry, Rz 목표값)
+        self.groupDetectionPose = QGroupBox("Detection Pose (Rx, Ry, Rz)")
+        det_layout = QGridLayout(self.groupDetectionPose)
+
+        defaults = {'Rx': 90.0, 'Ry': 0.0, 'Rz': 90.0}
+        for row, name in enumerate(['Rx', 'Ry', 'Rz']):
+            det_layout.addWidget(QLabel(f"{name}"), row, 0)
+            spin = QDoubleSpinBox()
+            spin.setRange(-360.0, 360.0)
+            spin.setDecimals(2)
+            spin.setSuffix(" °")
+            spin.setValue(defaults[name])
+            det_layout.addWidget(spin, row, 1)
+            setattr(self, f'spinDetPose{name}', spin)
+
+        ar_layout.addWidget(self.groupDetectionPose)
+
         # 정렬 디버그 로그
         from PyQt5.QtWidgets import QTextEdit
         self.txtAlignDebug = QTextEdit()
@@ -265,7 +316,7 @@ class TabArucoReliability(QWidget, JogMixin):
         # Known distance spinbox
         self.spinKnownDistance = QDoubleSpinBox()
         self.spinKnownDistance.setRange(50.0, 500.0)
-        self.spinKnownDistance.setValue(130.39)
+        self.spinKnownDistance.setValue(58.0)
         self.spinKnownDistance.setSingleStep(0.1)
         self.spinKnownDistance.setDecimals(2)
         self.spinKnownDistance.setSuffix(" mm")
@@ -413,6 +464,9 @@ class TabArucoReliability(QWidget, JogMixin):
         self.btnExportCSV.clicked.connect(self._on_export_csv)
         self.btnExportGraph.clicked.connect(self._on_export_graph)
 
+        # Detection Pose 버튼
+        self.btnSetDetectionPose.clicked.connect(self._on_set_detection_pose)
+
         # 조그 이동 (JogMixin)
         self._connect_jog_buttons()
 
@@ -466,7 +520,7 @@ class TabArucoReliability(QWidget, JogMixin):
             self.dist_coeffs = None
 
     def update_frame(self, frame):
-        """카메라 프레임 업데이트 (Dual ArUco 지원, undistort 적용)"""
+        """카메라 프레임 업데이트 (Dual ArUco 지원)"""
         if frame is None:
             return
 
@@ -476,41 +530,67 @@ class TabArucoReliability(QWidget, JogMixin):
         camera_type = 'arducam' if self.radioArduCam.isChecked() else 'ds435'
         self._load_calibration(camera_type)
 
-        # undistort 적용
+        # undistort 저장 (표시용)
         if self.camera_matrix is not None and self.dist_coeffs is not None:
             self.undistorted_frame = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
         else:
             self.undistorted_frame = frame.copy()
 
-        # ArUco 태그 검출 및 표시 (Dual 마커) - undistorted 프레임 사용
+        # 마커 중심 좌표 검출 (서비스 레이어 호출)
+        tag_id1 = self.spinTagID1.value()
+        tag_id2 = self.spinTagID2.value()
+        colors = {tag_id1: (0, 255, 0), tag_id2: (255, 0, 0)}
+
+        marker1_info = None
+        marker2_info = None
+
         if self.vision_manager:
-            tag_id1 = self.spinTagID1.value()
-            tag_id2 = self.spinTagID2.value()
-            target_ids = {tag_id1, tag_id2}
-            _, markers = self.vision_manager.detect_markers(self.undistorted_frame)
+            markers = self.vision_manager.detect_marker_centers(
+                frame, self.camera_matrix, self.dist_coeffs
+            )
 
-            # 마커별 색상 (ID1: 초록, ID2: 파랑)
-            colors = {tag_id1: (0, 255, 0), tag_id2: (255, 0, 0)}
+            for m in markers:
+                mid = m['id']
+                if mid not in (tag_id1, tag_id2):
+                    continue
 
-            # 검출된 마커 그리기
-            if markers:
-                for marker in markers:
-                    if marker['id'] in target_ids:
-                        corners = marker['corners']
-                        if len(corners.shape) == 3:
-                            corners = corners[0]
+                # 프레임에 마커 표시 (UI 시각화)
+                color = colors.get(mid, (0, 255, 0))
+                crn = m['corners']
+                if len(crn.shape) == 3:
+                    crn = crn[0]
+                for j in range(4):
+                    pt1 = tuple(crn[j].astype(int))
+                    pt2 = tuple(crn[(j + 1) % 4].astype(int))
+                    cv2.line(frame, pt1, pt2, color, 2)
+                raw_center = crn.mean(axis=0)
+                cv2.putText(frame, f"ID:{mid}", tuple(raw_center.astype(int)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-                        color = colors.get(marker['id'], (0, 255, 0))
-                        for i in range(4):
-                            pt1 = tuple(corners[i].astype(int))
-                            pt2 = tuple(corners[(i + 1) % 4].astype(int))
-                            cv2.line(frame, pt1, pt2, color, 2)
+                cx, cy = m['center']
+                if mid == tag_id1:
+                    marker1_info = {'cx': cx, 'cy': cy}
+                elif mid == tag_id2:
+                    marker2_info = {'cx': cx, 'cy': cy}
 
-                        center = tuple(corners.mean(axis=0).astype(int))
-                        cv2.putText(frame, f"ID:{marker['id']}", center,
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
+        self._update_align_tab_display(marker1_info, marker2_info)
         display_frame_on_label(frame, self.labelCameraView)
+
+    def _update_align_tab_display(self, marker1_info, marker2_info):
+        """aruco 정렬 탭의 마커 중심 좌표 라벨 업데이트"""
+        if marker1_info:
+            self.labelM1CenterX.setText(f"{marker1_info['cx']:.1f}")
+            self.labelM1CenterY.setText(f"{marker1_info['cy']:.1f}")
+        else:
+            self.labelM1CenterX.setText("-")
+            self.labelM1CenterY.setText("-")
+
+        if marker2_info:
+            self.labelM2CenterX.setText(f"{marker2_info['cx']:.1f}")
+            self.labelM2CenterY.setText(f"{marker2_info['cy']:.1f}")
+        else:
+            self.labelM2CenterX.setText("-")
+            self.labelM2CenterY.setText("-")
 
     def _on_start_camera(self):
         """카메라 시작"""
@@ -590,7 +670,7 @@ class TabArucoReliability(QWidget, JogMixin):
         tag_id2 = self.spinTagID2.value()
         timestamp = datetime.now().isoformat()
 
-        if self.undistorted_frame is None:
+        if self.current_frame is None:
             self._log(f"[{self.capture_count + 1}/{self.max_captures}] 프레임 없음")
             self.capture_count += 1
             self.progressBar.setValue(self.capture_count)
@@ -605,10 +685,10 @@ class TabArucoReliability(QWidget, JogMixin):
             known_distance_m = self.spinKnownDistance.value() / 1000.0
             self._log(f"[Capture] Using disambiguation: True, known_distance={known_distance_m * 1000:.2f}mm")
 
-            # Disambiguation 방식으로 검출 (returns tuple)
+            # Disambiguation 방식으로 검출 - 원본 프레임 사용 (solvePnP가 왜곡 처리)
             vis_frame, marker1_pose, marker2_pose, measured_distance, distance_error = \
                 self.vision_manager.detect_markers_disambiguated(
-                    self.undistorted_frame,
+                    self.current_frame,
                     (tag_id1, tag_id2),
                     known_distance_m
                 )
@@ -624,8 +704,8 @@ class TabArucoReliability(QWidget, JogMixin):
                 if hasattr(self, 'labelDistanceError'):
                     self.labelDistanceError.setText("Distance Error: -- mm")
         else:
-            # 기존 방식으로 검출
-            _, markers = self.vision_manager.detect_markers(self.undistorted_frame)
+            # 기존 방식으로 검출 - 원본 프레임 사용 (solvePnP가 왜곡 처리)
+            _, markers = self.vision_manager.detect_markers(self.current_frame)
 
         # Dual 마커 검출
         marker1_data = None
@@ -1600,6 +1680,72 @@ class TabArucoReliability(QWidget, JogMixin):
         drx, dry, drz = self._last_tcp_correction
         self._log(f"마커 평행 정렬 요청: dRx={drx:.2f}, dRy={dry:.2f}, dRz={drz:.2f}°")
         self.align_parallel_requested.emit(drx, dry, drz)
+
+    def _on_set_detection_pose(self):
+        """set_rz.py 방식: TF3 전환 → 현재XYZ+목표RxRyRz movel → TF5 복귀"""
+        if self.robot is None:
+            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
+            return
+
+        import time
+        from PyQt5.QtWidgets import QApplication
+
+        try:
+            # 1) TF3(기본)으로 전환 - set_rz.py와 동일 조건
+            self._log("Detection Pose: TF3으로 전환")
+            success, msg = self.robot.send_set_toolframe(3, wait=True)
+            if not success:
+                self._log(f"TF3 전환 실패: {msg}")
+                return
+            time.sleep(0.5)
+
+            # 2) 현재 위치 읽기 (set_rz.py와 동일: reg 158~169, float32)
+            pose = self.robot.read_current_pose()
+            if pose is None:
+                QMessageBox.warning(self, "경고", "TCP 좌표를 읽을 수 없습니다.")
+                return
+
+            x, y, z = pose[0], pose[1], pose[2]
+            tgt_rx = self.spinDetPoseRx.value()
+            tgt_ry = self.spinDetPoseRy.value()
+            tgt_rz = self.spinDetPoseRz.value()
+
+            self._log(f"현재: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
+            self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
+
+            # 3) 레지스터 직접 쓰기 (set_rz.py 방식 그대로)
+            to_int16 = self.robot.to_uint16
+            regs = [
+                to_int16(int(x * 10)),
+                to_int16(int(y * 10)),
+                to_int16(int(z * 10)),
+                to_int16(int(tgt_rx * 10)),
+                to_int16(int(tgt_ry * 10)),
+                to_int16(int(tgt_rz * 10)),
+            ]
+            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+            # 4) 완료 대기
+            success, msg = self.robot.wait_for_done(
+                process_events_callback=QApplication.processEvents
+            )
+            if not success:
+                self._log(f"Detection Pose 이동 실패: {msg}")
+                return
+
+            self._log("Detection Pose 이동 완료")
+            time.sleep(0.5)
+
+            # 5) TF4로 복귀 (TF5는 TCP 오프셋이 커서 3축 보호정지 발생)
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            if success:
+                self._log("TF4 복귀 완료")
+            else:
+                self._log(f"TF4 복귀 실패: {msg}")
+
+        except Exception as e:
+            QMessageBox.warning(self, "오류", f"Detection Pose 실패: {e}")
 
     def _update_robot_pose_ui(self):
         """현재 로봇 포즈 UI 업데이트"""

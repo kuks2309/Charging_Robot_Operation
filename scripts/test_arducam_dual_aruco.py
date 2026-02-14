@@ -26,6 +26,39 @@ sys.path.insert(0, PROJECT_ROOT)
 CALIB_FILE = os.path.join(PROJECT_ROOT, '..', 'config', 'arducam_calibration.yaml')
 
 from Robot.communication.modbus_client import ModbusClient
+from utils.ar_to_base_tf import euler_to_rotation_matrix, rotation_matrix_to_euler
+
+
+def marker_to_base(tvec, rvec, robot_pose):
+    """마커의 카메라 좌표계 pose → 베이스 좌표계 변환.
+
+    ar_to_base_tf.camera_to_vision의 diag(1,-1,1) (det=-1 반사행렬)이
+    Rodrigues 왕복 시 회전행렬을 깨뜨리는 버그를 우회하기 위해
+    회전행렬을 직접 합성한다.
+
+    회전: R_base = R_tcp @ R_camera  (marker→base)
+           euler = decompose(R_base.T)  (base→marker, TCP와 동일 관점)
+    위치: P_base = R_tcp @ tvec + T_tcp  (카메라 = 툴 프레임 가정)
+
+    Note: R_base.T를 분해하는 이유:
+      - TCP euler = base→tool 회전 (Doosan 관례)
+      - R_base.T euler = base→marker 회전 (동일 관례)
+      → 마커 orientation을 TCP Rx/Ry/Rz와 직접 비교 가능
+    """
+    R_camera, _ = cv2.Rodrigues(np.array(rvec).flatten())
+    R_tcp = euler_to_rotation_matrix(robot_pose[3], robot_pose[4], robot_pose[5])
+    T_tcp = np.array(robot_pose[:3]) / 1000.0
+
+    tvec = np.array(tvec).flatten()
+
+    # 회전: R_base.T 분해 (base→marker = TCP와 동일 관점)
+    R_base = R_tcp @ R_camera
+    rx, ry, rz = rotation_matrix_to_euler(R_base.T)
+
+    # 위치: 카메라 → 베이스 직접 변환
+    base_pos = R_tcp @ tvec + T_tcp
+
+    return (base_pos[0]*1000, base_pos[1]*1000, base_pos[2]*1000, rx, ry, rz)
 
 # ArUco 설정
 ARUCO_DICT_TYPE = cv2.aruco.DICT_5X5_50
@@ -71,6 +104,45 @@ def unwrap_euler(marker_id, euler):
                 euler[i] += 360
     _prev_euler[marker_id] = euler.copy()
     return euler
+
+
+def compute_plane_pose(m1, m2):
+    """두 마커로 정의되는 평면의 위치(중점)와 자세(회전행렬) 계산.
+
+    좌표계 정의:
+      - Origin: 두 마커 중점
+      - X축: m1 → m2 방향
+      - Z축: 두 마커 법선 평균 (카메라 방향)
+      - Y축: Z × X (오른손 법칙)
+
+    Returns: (midpoint_tvec, R_plane, euler_deg)
+    """
+    mid = (m1['tvec'] + m2['tvec']) / 2.0
+
+    # X축: m1 → m2
+    x_axis = m2['tvec'] - m1['tvec']
+    x_axis = x_axis / np.linalg.norm(x_axis)
+
+    # 각 마커의 Z축 법선 (카메라 좌표계)
+    R1, _ = cv2.Rodrigues(m1['rvec'])
+    R2, _ = cv2.Rodrigues(m2['rvec'])
+    z1 = R1[:, 2]
+    z2 = R2[:, 2]
+    z_avg = (z1 + z2) / 2.0
+    z_avg = z_avg / np.linalg.norm(z_avg)
+
+    # Y축 = Z × X, 재정규화
+    y_axis = np.cross(z_avg, x_axis)
+    y_axis = y_axis / np.linalg.norm(y_axis)
+
+    # Z축 재계산 (직교성 보장)
+    z_axis = np.cross(x_axis, y_axis)
+    z_axis = z_axis / np.linalg.norm(z_axis)
+
+    R_plane = np.column_stack([x_axis, y_axis, z_axis])
+    euler = rotation_matrix_to_euler(R_plane)
+
+    return mid, R_plane, euler
 
 
 def draw_axes_on_frame(frame, camera_matrix, dist_coeffs, rvec, tvec, length):
@@ -189,6 +261,9 @@ def main():
     console_count = 0
     console_max = 50
 
+    # Temporal consistency: 이전 프레임의 평면 rx 저장
+    _prev_plane_rx = [None]  # mutable container for closure
+
     try:
         while plt.fignum_exists(fig.number):
             ret, frame = cap.read()
@@ -200,8 +275,16 @@ def main():
 
             markers = {}
 
+            # 로봇 TCP 자세 읽기
+            robot_pose = None
+            if robot.is_connected:
+                robot_pose = robot.read_current_pose()
+
             if ids is not None:
+                # Phase 1: 각 마커별 IPPE 후보 수집 (z22 < 0 필터)
+                marker_candidates = {}  # marker_id -> [{'rv', 'tv', 'rx', 'corners'}, ...]
                 for i, marker_id in enumerate(ids.flatten()):
+                    mid = int(marker_id)
                     n_solutions, rvecs, tvecs, reproj_errors = cv2.solvePnPGeneric(
                         obj_points, corners[i].reshape(-1, 2),
                         camera_matrix, dist_coeffs,
@@ -210,36 +293,97 @@ def main():
                     if n_solutions == 0:
                         continue
 
-                    # Z축 법선 기준 disambiguation: 마커 Z축이 카메라를 향하는 해 선택
-                    # 카메라 좌표계에서 z_axis.z < 0 → 마커가 카메라를 바라봄
-                    best_rv, best_tv = rvecs[0].flatten(), tvecs[0].flatten()
+                    candidates = []
                     for s in range(n_solutions):
                         rv = rvecs[s].flatten()
+                        tv = tvecs[s].flatten()
                         R, _ = cv2.Rodrigues(rv)
-                        z_axis = R[:, 2]
-                        if z_axis[2] < 0:  # Z축이 카메라 방향
-                            best_rv = rv
-                            best_tv = tvecs[s].flatten()
-                            break
+                        if R[2, 2] < 0:  # Z축이 카메라 방향
+                            rx = np.degrees(np.arctan2(R[2, 1], R[2, 2])) % 360
+                            candidates.append({'rv': rv, 'tv': tv, 'rx': rx})
 
-                    # LM refinement
+                    if not candidates:
+                        # z22 < 0 만족하는 해가 없으면 sol[0] 폴백
+                        rv = rvecs[0].flatten()
+                        tv = tvecs[0].flatten()
+                        R, _ = cv2.Rodrigues(rv)
+                        rx = np.degrees(np.arctan2(R[2, 1], R[2, 2])) % 360
+                        candidates.append({'rv': rv, 'tv': tv, 'rx': rx})
+
+                    marker_candidates[mid] = (candidates, corners[i])
+
+                # Phase 2: Coplanarity + Temporal disambiguation (2개 마커)
+                mids_all = sorted(marker_candidates.keys())
+                if len(mids_all) >= 2:
+                    mid_a, mid_b = mids_all[0], mids_all[1]
+                    sols_a, corners_a = marker_candidates[mid_a]
+                    sols_b, corners_b = marker_candidates[mid_b]
+
+                    # 모든 조합 평가
+                    best_combo = (0, 0)
+                    best_score = 999.0
+                    for ia in range(len(sols_a)):
+                        for ib in range(len(sols_b)):
+                            # Coplanarity: rx 차이 최소
+                            rx_diff = abs(sols_a[ia]['rx'] - sols_b[ib]['rx'])
+                            if rx_diff > 180:
+                                rx_diff = 360 - rx_diff
+                            score = rx_diff
+
+                            # Temporal: 이전 프레임 plane rx와의 차이 가산
+                            if _prev_plane_rx[0] is not None:
+                                avg_rx = (sols_a[ia]['rx'] + sols_b[ib]['rx']) / 2.0
+                                temporal_diff = abs(avg_rx - _prev_plane_rx[0])
+                                if temporal_diff > 180:
+                                    temporal_diff = 360 - temporal_diff
+                                # temporal weight: coplanarity가 비슷할 때 temporal로 결정
+                                score += temporal_diff * 0.5
+
+                            if score < best_score:
+                                best_score = score
+                                best_combo = (ia, ib)
+
+                    ia_best, ib_best = best_combo
+                    selected = {
+                        mid_a: (sols_a[ia_best], corners_a),
+                        mid_b: (sols_b[ib_best], corners_b),
+                    }
+
+                    # 평면 rx 업데이트 (temporal용)
+                    _prev_plane_rx[0] = (sols_a[ia_best]['rx'] + sols_b[ib_best]['rx']) / 2.0
+
+                else:
+                    # 1개 마커: temporal consistency로 선택
+                    selected = {}
+                    for mid in mids_all:
+                        cands, crn = marker_candidates[mid]
+                        if len(cands) == 1 or _prev_plane_rx[0] is None:
+                            selected[mid] = (cands[0], crn)
+                        else:
+                            # 이전 plane rx에 가장 가까운 후보
+                            best_c = min(cands, key=lambda c: min(
+                                abs(c['rx'] - _prev_plane_rx[0]),
+                                360 - abs(c['rx'] - _prev_plane_rx[0])))
+                            selected[mid] = (best_c, crn)
+
+                # Phase 3: LM refinement + euler 계산
+                for mid, (sol, crn) in selected.items():
+                    corner_2d = crn.reshape(-1, 2)
                     best_rv, best_tv = cv2.solvePnPRefineLM(
-                        obj_points, corners[i].reshape(-1, 2),
+                        obj_points, corner_2d,
                         camera_matrix, dist_coeffs,
-                        best_rv.reshape(3, 1), best_tv.reshape(3, 1)
+                        sol['rv'].reshape(3, 1), sol['tv'].reshape(3, 1)
                     )
                     best_rv = best_rv.flatten()
                     best_tv = best_tv.flatten()
 
                     R, _ = cv2.Rodrigues(best_rv)
                     euler = rotation_matrix_to_euler(R)
-                    marker_id = int(marker_id)
-                    euler = unwrap_euler(marker_id, euler)
-                    # rx를 [0, 360) 범위로 정규화 (±180° 경계 일관성)
+                    euler = unwrap_euler(mid, euler)
                     euler[0] = euler[0] % 360
-                    markers[marker_id] = {
+                    markers[mid] = {
                         'tvec': best_tv, 'rvec': best_rv,
-                        'euler': euler, 'corners': corners[i],
+                        'euler': euler, 'corners': crn,
                     }
 
                 # 시각화
@@ -250,8 +394,14 @@ def main():
                     draw_axes_on_frame(frame, camera_matrix, dist_coeffs, rvec, tvec, MARKER_SIZE * 0.5)
 
                     c = np.mean(m['corners'][0], axis=0).astype(int)
+                    # 마커 중심 이미지 좌표 (픽셀) 표시
+                    cv2.circle(frame, (c[0], c[1]), 4, (0, 255, 255), -1)
                     cv2.putText(frame, f"ID:{marker_id}", (c[0]-20, c[1]-40),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    cv2.putText(frame,
+                                f"px:[{c[0]}, {c[1]}]",
+                                (c[0]-60, c[1]-55),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 200, 0), 1)
                     cv2.putText(frame,
                                 f"t:[{m['tvec'][0]*1000:.1f}, {m['tvec'][1]*1000:.1f}, {m['tvec'][2]*1000:.1f}]mm",
                                 (c[0]-60, c[1]-20),
@@ -260,11 +410,49 @@ def main():
                                 f"r:[{m['euler'][0]:.1f}, {m['euler'][1]:.1f}, {m['euler'][2]:.1f}]deg",
                                 (c[0]-60, c[1]),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
+                    # 베이스 기준 자세 표시
+                    if robot_pose:
+                        bx, by, bz, brx, bry, brz = marker_to_base(m['tvec'], m['rvec'], robot_pose)
+                        cv2.putText(frame,
+                                    f"base r:[{brx:.1f}, {bry:.1f}, {brz:.1f}]deg",
+                                    (c[0]-60, c[1]+15),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 0), 1)
 
-            # 로봇 TCP 자세 읽기
-            robot_pose = None
-            if robot.is_connected:
-                robot_pose = robot.read_current_pose()
+                # 평면 자세 계산 및 시각화 (2개 이상 마커 검출 시)
+                if len(markers) >= 2:
+                    mids_sorted = sorted(markers.keys())
+                    plane_mid, R_plane, plane_euler = compute_plane_pose(
+                        markers[mids_sorted[0]], markers[mids_sorted[1]])
+
+                    # 평면 중점에 좌표축 그리기 (마젠타 색상으로 구분)
+                    plane_rvec, _ = cv2.Rodrigues(R_plane)
+                    plane_tvec = plane_mid.reshape(3, 1)
+                    draw_axes_on_frame(frame, camera_matrix, dist_coeffs,
+                                       plane_rvec, plane_tvec, MARKER_SIZE * 0.8)
+
+                    # 중점 위치에 "PLANE" 라벨 + 자세 표시
+                    mid_2d, _ = cv2.projectPoints(
+                        np.zeros((1, 3), dtype=np.float32),
+                        plane_rvec, plane_tvec, camera_matrix, dist_coeffs)
+                    mx, my = int(mid_2d[0][0][0]), int(mid_2d[0][0][1])
+                    cv2.putText(frame, "PLANE", (mx - 30, my + 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+                    cv2.putText(frame,
+                                f"t:[{plane_mid[0]*1000:.1f}, {plane_mid[1]*1000:.1f}, {plane_mid[2]*1000:.1f}]mm",
+                                (mx - 80, my + 45),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 0, 255), 1)
+                    cv2.putText(frame,
+                                f"r:[{plane_euler[0]:.1f}, {plane_euler[1]:.1f}, {plane_euler[2]:.1f}]deg",
+                                (mx - 80, my + 65),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 0, 255), 1)
+                    # 평면 베이스 기준 자세 표시
+                    if robot_pose:
+                        pb_x, pb_y, pb_z, pb_rx, pb_ry, pb_rz = marker_to_base(
+                            plane_mid, plane_rvec.flatten(), robot_pose)
+                        cv2.putText(frame,
+                                    f"base r:[{pb_rx:.1f}, {pb_ry:.1f}, {pb_rz:.1f}]deg",
+                                    (mx - 80, my + 85),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 0), 1)
 
             # 's' 키 저장 처리
             if save_requested[0] and len(markers) >= 2:
@@ -421,18 +609,41 @@ def main():
                 mids = sorted(markers.keys())
                 m1, m2 = markers[mids[0]], markers[mids[1]]
                 dist = np.linalg.norm(m1['tvec'] - m2['tvec']) * 1000
+                p_mid, R_p, p_euler = compute_plane_pose(m1, m2)
+                # 베이스 기준 변환
+                base_info = ""
+                if robot_pose:
+                    b1 = marker_to_base(m1['tvec'], m1['rvec'], robot_pose)
+                    b2 = marker_to_base(m2['tvec'], m2['rvec'], robot_pose)
+                    p_rvec_flat, _ = cv2.Rodrigues(R_p)
+                    bp = marker_to_base(p_mid, p_rvec_flat.flatten(), robot_pose)
+                    base_info = (f"[Base] ID{mids[0]}: pos=[{b1[0]:.1f}, {b1[1]:.1f}, {b1[2]:.1f}]mm "
+                                 f"r=[{b1[3]:.1f}, {b1[4]:.1f}, {b1[5]:.1f}]deg\n"
+                                 f"[Base] ID{mids[1]}: pos=[{b2[0]:.1f}, {b2[1]:.1f}, {b2[2]:.1f}]mm "
+                                 f"r=[{b2[3]:.1f}, {b2[4]:.1f}, {b2[5]:.1f}]deg\n"
+                                 f"[Base] PLANE: pos=[{bp[0]:.1f}, {bp[1]:.1f}, {bp[2]:.1f}]mm "
+                                 f"r=[{bp[3]:.1f}, {bp[4]:.1f}, {bp[5]:.1f}]deg\n")
                 info = (f"{robot_info}"
                         f"ID{mids[0]}: t=[{m1['tvec'][0]*1000:.1f}, {m1['tvec'][1]*1000:.1f}, {m1['tvec'][2]*1000:.1f}]mm "
                         f"r=[{m1['euler'][0]:.1f}, {m1['euler'][1]:.1f}, {m1['euler'][2]:.1f}]deg\n"
                         f"ID{mids[1]}: t=[{m2['tvec'][0]*1000:.1f}, {m2['tvec'][1]*1000:.1f}, {m2['tvec'][2]*1000:.1f}]mm "
                         f"r=[{m2['euler'][0]:.1f}, {m2['euler'][1]:.1f}, {m2['euler'][2]:.1f}]deg\n"
+                        f"PLANE: t=[{p_mid[0]*1000:.1f}, {p_mid[1]*1000:.1f}, {p_mid[2]*1000:.1f}]mm "
+                        f"r=[{p_euler[0]:.1f}, {p_euler[1]:.1f}, {p_euler[2]:.1f}]deg\n"
+                        f"{base_info}"
                         f"Distance: {dist:.1f}mm (ref:{KNOWN_MARKER_DISTANCE*1000:.0f}mm, err:{abs(dist-KNOWN_MARKER_DISTANCE*1000):.1f}mm) | Saved: {len(saved_samples)}")
             elif len(markers) == 1:
                 mid = list(markers.keys())[0]
                 m = markers[mid]
+                base_info_1 = ""
+                if robot_pose:
+                    b = marker_to_base(m['tvec'], m['rvec'], robot_pose)
+                    base_info_1 = (f"[Base] ID{mid}: pos=[{b[0]:.1f}, {b[1]:.1f}, {b[2]:.1f}]mm "
+                                   f"r=[{b[3]:.1f}, {b[4]:.1f}, {b[5]:.1f}]deg\n")
                 info = (f"{robot_info}"
                         f"ID{mid}: t=[{m['tvec'][0]*1000:.1f}, {m['tvec'][1]*1000:.1f}, {m['tvec'][2]*1000:.1f}]mm "
                         f"r=[{m['euler'][0]:.1f}, {m['euler'][1]:.1f}, {m['euler'][2]:.1f}]deg\n"
+                        f"{base_info_1}"
                         f"(1/2 markers) | Saved: {len(saved_samples)}")
             else:
                 info = f"{robot_info}No markers detected | Saved: {len(saved_samples)}"

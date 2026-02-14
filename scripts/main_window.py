@@ -688,11 +688,19 @@ class MainWindow(QMainWindow):
         success, message = self.robot.connect()
 
         if success:
-            self.statusbar.showMessage(message)
             self._log(message)
 
             # 공통 연결 설정
             self._setup_robot_connection()
+
+            # 연결 후 현재 TCP 좌표 표시
+            try:
+                pose = self.robot.read_camera_pose()
+                if pose:
+                    x, y, z, rx, ry, rz = pose
+                    self._log(f"현재 TCP 좌표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={rx:.1f} Ry={ry:.1f} Rz={rz:.1f}")
+            except Exception:
+                pass
         else:
             self.tabTaskEdit.update_connection_status(False)
             self.statusbar.showMessage(message)
@@ -732,17 +740,17 @@ class MainWindow(QMainWindow):
         # 상태바에 연결 정보 및 Tool Frame 표시
         self._update_statusbar()
 
-        # 현재 탭이 비전/캘리브레이션/ArUco 신뢰성 검증 탭이면 Tool Frame 1로 설정
+        # 현재 탭에 따라 Tool Frame 설정 (비전/캘리브 → TF1, ArUco → TF4)
         current_tab = self.tabWidget.currentIndex()
         if current_tab in [1, 2, 3]:
             try:
-                success, msg = self.robot.send_set_toolframe(1, wait=True)
+                tf = 4 if current_tab == 3 else 1
+                success, msg = self.robot.send_set_toolframe(tf, wait=True)
                 tab_name = "Vision" if current_tab == 1 else ("캘리브레이션" if current_tab == 2 else "ArUco 신뢰성 검증")
                 if success:
-                    self._log(f"{tab_name} 탭: Tool Frame 1 (비전)으로 설정 완료")
-                    # 캘리브레이션 탭 UI 업데이트
+                    self._log(f"{tab_name} 탭: Tool Frame {tf}으로 설정 완료")
                     if current_tab == 2:
-                        self.tabCalibration.update_current_toolframe(1)
+                        self.tabCalibration.update_current_toolframe(tf)
                     # 상태바 업데이트
                     self._update_statusbar()
                 else:
@@ -1473,18 +1481,18 @@ class MainWindow(QMainWindow):
 
     def _on_tab_changed(self, index: int):
         """탭 변경 시 호출"""
-        # Vision 탭 (인덱스 1), 캘리브레이션 탭 (인덱스 2), ArUco 신뢰성 검증 탭 (인덱스 3)이 선택되면 Tool Frame 1로 설정
+        # Vision 탭 (인덱스 1), 캘리브레이션 탭 (인덱스 2) → TF1
+        # ArUco 신뢰성 검증 탭 (인덱스 3) → TF4 (TF5는 TCP 오프셋이 커서 보호정지)
         if index in [1, 2, 3]:
             if self.robot and self.robot.is_connected:
                 try:
-                    success, msg = self.robot.send_set_toolframe(1, wait=True)
+                    tf = 4 if index == 3 else 1
+                    success, msg = self.robot.send_set_toolframe(tf, wait=True)
                     tab_name = "Vision" if index == 1 else ("캘리브레이션" if index == 2 else "ArUco 신뢰성 검증")
                     if success:
-                        self._log(f"{tab_name} 탭 선택: Tool Frame 1 (비전)으로 설정 완료")
-                        # 캘리브레이션 탭 UI 업데이트
+                        self._log(f"{tab_name} 탭 선택: Tool Frame {tf}으로 설정 완료")
                         if index == 2:
-                            self.tabCalibration.update_current_toolframe(1)
-                        # 상태바 업데이트
+                            self.tabCalibration.update_current_toolframe(tf)
                         self._update_statusbar()
                     else:
                         self._log(f"Tool Frame 설정 실패: {msg}")

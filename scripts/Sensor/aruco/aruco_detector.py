@@ -26,70 +26,17 @@ class ArucoCameraPoseEstimator:
 
         if opencv_version >= (4, 7):
             # OpenCV 4.7.0+ uses ArucoDetector
-            self.detector = aruco.ArucoDetector(self.aruco_dict)
-
-            # Optimize detection parameters for better detection
             params = aruco.DetectorParameters()
-            # Adaptive thresholding - wider range for varied lighting
-            params.adaptiveThreshWinSizeMin = 3
-            params.adaptiveThreshWinSizeMax = 23
-            params.adaptiveThreshWinSizeStep = 10
-            params.adaptiveThreshConstant = 7
-            # Corner refinement - use AprilTag method for AprilTag markers
             if is_apriltag:
                 params.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
-            else:
-                params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-            # Precision-tuned parameters (matching OpenCV 4.5.4 quality)
-            params.cornerRefinementWinSize = 7
-            params.cornerRefinementMaxIterations = 50
-            params.cornerRefinementMinAccuracy = 0.01
-            # Detection parameters - more permissive for small markers
-            params.minMarkerPerimeterRate = 0.01
-            params.maxMarkerPerimeterRate = 4.0
-            params.polygonalApproxAccuracyRate = 0.05
-            params.minCornerDistanceRate = 0.01
-            params.minDistanceToBorder = 1
-            params.minMarkerDistanceRate = 0.01
-            # Perspective removal
-            params.perspectiveRemovePixelPerCell = 4
-            params.perspectiveRemoveIgnoredMarginPerCell = 0.13
-            # Other parameters
-            params.minOtsuStdDev = 5.0
-            params.markerBorderBits = 1
-            self.detector.setDetectorParameters(params)
+            self.detector = aruco.ArucoDetector(self.aruco_dict, params)
             self.use_legacy_api = False
         else:
             # OpenCV < 4.7.0 uses legacy API
             self.detector = None
             params = aruco.DetectorParameters_create()
-            # Adaptive thresholding - wider range for varied lighting
-            params.adaptiveThreshWinSizeMin = 3
-            params.adaptiveThreshWinSizeMax = 23
-            params.adaptiveThreshWinSizeStep = 10
-            params.adaptiveThreshConstant = 7
-            # Corner refinement - use AprilTag method for AprilTag markers
             if is_apriltag:
                 params.cornerRefinementMethod = aruco.CORNER_REFINE_APRILTAG
-            else:
-                params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-            # Precision-tuned parameters (matching OpenCV 4.5.4 quality)
-            params.cornerRefinementWinSize = 7
-            params.cornerRefinementMaxIterations = 50
-            params.cornerRefinementMinAccuracy = 0.01
-            # Detection parameters - more permissive for small markers
-            params.minMarkerPerimeterRate = 0.01
-            params.maxMarkerPerimeterRate = 4.0
-            params.polygonalApproxAccuracyRate = 0.05
-            params.minCornerDistanceRate = 0.01
-            params.minDistanceToBorder = 1
-            params.minMarkerDistanceRate = 0.01
-            # Perspective removal
-            params.perspectiveRemovePixelPerCell = 4
-            params.perspectiveRemoveIgnoredMarginPerCell = 0.13
-            # Other parameters
-            params.minOtsuStdDev = 5.0
-            params.markerBorderBits = 1
             self.detector_params = params
             self.use_legacy_api = True
         
@@ -208,6 +155,52 @@ class ArucoCameraPoseEstimator:
                 
         
         return marker_poses
+
+    def detect_marker_centers(self, image, camera_matrix=None, dist_coeffs=None):
+        """
+        마커 검출 및 중심 좌표 반환 (pose 추정 없이 경량 검출).
+
+        Args:
+            image: 입력 이미지 (grayscale 또는 color)
+            camera_matrix: 카메라 행렬 (numpy array, optional) - 제공 시 undistortPoints 적용
+            dist_coeffs: 왜곡 계수 (numpy array, optional)
+
+        Returns:
+            list of dict: [{'id': int, 'corners': ndarray, 'center': (cx, cy)}, ...]
+        """
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        if self.use_legacy_api:
+            corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.detector_params)
+        else:
+            corners, ids, _ = self.detector.detectMarkers(gray)
+
+        results = []
+        if ids is not None:
+            for i, mid in enumerate(ids.flatten()):
+                crn = corners[i]
+                if len(crn.shape) == 3:
+                    crn = crn[0]
+
+                if camera_matrix is not None and dist_coeffs is not None:
+                    undist = cv2.undistortPoints(
+                        crn.reshape(-1, 1, 2).astype(np.float64),
+                        camera_matrix, dist_coeffs, P=camera_matrix
+                    )
+                    center = undist.reshape(-1, 2).mean(axis=0)
+                else:
+                    center = crn.mean(axis=0)
+
+                results.append({
+                    'id': int(mid),
+                    'corners': corners[i],
+                    'center': (float(center[0]), float(center[1])),
+                })
+
+        return results
 
     def detect_and_estimate_pose_dual_disambiguated(self, image, intrinsics, target_ids: tuple, known_distance_m: float):
         """

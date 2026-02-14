@@ -1,102 +1,95 @@
 #!/usr/bin/env python3
-"""
-AR Tag 감지 테스트 스크립트
-- 모든 ArUco 사전 타입 테스트
-"""
-
+"""ArUco 검출 단위 테스트 - ArduCam 마커 인식 확인"""
 import cv2
 import numpy as np
-import pyrealsense2 as rs
-import time
+import yaml
+import os
 
-# 테스트할 사전 타입들
-DICT_TYPES = [
-    ("DICT_4X4_50", cv2.aruco.DICT_4X4_50),
-    ("DICT_4X4_100", cv2.aruco.DICT_4X4_100),
-    ("DICT_4X4_250", cv2.aruco.DICT_4X4_250),
-    ("DICT_5X5_50", cv2.aruco.DICT_5X5_50),
-    ("DICT_5X5_100", cv2.aruco.DICT_5X5_100),
-    ("DICT_5X5_250", cv2.aruco.DICT_5X5_250),
-    ("DICT_6X6_50", cv2.aruco.DICT_6X6_50),
-    ("DICT_6X6_100", cv2.aruco.DICT_6X6_100),
-    ("DICT_6X6_250", cv2.aruco.DICT_6X6_250),
-    ("DICT_7X7_50", cv2.aruco.DICT_7X7_50),
-    ("DICT_7X7_100", cv2.aruco.DICT_7X7_100),
-    ("DICT_7X7_250", cv2.aruco.DICT_7X7_250),
-    ("DICT_ARUCO_ORIGINAL", cv2.aruco.DICT_ARUCO_ORIGINAL),
-]
+DEVICE_INDEX = 6
+CALIB_FILE = os.path.join(os.path.dirname(__file__), '..', 'config', 'arducam_calibration.yaml')
 
 def main():
-    # RealSense 카메라 초기화
-    pipeline = rs.pipeline()
-    config = rs.config()
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    print(f"OpenCV: {cv2.__version__}")
+    ver = tuple(map(int, cv2.__version__.split('.')[:2]))
 
-    try:
-        pipeline.start(config)
-        print("=" * 60)
-        print("AR Tag 감지 테스트 (모든 사전 타입)")
-        print("카메라 시작됨. 마커를 카메라에 비춰주세요.")
-        print("10초 동안 테스트합니다...")
-        print("=" * 60)
+    # 카메라
+    cap = cv2.VideoCapture(DEVICE_INDEX)
+    if not cap.isOpened():
+        print(f"[FAIL] 카메라 {DEVICE_INDEX} 열기 실패")
+        return
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    print(f"[OK] 카메라: {int(cap.get(3))}x{int(cap.get(4))}")
 
-        start_time = time.time()
-        detected_results = {}  # {dict_name: set of ids}
-        frame_count = 0
+    for _ in range(10):
+        cap.read()
 
-        while time.time() - start_time < 10.0:
-            frames = pipeline.wait_for_frames()
-            color_frame = frames.get_color_frame()
-            if not color_frame:
-                continue
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        print("[FAIL] 프레임 캡처 실패")
+        return
+    print(f"[OK] 프레임: {frame.shape}")
 
-            frame_count += 1
-            color_image = np.asanyarray(color_frame.get_data())
-            gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
+    # 캘리브레이션
+    camera_matrix, dist_coeffs = None, None
+    if os.path.exists(CALIB_FILE):
+        with open(CALIB_FILE) as f:
+            data = yaml.safe_load(f)
+        cm = data['camera_matrix']
+        camera_matrix = np.array(cm['data'], dtype=np.float64).reshape(cm['rows'], cm['cols'])
+        dc = data['distortion_coefficients']
+        dist_coeffs = np.array(dc['data'], dtype=np.float64).reshape(dc['rows'], dc['cols'])
+        print(f"[OK] 캘리브레이션 로드")
+    else:
+        print(f"[WARN] 캘리브레이션 없음")
 
-            # 모든 사전 타입으로 감지 시도
-            for dict_name, dict_type in DICT_TYPES:
-                aruco_dict = cv2.aruco.getPredefinedDictionary(dict_type)
-                params = cv2.aruco.DetectorParameters()
-                params.minMarkerPerimeterRate = 0.005
-                params.maxMarkerPerimeterRate = 4.0
-                detector = cv2.aruco.ArucoDetector(aruco_dict, params)
-                corners, ids, rejected = detector.detectMarkers(gray)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                if ids is not None and len(ids) > 0:
-                    if dict_name not in detected_results:
-                        detected_results[dict_name] = set()
-                    detected_results[dict_name].update(ids.flatten().tolist())
+    # 원본 프레임 검출
+    print(f"\n--- 원본 프레임 검출 ---")
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_50)
+    if ver >= (4, 7):
+        detector = cv2.aruco.ArucoDetector(aruco_dict, cv2.aruco.DetectorParameters())
+        corners, ids, rejected = detector.detectMarkers(gray)
+    else:
+        corners, ids, rejected = cv2.aruco.detectMarkers(gray, aruco_dict)
+    print(f"  rejected={len(rejected) if rejected else 0}")
 
-            # 실시간 출력
-            if detected_results:
-                current = ", ".join([f"{k}:{sorted(v)}" for k, v in detected_results.items()])
-                print(f"\r프레임 {frame_count}: {current[:70]}...", end="")
-            else:
-                print(f"\r프레임 {frame_count}: 감지된 마커 없음", end="")
+    if ids is not None:
+        print(f"  [OK] 검출: {ids.flatten().tolist()}")
+        for i, mid in enumerate(ids.flatten()):
+            c = corners[i][0] if len(corners[i].shape) == 3 else corners[i]
+            center = c.mean(axis=0)
+            print(f"    ID {mid}: center=({center[0]:.1f}, {center[1]:.1f})")
+    else:
+        print(f"  [FAIL] 검출 실패")
 
-            time.sleep(0.05)
-
-        # 최종 결과 출력
-        print("\n\n" + "=" * 60)
-        print("최종 결과:")
-        print("=" * 60)
-        print(f"총 프레임 수: {frame_count}")
-
-        if detected_results:
-            print("\n감지된 마커:")
-            for dict_name, ids in sorted(detected_results.items()):
-                print(f"  [{dict_name}] IDs: {sorted(ids)}")
+    # undistort 프레임 검출
+    if camera_matrix is not None:
+        print(f"\n--- undistort 프레임 검출 ---")
+        undist = cv2.undistort(frame, camera_matrix, dist_coeffs)
+        gray_u = cv2.cvtColor(undist, cv2.COLOR_BGR2GRAY)
+        if ver >= (4, 7):
+            corners2, ids2, rejected2 = detector.detectMarkers(gray_u)
         else:
-            print("감지된 마커 없음")
+            corners2, ids2, rejected2 = cv2.aruco.detectMarkers(gray_u, aruco_dict)
+        print(f"  rejected={len(rejected2) if rejected2 else 0}")
 
-        # 마지막 프레임 저장
-        cv2.imwrite("/tmp/aruco_final_frame.jpg", color_image)
-        print(f"\n마지막 프레임 저장: /tmp/aruco_final_frame.jpg")
-        print("=" * 60)
+        if ids2 is not None:
+            print(f"  [OK] 검출: {ids2.flatten().tolist()}")
+            for i, mid in enumerate(ids2.flatten()):
+                c = corners2[i][0] if len(corners2[i].shape) == 3 else corners2[i]
+                center = c.mean(axis=0)
+                print(f"    ID {mid}: center=({center[0]:.1f}, {center[1]:.1f})")
+        else:
+            print(f"  [FAIL] 검출 실패")
 
-    finally:
-        pipeline.stop()
+    # 이미지 저장
+    if ids is not None:
+        cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+    cv2.imwrite('/tmp/aruco_test.png', frame)
+    print(f"\n결과: /tmp/aruco_test.png")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
