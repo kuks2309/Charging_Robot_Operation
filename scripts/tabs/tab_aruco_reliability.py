@@ -64,6 +64,8 @@ class TabArucoReliability(QWidget, JogMixin):
     align_parallel_requested = pyqtSignal(float, float, float)  # dRx, dRy, dRz
     align_single_axis_requested = pyqtSignal(str, float)  # axis('rx'/'ry'/'rz'), angle(deg)
     align_base_ry_requested = pyqtSignal(float)  # angle(deg) - base 기준 Ry movel 보정
+    align_base_rz_requested = pyqtSignal(float, float)  # angle(deg), distance(mm) - base 기준 Rz + Y보정
+    align_base_y_requested = pyqtSignal(float)  # dY (px) - base Y 위치 보정
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -184,18 +186,37 @@ class TabArucoReliability(QWidget, JogMixin):
         grid1.addWidget(self.labelM1ZAr, 3, 1)
         marker_row.addWidget(group_marker1)
 
-        # --- 중앙 각도 표시 ---
+        # --- 중앙 Ry/Rx 표시 ---
         angle_widget = QWidget()
         angle_vbox = QVBoxLayout(angle_widget)
         angle_vbox.setContentsMargins(0, 0, 0, 0)
+        # Ry: 2D / 3D
+        angle_vbox.addWidget(QLabel("Ry(°)"), alignment=Qt.AlignCenter)
         self.labelMarkerAngle = QLabel("-")
         self.labelMarkerAngle.setAlignment(Qt.AlignCenter)
         self.labelMarkerAngle3D = QLabel("-")
         self.labelMarkerAngle3D.setAlignment(Qt.AlignCenter)
-        angle_vbox.addWidget(QLabel("2D(°)"), alignment=Qt.AlignCenter)
-        angle_vbox.addWidget(self.labelMarkerAngle)
-        angle_vbox.addWidget(QLabel("3D(°)"), alignment=Qt.AlignCenter)
-        angle_vbox.addWidget(self.labelMarkerAngle3D)
+        ry_row = QHBoxLayout()
+        ry_row.addWidget(self.labelMarkerAngle)
+        ry_row.addWidget(QLabel("/"))
+        ry_row.addWidget(self.labelMarkerAngle3D)
+        angle_vbox.addLayout(ry_row)
+        # Rx: 3D only (Z차이 기반)
+        angle_vbox.addWidget(QLabel("Rz(°)"), alignment=Qt.AlignCenter)
+        self.labelMarkerRx = QLabel("-")
+        self.labelMarkerRx.setAlignment(Qt.AlignCenter)
+        angle_vbox.addWidget(self.labelMarkerRx)
+        # --- 중심 오프셋 (이미지 중심 대비 마커 중점, px) ---
+        offset_row = QHBoxLayout()
+        offset_row.addWidget(QLabel("dY"))
+        self.labelOffsetY = QLabel("-")
+        self.labelOffsetY.setAlignment(Qt.AlignCenter)
+        offset_row.addWidget(self.labelOffsetY)
+        offset_row.addWidget(QLabel("dZ"))
+        self.labelOffsetZ = QLabel("-")
+        self.labelOffsetZ.setAlignment(Qt.AlignCenter)
+        offset_row.addWidget(self.labelOffsetZ)
+        angle_vbox.addLayout(offset_row)
         marker_row.addWidget(angle_widget)
 
         # --- 오른쪽 마커 ---
@@ -217,11 +238,21 @@ class TabArucoReliability(QWidget, JogMixin):
 
         align_tab_layout.addLayout(marker_row)
 
-        # --- Robot base 기준 TCP rx 보정 버튼 ---
-        self.btnAlignRxFromAngle = QPushButton("Robot base 기준 TCP rx 보정")
+        # --- TCP ry 보정 버튼 ---
+        self.btnAlignRxFromAngle = QPushButton("TCP ry 보정")
         self.btnAlignRxFromAngle.setEnabled(False)
-        self.btnAlignRxFromAngle.clicked.connect(self._on_align_rx_from_angle)
+        self.btnAlignRxFromAngle.clicked.connect(self._on_align_ry_from_angle)
         align_tab_layout.addWidget(self.btnAlignRxFromAngle)
+
+        self.btnAlignRzFromAngle = QPushButton("TCP rz 보정")
+        self.btnAlignRzFromAngle.setEnabled(False)
+        self.btnAlignRzFromAngle.clicked.connect(self._on_align_rz_from_angle)
+        align_tab_layout.addWidget(self.btnAlignRzFromAngle)
+
+        self.btnAlignBaseY = QPushButton("Base Y 보정")
+        self.btnAlignBaseY.setEnabled(False)
+        self.btnAlignBaseY.clicked.connect(self._on_align_base_y)
+        align_tab_layout.addWidget(self.btnAlignBaseY)
 
         align_tab_layout.addStretch()
         self.rightTabWidget.addTab(self.widgetArucoAlign, "aruco 정렬")
@@ -612,6 +643,12 @@ class TabArucoReliability(QWidget, JogMixin):
                 elif mid == tag_id2:
                     marker2_info = {'cx': cx, 'cy': cy, 'tvec': tvec, 'depth': depth}
 
+        # 이미지 중심 십자선 (정렬 기준)
+        h, w = frame.shape[:2]
+        img_cx, img_cy = w // 2, h // 2
+        cv2.line(frame, (img_cx, 0), (img_cx, h), (128, 128, 128), 1)  # 세로축
+        cv2.line(frame, (0, img_cy), (w, img_cy), (128, 128, 128), 1)  # 가로축
+
         # 두 마커 중심을 연결하는 수평 라인 + 중심점 표시
         if marker1_info and marker2_info:
             p1 = (int(round(marker1_info['cx'])), int(round(marker1_info['cy'])))
@@ -627,6 +664,7 @@ class TabArucoReliability(QWidget, JogMixin):
         import math
         angle_2d = None
         angle_3d = None
+        angle_rx = None
         if marker1_info and marker2_info:
             dx = marker2_info['cx'] - marker1_info['cx']
             dy = marker2_info['cy'] - marker1_info['cy']
@@ -635,15 +673,29 @@ class TabArucoReliability(QWidget, JogMixin):
             t1 = marker1_info.get('tvec')
             t2 = marker2_info.get('tvec')
             if t1 is not None and t2 is not None:
-                # tvec: [x, y, z] 카메라 좌표계 (y 아래 양수)
+                # Ry: tvec x,y 기반 기울기
                 dx3 = t2[0] - t1[0]
                 dy3 = t2[1] - t1[1]
                 angle_3d = -math.degrees(math.atan2(dy3, dx3))  # CCW+
+                # Rx: tvec x,z 기반 (depth 차이)
+                dz3 = t2[2] - t1[2]
+                angle_rx = math.degrees(math.atan2(dz3, abs(dx3)))
 
-        self._update_align_tab_display(marker1_info, marker2_info, angle_2d, angle_3d)
+        # 중심 오프셋 (이미지 중심 대비 마커 중점, px)
+        offset_y = None  # 가로 (px)
+        offset_z = None  # 세로 (px)
+        if marker1_info and marker2_info:
+            h, w = frame.shape[:2]
+            img_cx, img_cy = w / 2.0, h / 2.0
+            mid_px_x = (marker1_info['cx'] + marker2_info['cx']) / 2.0
+            mid_px_y = (marker1_info['cy'] + marker2_info['cy']) / 2.0
+            offset_y = mid_px_x - img_cx  # 가로: 양수=오른쪽
+            offset_z = mid_px_y - img_cy  # 세로: 양수=아래
+
+        self._update_align_tab_display(marker1_info, marker2_info, angle_2d, angle_3d, angle_rx, offset_y, offset_z)
         display_frame_on_label(frame, self.labelCameraView)
 
-    def _update_align_tab_display(self, marker1_info, marker2_info, angle_2d=None, angle_3d=None):
+    def _update_align_tab_display(self, marker1_info, marker2_info, angle_2d=None, angle_3d=None, angle_rx=None, offset_y=None, offset_z=None):
         """aruco 정렬 탭의 마커 중심 좌표 및 각도 라벨 업데이트"""
         if marker1_info:
             self.labelM1CenterX.setText(f"{marker1_info['cx']:.1f}")
@@ -671,21 +723,52 @@ class TabArucoReliability(QWidget, JogMixin):
             self.labelM2Depth.setText("-")
             self.labelM2ZAr.setText("-")
 
-        # 2D 각도
+        # Ry: 2D / 3D
         self.labelMarkerAngle.setText(f"{angle_2d:.2f}" if angle_2d is not None else "-")
-        # 3D 각도
         self.labelMarkerAngle3D.setText(f"{angle_3d:.2f}" if angle_3d is not None else "-")
+        # Rx: 3D only (Z차이 기반)
+        self.labelMarkerRx.setText(f"{angle_rx:.2f}" if angle_rx is not None else "-")
 
-        # 보정 버튼 (3D 우선, 없으면 2D)
-        active_angle = angle_3d if angle_3d is not None else angle_2d
-        if active_angle is not None:
-            self._last_marker_angle = active_angle
+        # Ry 보정 버튼 (3D 우선, 없으면 2D)
+        active_ry = angle_3d if angle_3d is not None else angle_2d
+        if active_ry is not None:
+            self._last_marker_angle = active_ry
             self.btnAlignRxFromAngle.setEnabled(True)
-            self.btnAlignRxFromAngle.setText(f"Robot base 기준 TCP rx 보정 ({active_angle:.2f}°)")
+            self.btnAlignRxFromAngle.setText(f"TCP ry 보정 ({active_ry:.2f}°)")
         else:
             self._last_marker_angle = None
             self.btnAlignRxFromAngle.setEnabled(False)
-            self.btnAlignRxFromAngle.setText("Robot base 기준 TCP rx 보정")
+            self.btnAlignRxFromAngle.setText("TCP ry 보정")
+
+        # Rz 보정 버튼 + 평균 마커 거리 저장
+        if angle_rx is not None:
+            self._last_marker_rz_angle = angle_rx
+            # 평균 마커 거리 (tvec Z, mm)
+            t1 = marker1_info.get('tvec') if marker1_info else None
+            t2 = marker2_info.get('tvec') if marker2_info else None
+            if t1 is not None and t2 is not None:
+                self._last_marker_distance = (t1[2] + t2[2]) / 2.0 * 1000  # mm
+            else:
+                self._last_marker_distance = None
+            self.btnAlignRzFromAngle.setEnabled(True)
+            self.btnAlignRzFromAngle.setText(f"TCP rz 보정 ({angle_rx:.2f}°)")
+        else:
+            self._last_marker_rz_angle = None
+            self._last_marker_distance = None
+            self.btnAlignRzFromAngle.setEnabled(False)
+            self.btnAlignRzFromAngle.setText("TCP rz 보정")
+
+        # 중심 오프셋 표시 + Base Y 보정 버튼
+        self.labelOffsetY.setText(f"{offset_y:.1f}" if offset_y is not None else "-")
+        self.labelOffsetZ.setText(f"{offset_z:.1f}" if offset_z is not None else "-")
+        if offset_y is not None:
+            self._last_offset_y_px = offset_y
+            self.btnAlignBaseY.setEnabled(True)
+            self.btnAlignBaseY.setText(f"Base Y 보정 ({offset_y:.0f}px)")
+        else:
+            self._last_offset_y_px = None
+            self.btnAlignBaseY.setEnabled(False)
+            self.btnAlignBaseY.setText("Base Y 보정")
 
     def _on_start_camera(self):
         """카메라 시작"""
@@ -1755,14 +1838,36 @@ class TabArucoReliability(QWidget, JogMixin):
         # 현재 로봇 포즈 표시
         self._update_robot_pose_ui()
 
-    def _on_align_rx_from_angle(self):
-        """aruco 정렬 탭 - 마커 기울기 기반 Robot base Ry movel 보정"""
+    def _on_align_ry_from_angle(self):
+        """aruco 정렬 탭 - 마커 기울기 기반 TCP Ry movel 보정"""
         angle = getattr(self, '_last_marker_angle', None)
         if angle is None:
             QMessageBox.warning(self, "경고", "마커 기울기 값이 없습니다.")
             return
-        self._log(f"Robot base Ry 보정 요청: {angle:.2f}°")
+        self._log(f"TCP Ry 보정 요청: {angle:.2f}°")
         self.align_base_ry_requested.emit(angle)
+
+    def _on_align_rz_from_angle(self):
+        """aruco 정렬 탭 - 마커 Z차이 기반 TCP Rz + Y보정"""
+        angle = getattr(self, '_last_marker_rz_angle', None)
+        distance = getattr(self, '_last_marker_distance', None)
+        if angle is None:
+            QMessageBox.warning(self, "경고", "Rz 값이 없습니다.")
+            return
+        if distance is None:
+            QMessageBox.warning(self, "경고", "마커 거리 값이 없습니다.")
+            return
+        self._log(f"TCP Rz 보정 요청: {angle:.2f}°, D={distance:.0f}mm")
+        self.align_base_rz_requested.emit(angle, distance)
+
+    def _on_align_base_y(self):
+        """aruco 정렬 탭 - 이미지 중심 기준 Base Y 위치 보정"""
+        dy_px = getattr(self, '_last_offset_y_px', None)
+        if dy_px is None:
+            QMessageBox.warning(self, "경고", "dY 값이 없습니다.")
+            return
+        self._log(f"Base Y 보정 요청: dY={dy_px:.1f}px")
+        self.align_base_y_requested.emit(dy_px)
 
     def _on_align_single_axis(self, axis: str):
         """개별 축 정렬 버튼 핸들러"""
