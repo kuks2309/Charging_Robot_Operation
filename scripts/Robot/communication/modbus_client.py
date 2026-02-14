@@ -74,6 +74,15 @@ class ModbusClient:
     CMD_BASE_ROTATE_X = 54      # rotx(rx) - 베이스 좌표계 X축 회전
     CMD_BASE_ROTATE_Y = 55      # roty(ry) - 베이스 좌표계 Y축 회전
     CMD_BASE_ROTATE_Z = 56      # rotz(rz) - 베이스 좌표계 Z축 회전
+    CMD_BASE_FINE_X = 60        # transx(fx/10) - 베이스 정밀 X 이동 (0.1mm)
+    CMD_BASE_FINE_Y = 61        # transy(fy/10) - 베이스 정밀 Y 이동 (0.1mm)
+    CMD_BASE_FINE_Z = 62        # transz(fz/10) - 베이스 정밀 Z 이동 (0.1mm)
+    CMD_BASE_FINE_XYZ = 63      # trans(fx/10,fy/10,fz/10) - 베이스 정밀 XYZ 이동 (0.1mm)
+
+    # 정밀 이동 레지스터 (CMD 60-63 전용)
+    REGISTER_FINE_X = 313       # fx (int16, mm×10)
+    REGISTER_FINE_Y = 314       # fy (int16, mm×10)
+    REGISTER_FINE_Z = 315       # fz (int16, mm×10)
 
     def __init__(self, ip: str = "192.168.0.29", port: int = 1502, timeout: float = 1.0):
         """
@@ -608,6 +617,58 @@ class ModbusClient:
                       f"Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
                 if before_pose:
                     print(f"[BASE LINEAR] 변화량: dX={after_pose[0]-before_pose[0]:.2f}, dY={after_pose[1]-before_pose[1]:.2f}, "
+                          f"dZ={after_pose[2]-before_pose[2]:.2f}")
+            return result
+        return True, "명령 전송됨"
+
+    def send_base_fine_translate(self, axis: str, distance: float, wait: bool = True,
+                                process_events_callback=None) -> Tuple[bool, str]:
+        """
+        베이스 좌표계 정밀 이동 (0.1mm 단위, CMD 60-63, 레지스터 313-315)
+
+        Args:
+            axis: 'x', 'y', 'z', 'xyz'
+            distance: 이동 거리 (mm, 0.1mm 해상도). xyz인 경우 [x, y, z] 리스트
+            wait: 완료 대기 여부
+            process_events_callback: UI 이벤트 처리 콜백
+        """
+        before_pose = self.read_current_pose()
+        if before_pose:
+            print(f"[BASE FINE] 이동 전: X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}")
+        print(f"[BASE FINE] 명령: axis={axis}, distance={distance}mm")
+
+        if axis.lower() == 'x':
+            val = self.to_uint16(int(round(distance * 10)))
+            self.write_register(self.REGISTER_FINE_X, val)
+            print(f"[BASE FINE] 레지스터: fx(313)={val}, CMD(351)={self.CMD_BASE_FINE_X}")
+            self.write_command(self.CMD_BASE_FINE_X)
+        elif axis.lower() == 'y':
+            val = self.to_uint16(int(round(distance * 10)))
+            self.write_register(self.REGISTER_FINE_Y, val)
+            print(f"[BASE FINE] 레지스터: fy(314)={val}, CMD(351)={self.CMD_BASE_FINE_Y}")
+            self.write_command(self.CMD_BASE_FINE_Y)
+        elif axis.lower() == 'z':
+            val = self.to_uint16(int(round(distance * 10)))
+            self.write_register(self.REGISTER_FINE_Z, val)
+            print(f"[BASE FINE] 레지스터: fz(315)={val}, CMD(351)={self.CMD_BASE_FINE_Z}")
+            self.write_command(self.CMD_BASE_FINE_Z)
+        elif axis.lower() == 'xyz' and isinstance(distance, (list, tuple)):
+            fx_val = self.to_uint16(int(round(distance[0] * 10)))
+            fy_val = self.to_uint16(int(round(distance[1] * 10)))
+            fz_val = self.to_uint16(int(round(distance[2] * 10)))
+            self.write_registers(self.REGISTER_FINE_X, [fx_val, fy_val, fz_val])
+            print(f"[BASE FINE] 레지스터: fx={fx_val}, fy={fy_val}, fz={fz_val}, CMD={self.CMD_BASE_FINE_XYZ}")
+            self.write_command(self.CMD_BASE_FINE_XYZ)
+        else:
+            return False, "잘못된 축 지정"
+
+        if wait:
+            result = self.wait_for_done(process_events_callback=process_events_callback)
+            after_pose = self.read_current_pose()
+            if after_pose:
+                print(f"[BASE FINE] 이동 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}")
+                if before_pose:
+                    print(f"[BASE FINE] 변화량: dX={after_pose[0]-before_pose[0]:.2f}, dY={after_pose[1]-before_pose[1]:.2f}, "
                           f"dZ={after_pose[2]-before_pose[2]:.2f}")
             return result
         return True, "명령 전송됨"

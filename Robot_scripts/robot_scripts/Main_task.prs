@@ -359,6 +359,59 @@ while true do
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
+
+    -- command 60-63: 베이스 좌표계 정밀 이동 (×10 스케일, 0.1mm 단위, 레지스터 fx/fy/fz = 313-315)
+    elseif command == 60 then
+        modserv.write_register('task_done', 1)
+        fx = modserv.read_register('fx')
+        if fx > 32767 then
+            fx = fx - 65536
+        end
+        transx(fx/10)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 61 then
+        modserv.write_register('task_done', 1)
+        fy = modserv.read_register('fy')
+        if fy > 32767 then
+            fy = fy - 65536
+        end
+        transy(fy/10)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 62 then
+        modserv.write_register('task_done', 1)
+        fz = modserv.read_register('fz')
+        if fz > 32767 then
+            fz = fz - 65536
+        end
+        transz(fz/10)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
+
+    elseif command == 63 then
+        modserv.write_register('task_done', 1)
+        fx = modserv.read_register('fx')
+        fy = modserv.read_register('fy')
+        fz = modserv.read_register('fz')
+        if fx > 32767 then
+            fx = fx - 65536
+        end
+        if fy > 32767 then
+            fy = fy - 65536
+        end
+        if fz > 32767 then
+            fz = fz - 65536
+        end
+        trans(fx/10, fy/10, fz/10)
+        modserv.write_register('task_done', 2)
+        modserv.write_register('task_number', 0)
+        modserv.write_register('task_done', 0)
     end
 
     delay(50)
