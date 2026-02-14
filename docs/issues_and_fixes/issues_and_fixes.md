@@ -442,3 +442,50 @@ IPPE 2해 × 2마커 = 4가지 조합의 마커 간 거리 비교:
 **교훈:** 코드 복원/체크아웃 후 반드시 `issues_and_fixes.md`의 최근 수정 사항 전체를 재검증할 것.
 
 ---
+
+## 2026-02-14 | ArUco 정렬 탭 기능 확장 (2D/3D 각도, Depth, 보정 버튼)
+
+**구현 내용:**
+
+1. **마커 중심 연결선 + 중점 표시**: 두 마커 중심을 빨간 라인으로 연결, 중점에 녹색 십자 표시
+2. **이미지 중심 십자선**: 회색 가로/세로 축으로 정렬 기준선 표시
+3. **Ry 각도 (2D/3D)**: 픽셀 기반 2D + solvePnP tvec 기반 3D 기울기 표시 (CCW+ 관례)
+4. **Rz 각도 (3D)**: tvec Z 차이 기반 깊이 방향 기울기 표시
+5. **Depth/ArUco Z 비교**: 각 마커 중심의 RealSense depth (Z_d) 와 solvePnP tvec Z (Z_ar) 표시
+6. **TCP ry 보정 버튼**: `send_base_rotate('ry', angle)` 호출 → base movel로 Ry 보정
+7. **TCP rz 보정 버튼**: Rz 보정 + Y 보정 (`ΔY = D × tan(ΔRz)`) 적용 → `send_move_to_pose`
+8. **dY/dZ 오프셋 표시**: 이미지 중심 대비 마커 중점의 픽셀 오프셋 (가로=dY, 세로=dZ)
+
+**수정 파일:**
+- `scripts/tabs/tab_aruco_reliability.py` — UI, 프레임 처리, 보정 핸들러
+- `scripts/Sensor/aruco/aruco_detector.py` — `detect_marker_centers`에 `estimate_pose` 옵션 추가
+- `scripts/services/vision_manager.py` — `estimate_pose` 파라미터 전달
+- `scripts/services/camera_manager.py` — `rs.align(rs.stream.color)` 추가, depth 5x5 median 필터
+- `scripts/main_window.py` — `align_base_ry_requested`, `align_base_rz_requested` 시그널 핸들러
+
+**해결된 이슈:**
+- **Depth 100mm 오차**: `rs.align` 미적용 → color/depth 센서 물리적 오프셋 미보정. `rs.align(rs.stream.color)` 적용 후 ArUco Z와 2-4mm 이내 일치
+- **QPushButton UnboundLocalError**: 로컬 import → 탑레벨 import로 이동
+
+---
+
+## 2026-02-14 | 베이스 좌표계 정밀 이동 (0.1mm) 명령 추가
+
+**구현 내용:** 기존 1mm 단위 base translate(CMD 50-53)에 추가로 0.1mm 해상도 정밀 이동 명령 구현
+
+**설계:**
+| 항목 | 기존 (mm) | 신규 (0.1mm) |
+|---|---|---|
+| CMD X/Y/Z | 50/51/52 | 60/61/62 |
+| CMD XYZ | 53 | 63 |
+| 레지스터 | 301-303 (x,y,z) | 313-315 (fx,fy,fz) |
+| PRS | `transx(x)` | `transx(fx/10)` |
+| Python | `int(distance)` | `int(round(distance*10))` |
+
+**수정 파일:**
+- `Robot_scripts/robot_scripts/Main_task.prs` — CMD 60-63 추가 (레지스터 fx/fy/fz 읽기, ÷10 적용)
+- `scripts/Robot/communication/modbus_client.py` — 상수 + `send_base_fine_translate()` 메서드
+
+**주의:** 로봇 컨트롤러 Modbus 서버에 레지스터 `fx(313)`, `fy(314)`, `fz(315)` 등록 필요
+
+---
