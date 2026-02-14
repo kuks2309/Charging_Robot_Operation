@@ -208,6 +208,7 @@ class MainWindow(QMainWindow):
         self.tabArucoReliability.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
         self.tabArucoReliability.align_parallel_requested.connect(self._on_ar_tag_align_parallel)
         self.tabArucoReliability.align_single_axis_requested.connect(self._on_ar_tag_align_single_axis)
+        self.tabArucoReliability.align_base_ry_requested.connect(self._on_ar_tag_align_base_ry)
 
         # Eye in Hand 탭 시그널
         self.tabEyeInHand.log_message.connect(self._log)
@@ -859,6 +860,25 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "오류", f"조그 회전 실패:\n{message}")
         else:
             self._log(f"조그 회전 완료: {axis.upper()} {'+' if angle > 0 else ''}{angle}deg")
+
+    def _on_ar_tag_align_base_ry(self, angle: float):
+        """ArUco 정렬 탭 - Robot base 기준 Ry movel 보정"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+        try:
+            from PyQt5.QtWidgets import QApplication
+            self._log(f"[ArUco] Base Ry 보정: {angle:.2f}°")
+            success, msg = self.robot.send_base_rotate(
+                'ry', angle, wait=True,
+                process_events_callback=QApplication.processEvents)
+            if success:
+                self._log(f"[ArUco] Base Ry 보정 완료")
+            else:
+                self._log(f"[ArUco] Base Ry 보정 실패: {msg}")
+            self._update_statusbar()
+        except Exception as e:
+            self._log(f"[ArUco] Base Ry 보정 오류: {e}")
 
     def _on_ar_tag_align_single_axis(self, axis: str, angle: float):
         """AR Tag TCP Align - 개별 축 tool.rot 테스트"""

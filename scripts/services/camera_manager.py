@@ -209,6 +209,9 @@ class CameraManager(QObject):
             # 파이프라인 시작
             profile = self._pipeline.start(self._config)
 
+            # Depth→Color 정렬 (depth를 color 해상도에 맞춤)
+            self._align = rs.align(rs.stream.color)
+
             # intrinsics: 캘리브레이션 파일이 없으면 런타임에서 가져오기
             if not self._use_calibration_file:
                 color_stream = profile.get_stream(rs.stream.color)
@@ -286,6 +289,9 @@ class CameraManager(QObject):
 
         try:
             frames = self._pipeline.wait_for_frames()
+            # Depth를 Color에 정렬
+            if hasattr(self, '_align') and self._align:
+                frames = self._align.process(frames)
             color_frame = frames.get_color_frame()
             depth_frame = frames.get_depth_frame()
 
@@ -384,9 +390,14 @@ class CameraManager(QObject):
             y = int(y * depth_h / color_h)
 
         if 0 <= x < depth_w and 0 <= y < depth_h:
-            distance = self._last_depth_raw[y, x]
-            if distance > 0:
-                return float(distance)
+            # 5x5 영역 중앙값으로 노이즈 감소
+            r = 2
+            y1, y2 = max(0, y - r), min(depth_h, y + r + 1)
+            x1, x2 = max(0, x - r), min(depth_w, x + r + 1)
+            patch = self._last_depth_raw[y1:y2, x1:x2]
+            valid = patch[patch > 0]
+            if len(valid) > 0:
+                return float(np.median(valid))
         return None
 
     def get_distance_at_center(self) -> Optional[float]:
