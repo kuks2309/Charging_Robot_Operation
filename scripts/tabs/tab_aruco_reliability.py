@@ -189,6 +189,15 @@ class TabArucoReliability(QWidget, JogMixin):
         marker_row.addWidget(group_marker2)
 
         align_tab_layout.addLayout(marker_row)
+
+        # --- 두 마커 간 각도 ---
+        angle_row = QHBoxLayout()
+        angle_row.addWidget(QLabel("기울기 (°):"))
+        self.labelMarkerAngle = QLabel("-")
+        angle_row.addWidget(self.labelMarkerAngle)
+        angle_row.addStretch()
+        align_tab_layout.addLayout(angle_row)
+
         align_tab_layout.addStretch()
         self.rightTabWidget.addTab(self.widgetArucoAlign, "aruco 정렬")
 
@@ -573,11 +582,30 @@ class TabArucoReliability(QWidget, JogMixin):
                 elif mid == tag_id2:
                     marker2_info = {'cx': cx, 'cy': cy}
 
-        self._update_align_tab_display(marker1_info, marker2_info)
+        # 두 마커 중심을 연결하는 수평 라인 + 중심점 표시
+        if marker1_info and marker2_info:
+            p1 = (int(round(marker1_info['cx'])), int(round(marker1_info['cy'])))
+            p2 = (int(round(marker2_info['cx'])), int(round(marker2_info['cy'])))
+            cv2.line(frame, p1, p2, (0, 0, 255), 2)  # 빨간 라인
+            mid_x = (p1[0] + p2[0]) // 2
+            mid_y = (p1[1] + p2[1]) // 2
+            cross = 10
+            cv2.line(frame, (mid_x - cross, mid_y), (mid_x + cross, mid_y), (0, 255, 0), 2)
+            cv2.line(frame, (mid_x, mid_y - cross), (mid_x, mid_y + cross), (0, 255, 0), 2)
+
+        # 각도 계산
+        angle_deg = None
+        if marker1_info and marker2_info:
+            import math
+            dx = marker2_info['cx'] - marker1_info['cx']
+            dy = marker2_info['cy'] - marker1_info['cy']
+            angle_deg = math.degrees(math.atan2(dy, dx))
+
+        self._update_align_tab_display(marker1_info, marker2_info, angle_deg)
         display_frame_on_label(frame, self.labelCameraView)
 
-    def _update_align_tab_display(self, marker1_info, marker2_info):
-        """aruco 정렬 탭의 마커 중심 좌표 라벨 업데이트"""
+    def _update_align_tab_display(self, marker1_info, marker2_info, angle_deg=None):
+        """aruco 정렬 탭의 마커 중심 좌표 및 각도 라벨 업데이트"""
         if marker1_info:
             self.labelM1CenterX.setText(f"{marker1_info['cx']:.1f}")
             self.labelM1CenterY.setText(f"{marker1_info['cy']:.1f}")
@@ -591,6 +619,11 @@ class TabArucoReliability(QWidget, JogMixin):
         else:
             self.labelM2CenterX.setText("-")
             self.labelM2CenterY.setText("-")
+
+        if angle_deg is not None:
+            self.labelMarkerAngle.setText(f"{angle_deg:.2f}")
+        else:
+            self.labelMarkerAngle.setText("-")
 
     def _on_start_camera(self):
         """카메라 시작"""
