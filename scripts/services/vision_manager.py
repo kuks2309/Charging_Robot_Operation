@@ -269,18 +269,19 @@ class VisionManager(QObject):
                     return marker
         return None
 
-    def detect_marker_centers(self, frame, camera_matrix=None, dist_coeffs=None):
-        """마커 중심 좌표 검출 (pose 추정 없이 경량 검출).
+    def detect_marker_centers(self, frame, camera_matrix=None, dist_coeffs=None, estimate_pose=False):
+        """마커 중심 좌표 검출.
 
         Args:
             frame: BGR 이미지
             camera_matrix: 카메라 행렬 (optional, undistortPoints용)
             dist_coeffs: 왜곡 계수 (optional)
+            estimate_pose: True이면 solvePnP로 tvec도 반환
 
         Returns:
-            list of dict: [{'id': int, 'corners': ndarray, 'center': (cx, cy)}, ...]
+            list of dict: [{'id': int, 'corners': ndarray, 'center': (cx, cy), 'tvec': ndarray (optional)}, ...]
         """
-        return self.aruco_detector.detect_marker_centers(frame, camera_matrix, dist_coeffs)
+        return self.aruco_detector.detect_marker_centers(frame, camera_matrix, dist_coeffs, estimate_pose)
 
     def update_marker_size(self, size_meters: float):
         """마커 크기 업데이트"""

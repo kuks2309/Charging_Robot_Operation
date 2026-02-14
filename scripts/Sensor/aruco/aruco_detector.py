@@ -156,7 +156,7 @@ class ArucoCameraPoseEstimator:
         
         return marker_poses
 
-    def detect_marker_centers(self, image, camera_matrix=None, dist_coeffs=None):
+    def detect_marker_centers(self, image, camera_matrix=None, dist_coeffs=None, estimate_pose=False):
         """
         마커 검출 및 중심 좌표 반환 (pose 추정 없이 경량 검출).
 
@@ -164,9 +164,10 @@ class ArucoCameraPoseEstimator:
             image: 입력 이미지 (grayscale 또는 color)
             camera_matrix: 카메라 행렬 (numpy array, optional) - 제공 시 undistortPoints 적용
             dist_coeffs: 왜곡 계수 (numpy array, optional)
+            estimate_pose: True이면 solvePnP로 tvec도 반환
 
         Returns:
-            list of dict: [{'id': int, 'corners': ndarray, 'center': (cx, cy)}, ...]
+            list of dict: [{'id': int, 'corners': ndarray, 'center': (cx, cy), 'tvec': ndarray (optional)}, ...]
         """
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -177,6 +178,17 @@ class ArucoCameraPoseEstimator:
             corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.detector_params)
         else:
             corners, ids, _ = self.detector.detectMarkers(gray)
+
+        # solvePnP용 3D 포인트
+        obj_points = None
+        if estimate_pose and camera_matrix is not None and dist_coeffs is not None:
+            half_size = self.marker_size / 2.0
+            obj_points = np.array([
+                [-half_size,  half_size, 0],
+                [ half_size,  half_size, 0],
+                [ half_size, -half_size, 0],
+                [-half_size, -half_size, 0]
+            ], dtype=np.float32)
 
         results = []
         if ids is not None:
@@ -194,11 +206,31 @@ class ArucoCameraPoseEstimator:
                 else:
                     center = crn.mean(axis=0)
 
-                results.append({
+                entry = {
                     'id': int(mid),
                     'corners': corners[i],
                     'center': (float(center[0]), float(center[1])),
-                })
+                }
+
+                # pose 추정
+                if obj_points is not None:
+                    n_sol, rvecs_all, tvecs_all, _ = cv2.solvePnPGeneric(
+                        obj_points, crn.reshape(-1, 2),
+                        camera_matrix, dist_coeffs,
+                        flags=cv2.SOLVEPNP_IPPE_SQUARE
+                    )
+                    if n_sol > 0:
+                        rvec = rvecs_all[0].flatten()
+                        tvec = tvecs_all[0].flatten()
+                        for s in range(n_sol):
+                            R_check, _ = cv2.Rodrigues(rvecs_all[s].flatten())
+                            if R_check[2, 2] < 0:
+                                rvec = rvecs_all[s].flatten()
+                                tvec = tvecs_all[s].flatten()
+                                break
+                        entry['tvec'] = tvec
+
+                results.append(entry)
 
         return results
 

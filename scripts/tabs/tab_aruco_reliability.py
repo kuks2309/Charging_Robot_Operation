@@ -13,7 +13,7 @@ from datetime import datetime
 from PyQt5 import uic
 from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QVBoxLayout, QButtonGroup,
                               QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout, QTabWidget,
-                              QGroupBox, QGridLayout)
+                              QGroupBox, QGridLayout, QPushButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 
 from .jog_mixin import JogMixin
@@ -177,6 +177,20 @@ class TabArucoReliability(QWidget, JogMixin):
         grid1.addWidget(self.labelM1CenterY, 1, 1)
         marker_row.addWidget(group_marker1)
 
+        # --- 중앙 각도 표시 ---
+        angle_widget = QWidget()
+        angle_vbox = QVBoxLayout(angle_widget)
+        angle_vbox.setContentsMargins(0, 0, 0, 0)
+        self.labelMarkerAngle = QLabel("-")
+        self.labelMarkerAngle.setAlignment(Qt.AlignCenter)
+        self.labelMarkerAngle3D = QLabel("-")
+        self.labelMarkerAngle3D.setAlignment(Qt.AlignCenter)
+        angle_vbox.addWidget(QLabel("2D(°)"), alignment=Qt.AlignCenter)
+        angle_vbox.addWidget(self.labelMarkerAngle)
+        angle_vbox.addWidget(QLabel("3D(°)"), alignment=Qt.AlignCenter)
+        angle_vbox.addWidget(self.labelMarkerAngle3D)
+        marker_row.addWidget(angle_widget)
+
         # --- 오른쪽 마커 ---
         group_marker2 = QGroupBox("오른쪽")
         grid2 = QGridLayout(group_marker2)
@@ -190,13 +204,11 @@ class TabArucoReliability(QWidget, JogMixin):
 
         align_tab_layout.addLayout(marker_row)
 
-        # --- 두 마커 간 각도 ---
-        angle_row = QHBoxLayout()
-        angle_row.addWidget(QLabel("기울기 (°):"))
-        self.labelMarkerAngle = QLabel("-")
-        angle_row.addWidget(self.labelMarkerAngle)
-        angle_row.addStretch()
-        align_tab_layout.addLayout(angle_row)
+        # --- Robot base 기준 TCP rx 보정 버튼 ---
+        self.btnAlignRxFromAngle = QPushButton("Robot base 기준 TCP rx 보정")
+        self.btnAlignRxFromAngle.setEnabled(False)
+        self.btnAlignRxFromAngle.clicked.connect(self._on_align_rx_from_angle)
+        align_tab_layout.addWidget(self.btnAlignRxFromAngle)
 
         align_tab_layout.addStretch()
         self.rightTabWidget.addTab(self.widgetArucoAlign, "aruco 정렬")
@@ -209,7 +221,6 @@ class TabArucoReliability(QWidget, JogMixin):
         ar_layout = QVBoxLayout(self.widgetArTagTcpAlign)
 
         # 조그 이동 그룹
-        from PyQt5.QtWidgets import QPushButton
         self.groupJogMove = QGroupBox("조그 이동")
         jog_grid = QGridLayout(self.groupJogMove)
 
@@ -555,7 +566,7 @@ class TabArucoReliability(QWidget, JogMixin):
 
         if self.vision_manager:
             markers = self.vision_manager.detect_marker_centers(
-                frame, self.camera_matrix, self.dist_coeffs
+                frame, self.camera_matrix, self.dist_coeffs, estimate_pose=True
             )
 
             for m in markers:
@@ -577,10 +588,11 @@ class TabArucoReliability(QWidget, JogMixin):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                 cx, cy = m['center']
+                tvec = m.get('tvec')
                 if mid == tag_id1:
-                    marker1_info = {'cx': cx, 'cy': cy}
+                    marker1_info = {'cx': cx, 'cy': cy, 'tvec': tvec}
                 elif mid == tag_id2:
-                    marker2_info = {'cx': cx, 'cy': cy}
+                    marker2_info = {'cx': cx, 'cy': cy, 'tvec': tvec}
 
         # 두 마커 중심을 연결하는 수평 라인 + 중심점 표시
         if marker1_info and marker2_info:
@@ -593,18 +605,27 @@ class TabArucoReliability(QWidget, JogMixin):
             cv2.line(frame, (mid_x - cross, mid_y), (mid_x + cross, mid_y), (0, 255, 0), 2)
             cv2.line(frame, (mid_x, mid_y - cross), (mid_x, mid_y + cross), (0, 255, 0), 2)
 
-        # 각도 계산
-        angle_deg = None
+        # 각도 계산 (2D 픽셀 + 3D tvec)
+        import math
+        angle_2d = None
+        angle_3d = None
         if marker1_info and marker2_info:
-            import math
             dx = marker2_info['cx'] - marker1_info['cx']
             dy = marker2_info['cy'] - marker1_info['cy']
-            angle_deg = math.degrees(math.atan2(dy, dx))
+            angle_2d = -math.degrees(math.atan2(dy, dx))  # CCW+
 
-        self._update_align_tab_display(marker1_info, marker2_info, angle_deg)
+            t1 = marker1_info.get('tvec')
+            t2 = marker2_info.get('tvec')
+            if t1 is not None and t2 is not None:
+                # tvec: [x, y, z] 카메라 좌표계 (y 아래 양수)
+                dx3 = t2[0] - t1[0]
+                dy3 = t2[1] - t1[1]
+                angle_3d = -math.degrees(math.atan2(dy3, dx3))  # CCW+
+
+        self._update_align_tab_display(marker1_info, marker2_info, angle_2d, angle_3d)
         display_frame_on_label(frame, self.labelCameraView)
 
-    def _update_align_tab_display(self, marker1_info, marker2_info, angle_deg=None):
+    def _update_align_tab_display(self, marker1_info, marker2_info, angle_2d=None, angle_3d=None):
         """aruco 정렬 탭의 마커 중심 좌표 및 각도 라벨 업데이트"""
         if marker1_info:
             self.labelM1CenterX.setText(f"{marker1_info['cx']:.1f}")
@@ -620,10 +641,21 @@ class TabArucoReliability(QWidget, JogMixin):
             self.labelM2CenterX.setText("-")
             self.labelM2CenterY.setText("-")
 
-        if angle_deg is not None:
-            self.labelMarkerAngle.setText(f"{angle_deg:.2f}")
+        # 2D 각도
+        self.labelMarkerAngle.setText(f"{angle_2d:.2f}" if angle_2d is not None else "-")
+        # 3D 각도
+        self.labelMarkerAngle3D.setText(f"{angle_3d:.2f}" if angle_3d is not None else "-")
+
+        # 보정 버튼 (3D 우선, 없으면 2D)
+        active_angle = angle_3d if angle_3d is not None else angle_2d
+        if active_angle is not None:
+            self._last_marker_angle = active_angle
+            self.btnAlignRxFromAngle.setEnabled(True)
+            self.btnAlignRxFromAngle.setText(f"Robot base 기준 TCP rx 보정 ({active_angle:.2f}°)")
         else:
-            self.labelMarkerAngle.setText("-")
+            self._last_marker_angle = None
+            self.btnAlignRxFromAngle.setEnabled(False)
+            self.btnAlignRxFromAngle.setText("Robot base 기준 TCP rx 보정")
 
     def _on_start_camera(self):
         """카메라 시작"""
@@ -1692,6 +1724,15 @@ class TabArucoReliability(QWidget, JogMixin):
 
         # 현재 로봇 포즈 표시
         self._update_robot_pose_ui()
+
+    def _on_align_rx_from_angle(self):
+        """aruco 정렬 탭 - 마커 기울기 기반 Robot base 기준 TCP rx 보정"""
+        angle = getattr(self, '_last_marker_angle', None)
+        if angle is None:
+            QMessageBox.warning(self, "경고", "마커 기울기 값이 없습니다.")
+            return
+        self._log(f"마커 기울기 기반 Rx 보정 요청: {angle:.2f}°")
+        self.align_single_axis_requested.emit('rx', angle)
 
     def _on_align_single_axis(self, axis: str):
         """개별 축 정렬 버튼 핸들러"""
