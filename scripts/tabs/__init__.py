@@ -10,6 +10,7 @@ from .tab_vision import TabVision
 from .tab_task_edit import TabTaskEdit
 from .tab_motion_test import TabMotionTest
 from .tab_ar_tag_tcp_align import TabArTagTcpAlign
+from .tab_laser_calibration import TabLaserCalibration
 
 __all__ = [
     'TabCalibration',
@@ -19,4 +20,5 @@ __all__ = [
     'TabTaskEdit',
     'TabMotionTest',
     'TabArTagTcpAlign',
+    'TabLaserCalibration',
 ]
