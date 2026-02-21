@@ -11,9 +11,7 @@ import yaml
 import numpy as np
 from datetime import datetime
 from PyQt5 import uic
-from PyQt5.QtWidgets import (QWidget, QFileDialog, QMessageBox, QVBoxLayout, QButtonGroup,
-                              QDoubleSpinBox, QSpinBox, QCheckBox, QLabel, QHBoxLayout, QTabWidget,
-                              QGroupBox, QGridLayout, QPushButton)
+from PyQt5.QtWidgets import QWidget, QFileDialog, QMessageBox, QVBoxLayout, QButtonGroup, QTabWidget
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 
 from .jog_mixin import JogMixin
@@ -73,8 +71,7 @@ class TabArucoReliability(QWidget, JogMixin):
         # UI 로드
         uic.loadUi(TAB_ARUCO_RELIABILITY_UI, self)
 
-        # 오른쪽 패널을 서브탭으로 구성
-        self._setup_right_panel_tabs()
+        # rightTabWidget, widgetArucoAlign, widgetArTagTcpAlign 등은 .ui에서 로드됨
 
         # 카메라/비전 매니저 참조
         self.camera_manager = None
@@ -143,374 +140,13 @@ class TabArucoReliability(QWidget, JogMixin):
         self.graph_marker_button_group.addButton(self.radioGraphID1, 1)
         self.graph_marker_button_group.buttonClicked.connect(self._on_graph_marker_changed)
 
-        # Disambiguation UI elements (프로그래매틱하게 추가)
-        self._setup_disambiguation_ui()
+        # Disambiguation UI elements는 .ui 파일에서 로드됨
 
         # 시그널 연결
         self._connect_signals()
 
         # 초기화
         self._init_ui()
-
-    def _setup_right_panel_tabs(self):
-        """오른쪽 패널을 서브탭(신뢰성 검증 설정 / ar tag tcp align)으로 구성"""
-        main_layout = self.horizontalLayoutArucoReliability
-
-        # groupControl을 메인 레이아웃에서 분리
-        main_layout.removeWidget(self.groupControl)
-
-        # QTabWidget 생성
-        self.rightTabWidget = QTabWidget()
-
-        # aruco 정렬 탭
-        self.widgetArucoAlign = QWidget()
-        align_tab_layout = QVBoxLayout(self.widgetArucoAlign)
-
-        # 왼쪽/오른쪽 마커를 가로로 나란히 배치
-        marker_row = QHBoxLayout()
-
-        # --- 왼쪽 마커 ---
-        group_marker1 = QGroupBox("왼쪽")
-        grid1 = QGridLayout(group_marker1)
-        grid1.addWidget(QLabel("X (px)"), 0, 0)
-        self.labelM1CenterX = QLabel("-")
-        grid1.addWidget(self.labelM1CenterX, 0, 1)
-        grid1.addWidget(QLabel("Y (px)"), 1, 0)
-        self.labelM1CenterY = QLabel("-")
-        grid1.addWidget(self.labelM1CenterY, 1, 1)
-        grid1.addWidget(QLabel("Z_d (mm)"), 2, 0)
-        self.labelM1Depth = QLabel("-")
-        grid1.addWidget(self.labelM1Depth, 2, 1)
-        grid1.addWidget(QLabel("Z_ar (mm)"), 3, 0)
-        self.labelM1ZAr = QLabel("-")
-        grid1.addWidget(self.labelM1ZAr, 3, 1)
-        marker_row.addWidget(group_marker1)
-
-        # --- 중앙 Ry/Rx 표시 ---
-        angle_widget = QWidget()
-        angle_vbox = QVBoxLayout(angle_widget)
-        angle_vbox.setContentsMargins(0, 0, 0, 0)
-        # Ry: 2D / 3D
-        angle_vbox.addWidget(QLabel("Ry(°)"), alignment=Qt.AlignCenter)
-        self.labelMarkerAngle = QLabel("-")
-        self.labelMarkerAngle.setAlignment(Qt.AlignCenter)
-        self.labelMarkerAngle3D = QLabel("-")
-        self.labelMarkerAngle3D.setAlignment(Qt.AlignCenter)
-        ry_row = QHBoxLayout()
-        ry_row.addWidget(self.labelMarkerAngle)
-        ry_row.addWidget(QLabel("/"))
-        ry_row.addWidget(self.labelMarkerAngle3D)
-        angle_vbox.addLayout(ry_row)
-        # Rx: 3D only (Z차이 기반)
-        angle_vbox.addWidget(QLabel("Rz(°)"), alignment=Qt.AlignCenter)
-        self.labelMarkerRx = QLabel("-")
-        self.labelMarkerRx.setAlignment(Qt.AlignCenter)
-        angle_vbox.addWidget(self.labelMarkerRx)
-        # --- 중심 오프셋 (이미지 중심 대비 마커 중점, px) ---
-        offset_row = QHBoxLayout()
-        offset_row.addWidget(QLabel("dY"))
-        self.labelOffsetY = QLabel("-")
-        self.labelOffsetY.setAlignment(Qt.AlignCenter)
-        offset_row.addWidget(self.labelOffsetY)
-        offset_row.addWidget(QLabel("dZ"))
-        self.labelOffsetZ = QLabel("-")
-        self.labelOffsetZ.setAlignment(Qt.AlignCenter)
-        offset_row.addWidget(self.labelOffsetZ)
-        angle_vbox.addLayout(offset_row)
-        marker_row.addWidget(angle_widget)
-
-        # --- 오른쪽 마커 ---
-        group_marker2 = QGroupBox("오른쪽")
-        grid2 = QGridLayout(group_marker2)
-        grid2.addWidget(QLabel("X (px)"), 0, 0)
-        self.labelM2CenterX = QLabel("-")
-        grid2.addWidget(self.labelM2CenterX, 0, 1)
-        grid2.addWidget(QLabel("Y (px)"), 1, 0)
-        self.labelM2CenterY = QLabel("-")
-        grid2.addWidget(self.labelM2CenterY, 1, 1)
-        grid2.addWidget(QLabel("Z_d (mm)"), 2, 0)
-        self.labelM2Depth = QLabel("-")
-        grid2.addWidget(self.labelM2Depth, 2, 1)
-        grid2.addWidget(QLabel("Z_ar (mm)"), 3, 0)
-        self.labelM2ZAr = QLabel("-")
-        grid2.addWidget(self.labelM2ZAr, 3, 1)
-        marker_row.addWidget(group_marker2)
-
-        align_tab_layout.addLayout(marker_row)
-
-        # --- TCP ry 보정 버튼 ---
-        self.btnAlignRxFromAngle = QPushButton("TCP ry 보정")
-        self.btnAlignRxFromAngle.setEnabled(False)
-        self.btnAlignRxFromAngle.clicked.connect(self._on_align_ry_from_angle)
-        align_tab_layout.addWidget(self.btnAlignRxFromAngle)
-
-        self.btnAlignRzFromAngle = QPushButton("TCP rz 보정")
-        self.btnAlignRzFromAngle.setEnabled(False)
-        self.btnAlignRzFromAngle.clicked.connect(self._on_align_rz_from_angle)
-        align_tab_layout.addWidget(self.btnAlignRzFromAngle)
-
-        self.btnAlignBaseY = QPushButton("Base Y 보정")
-        self.btnAlignBaseY.setEnabled(False)
-        self.btnAlignBaseY.clicked.connect(self._on_align_base_y)
-        align_tab_layout.addWidget(self.btnAlignBaseY)
-
-        align_tab_layout.addStretch()
-        self.rightTabWidget.addTab(self.widgetArucoAlign, "aruco 정렬")
-
-        # 기존 신뢰성 검증 설정을 두 번째 서브탭으로
-        self.rightTabWidget.addTab(self.groupControl, "신뢰성 검증 설정")
-
-        # ar tag tcp align 서브탭 (조그 이동 컨트롤)
-        self.widgetArTagTcpAlign = QWidget()
-        ar_layout = QVBoxLayout(self.widgetArTagTcpAlign)
-
-        # 조그 이동 그룹
-        self.groupJogMove = QGroupBox("조그 이동")
-        jog_grid = QGridLayout(self.groupJogMove)
-
-        axes_config = [
-            (0, 'X', 'mm', 0.1, 100.0, 10.0),
-            (1, 'Y', 'mm', 0.1, 100.0, 10.0),
-            (2, 'Z', 'mm', 0.1, 100.0, 10.0),
-            (3, 'Rx', 'deg', 0.1, 30.0, 5.0),
-            (4, 'Ry', 'deg', 0.1, 30.0, 5.0),
-            (5, 'Rz', 'deg', 0.1, 30.0, 5.0),
-        ]
-
-        for row, name, suffix, min_val, max_val, default in axes_config:
-            label = QLabel(f"{name}:")
-            jog_grid.addWidget(label, row, 0)
-
-            btn_minus = QPushButton("-")
-            btn_minus.setMinimumWidth(30)
-            jog_grid.addWidget(btn_minus, row, 1)
-
-            spin = QDoubleSpinBox()
-            spin.setSuffix(f" {suffix}")
-            spin.setDecimals(1)
-            spin.setMinimum(min_val)
-            spin.setMaximum(max_val)
-            spin.setSingleStep(1.0)
-            spin.setValue(default)
-            jog_grid.addWidget(spin, row, 2)
-
-            btn_plus = QPushButton("+")
-            btn_plus.setMinimumWidth(30)
-            jog_grid.addWidget(btn_plus, row, 3)
-
-            # Set widget references for JogMixin
-            attr_name = name.replace('R', 'r') if name.startswith('R') else name.lower()
-            setattr(self, f'btnJog{name}Minus', btn_minus)
-            setattr(self, f'btnJog{name}Plus', btn_plus)
-            setattr(self, f'spinJogStep{name}', spin)
-
-        ar_layout.addWidget(self.groupJogMove)
-
-        # 마커 평행 정렬 그룹
-        self.groupAlignParallel = QGroupBox("마커 평행 정렬 (TF4)")
-        align_layout = QVBoxLayout(self.groupAlignParallel)
-
-        # 현재 보정값 표시 라벨
-        self.labelAlignCorrection = QLabel("TCP 보정값: 검증 미완료")
-        self.labelAlignCorrection.setStyleSheet("color: gray;")
-        align_layout.addWidget(self.labelAlignCorrection)
-
-        # 개별 축 정렬 버튼
-        from PyQt5.QtWidgets import QHBoxLayout as _HBox
-        axis_btn_layout = _HBox()
-        self.btnAlignRx = QPushButton("Rx 정렬")
-        self.btnAlignRy = QPushButton("Ry 정렬")
-        self.btnAlignRz = QPushButton("Rz 정렬")
-        for btn in [self.btnAlignRx, self.btnAlignRy, self.btnAlignRz]:
-            btn.setEnabled(False)
-            btn.setStyleSheet("padding: 6px;")
-            axis_btn_layout.addWidget(btn)
-        self.btnAlignRx.clicked.connect(lambda: self._on_align_single_axis('rx'))
-        self.btnAlignRy.clicked.connect(lambda: self._on_align_single_axis('ry'))
-        self.btnAlignRz.clicked.connect(lambda: self._on_align_single_axis('rz'))
-        align_layout.addLayout(axis_btn_layout)
-
-        # 전체 정렬 실행 버튼
-        self.btnAlignParallel = QPushButton("전체 정렬 (RxRyRz CMD 17)")
-        self.btnAlignParallel.setStyleSheet("font-weight: bold; padding: 8px;")
-        self.btnAlignParallel.setEnabled(False)
-        self.btnAlignParallel.clicked.connect(self._on_align_parallel)
-        align_layout.addWidget(self.btnAlignParallel)
-
-        ar_layout.addWidget(self.groupAlignParallel)
-
-        # Detection Pose 그룹 (Rx, Ry, Rz 목표값)
-        self.groupDetectionPose = QGroupBox("Detection Pose (Rx, Ry, Rz)")
-        det_layout = QGridLayout(self.groupDetectionPose)
-
-        defaults = {'Rx': 90.0, 'Ry': 0.0, 'Rz': 90.0}
-        for row, name in enumerate(['Rx', 'Ry', 'Rz']):
-            det_layout.addWidget(QLabel(f"{name}"), row, 0)
-            spin = QDoubleSpinBox()
-            spin.setRange(-360.0, 360.0)
-            spin.setDecimals(2)
-            spin.setSuffix(" °")
-            spin.setValue(defaults[name])
-            det_layout.addWidget(spin, row, 1)
-            setattr(self, f'spinDetPose{name}', spin)
-
-        ar_layout.addWidget(self.groupDetectionPose)
-
-        # 정렬 디버그 로그
-        from PyQt5.QtWidgets import QTextEdit
-        self.txtAlignDebug = QTextEdit()
-        self.txtAlignDebug.setReadOnly(True)
-        self.txtAlignDebug.setStyleSheet("font-family: monospace; font-size: 11px; border: 1px solid #ccc;")
-        self.txtAlignDebug.setPlaceholderText("정렬 전후 자세 로그가 여기에 표시됩니다...")
-        ar_layout.addWidget(self.txtAlignDebug, 1)  # stretch=1로 남은 공간 채움
-        self.rightTabWidget.addTab(self.widgetArTagTcpAlign, "ar tag tcp align")
-
-        # QTabWidget을 메인 레이아웃에 추가
-        main_layout.addWidget(self.rightTabWidget)
-
-    def _setup_disambiguation_ui(self):
-        """Disambiguation UI 요소 설정"""
-        # First row: Disambiguation controls
-        self.disambiguation_layout = QHBoxLayout()
-
-        # Disambiguation checkbox
-        self.checkUseDisambiguation = QCheckBox("Use Disambiguation")
-        self.checkUseDisambiguation.setChecked(True)
-
-        # Known distance spinbox
-        self.spinKnownDistance = QDoubleSpinBox()
-        self.spinKnownDistance.setRange(50.0, 500.0)
-        self.spinKnownDistance.setValue(58.0)
-        self.spinKnownDistance.setSingleStep(0.1)
-        self.spinKnownDistance.setDecimals(2)
-        self.spinKnownDistance.setSuffix(" mm")
-
-        # Distance error label
-        self.labelDistanceError = QLabel("Distance Error: -- mm")
-
-        # 레이아웃에 추가
-        self.disambiguation_layout.addWidget(self.checkUseDisambiguation)
-        self.disambiguation_layout.addWidget(QLabel("Known Distance:"))
-        self.disambiguation_layout.addWidget(self.spinKnownDistance)
-        self.disambiguation_layout.addWidget(self.labelDistanceError)
-        self.disambiguation_layout.addStretch()
-
-        # Second row: Precision target controls
-        self.precision_layout = QHBoxLayout()
-
-        # Sigma multiplier spinbox
-        self.spinSigmaMultiplier = QDoubleSpinBox()
-        self.spinSigmaMultiplier.setRange(1.5, 4.0)
-        self.spinSigmaMultiplier.setValue(2.0)
-        self.spinSigmaMultiplier.setSingleStep(0.5)
-        self.spinSigmaMultiplier.setDecimals(1)
-        self.spinSigmaMultiplier.setSuffix(" sigma")
-
-        # Minimum samples spinbox
-        self.spinMinSamples = QSpinBox()
-        self.spinMinSamples.setRange(5, 30)
-        self.spinMinSamples.setValue(10)
-        self.spinMinSamples.setSingleStep(1)
-
-        # 레이아웃에 추가
-        self.precision_layout.addWidget(QLabel("Sigma:"))
-        self.precision_layout.addWidget(self.spinSigmaMultiplier)
-        self.precision_layout.addWidget(QLabel("Min Samples:"))
-        self.precision_layout.addWidget(self.spinMinSamples)
-        self.precision_layout.addStretch()
-
-        # groupControl 레이아웃에 disambiguation 컨트롤 추가
-        if hasattr(self, 'groupControl') and self.groupControl.layout() is not None:
-            group_layout = self.groupControl.layout()
-            group_layout.addLayout(self.disambiguation_layout)
-            group_layout.addLayout(self.precision_layout)
-
-        # 평면 결과 라벨들 생성 (프로그래매틱)
-        self._setup_plane_result_labels()
-
-    def _setup_plane_result_labels(self):
-        """평면 결과 표시 라벨 설정"""
-        # groupStatistics 레이아웃에 평면 결과 섹션 추가
-        if not hasattr(self, 'groupStatistics') or self.groupStatistics.layout() is None:
-            return
-
-        stats_layout = self.groupStatistics.layout()
-
-        # 구분선
-        separator = QLabel("─" * 80)
-        separator.setStyleSheet("color: gray; margin-top: 10px;")
-        stats_layout.addWidget(separator)
-
-        # 좌우 배치용 수평 레이아웃
-        dual_layout = QHBoxLayout()
-
-        # ===== 왼쪽: 평면 결과 =====
-        left_layout = QVBoxLayout()
-
-        plane_header = QLabel("📐 평면 결과 (Dual ArUco)")
-        plane_header.setStyleSheet("font-weight: bold; font-size: 12px; color: #9C27B0; margin-top: 5px;")
-        left_layout.addWidget(plane_header)
-
-        plane_pos_layout = QHBoxLayout()
-        plane_pos_layout.addWidget(QLabel("위치:"))
-        self.labelPlanePosition = QLabel("-")
-        self.labelPlanePosition.setStyleSheet("color: #2196F3;")
-        plane_pos_layout.addWidget(self.labelPlanePosition)
-        plane_pos_layout.addStretch()
-        left_layout.addLayout(plane_pos_layout)
-
-        plane_ori_layout = QHBoxLayout()
-        plane_ori_layout.addWidget(QLabel("자세:"))
-        self.labelPlaneOrientation = QLabel("-")
-        self.labelPlaneOrientation.setStyleSheet("color: #4CAF50;")
-        plane_ori_layout.addWidget(self.labelPlaneOrientation)
-        plane_ori_layout.addStretch()
-        left_layout.addLayout(plane_ori_layout)
-
-        tcp_corr_layout = QHBoxLayout()
-        tcp_corr_layout.addWidget(QLabel("TCP 보정:"))
-        self.labelTCPCorrection = QLabel("-")
-        self.labelTCPCorrection.setStyleSheet("color: #FF5722;")
-        tcp_corr_layout.addWidget(self.labelTCPCorrection)
-        tcp_corr_layout.addStretch()
-        left_layout.addLayout(tcp_corr_layout)
-
-        left_layout.addStretch()
-        dual_layout.addLayout(left_layout)
-
-        # 세로 구분선
-        v_separator = QLabel("│\n│\n│\n│")
-        v_separator.setStyleSheet("color: gray; margin: 0 10px;")
-        v_separator.setAlignment(Qt.AlignCenter)
-        dual_layout.addWidget(v_separator)
-
-        # ===== 오른쪽: 현재 Robot Pose =====
-        right_layout = QVBoxLayout()
-
-        robot_header = QLabel("🤖 현재 Robot Pose")
-        robot_header.setStyleSheet("font-weight: bold; font-size: 12px; color: #E91E63; margin-top: 5px;")
-        right_layout.addWidget(robot_header)
-
-        robot_pos_layout = QHBoxLayout()
-        robot_pos_layout.addWidget(QLabel("위치:"))
-        self.labelRobotPosition = QLabel("-")
-        self.labelRobotPosition.setStyleSheet("color: #E91E63;")
-        robot_pos_layout.addWidget(self.labelRobotPosition)
-        robot_pos_layout.addStretch()
-        right_layout.addLayout(robot_pos_layout)
-
-        robot_ori_layout = QHBoxLayout()
-        robot_ori_layout.addWidget(QLabel("자세:"))
-        self.labelRobotOrientation = QLabel("-")
-        self.labelRobotOrientation.setStyleSheet("color: #E91E63;")
-        robot_ori_layout.addWidget(self.labelRobotOrientation)
-        robot_ori_layout.addStretch()
-        right_layout.addLayout(robot_ori_layout)
-
-        right_layout.addStretch()
-        dual_layout.addLayout(right_layout)
-
-        stats_layout.addLayout(dual_layout)
 
     def _connect_signals(self):
         """내부 시그널-슬롯 연결"""
@@ -533,6 +169,17 @@ class TabArucoReliability(QWidget, JogMixin):
 
         # 조그 이동 (JogMixin)
         self._connect_jog_buttons()
+
+        # aruco 정렬 탭 버튼
+        self.btnAlignRxFromAngle.clicked.connect(self._on_align_ry_from_angle)
+        self.btnAlignRzFromAngle.clicked.connect(self._on_align_rz_from_angle)
+        self.btnAlignBaseY.clicked.connect(self._on_align_base_y)
+
+        # ar tag tcp align 탭 버튼
+        self.btnAlignRx.clicked.connect(lambda: self._on_align_single_axis('rx'))
+        self.btnAlignRy.clicked.connect(lambda: self._on_align_single_axis('ry'))
+        self.btnAlignRz.clicked.connect(lambda: self._on_align_single_axis('rz'))
+        self.btnAlignParallel.clicked.connect(self._on_align_parallel)
 
     def _init_ui(self):
         """UI 초기화"""
@@ -801,7 +448,7 @@ class TabArucoReliability(QWidget, JogMixin):
         self.save_folder = None
         if self.save_images:
             # 타임스탬프 폴더 생성
-            base_dir = "/home/argoon/Project/Charging_Robot_Operation/aruco_analysis"
+            base_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'images', 'aruco_mark')
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.save_folder = os.path.join(base_dir, timestamp)
             os.makedirs(self.save_folder, exist_ok=True)
@@ -1127,12 +774,12 @@ class TabArucoReliability(QWidget, JogMixin):
         tag_id2 = self.spinTagID2.value()
         default_name = f"aruco_dual_id{tag_id1}_{tag_id2}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
-        # 이미지 저장 폴더가 있으면 해당 폴더 사용, 없으면 기본 aruco_analysis 폴더
+        # 이미지 저장 폴더가 있으면 해당 폴더 사용, 없으면 기본 images/aruco_mark 폴더
         if hasattr(self, 'save_folder') and self.save_folder and os.path.exists(self.save_folder):
             default_dir = self.save_folder
         else:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            default_dir = os.path.join(project_root, "aruco_analysis")
+            default_dir = os.path.join(project_root, "images", "aruco_mark")
             os.makedirs(default_dir, exist_ok=True)
         default_path = os.path.join(default_dir, default_name)
 

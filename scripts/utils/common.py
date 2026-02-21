@@ -77,7 +77,8 @@ def save_snapshot(
     frame: np.ndarray,
     parent: QWidget,
     prefix: str = "snapshot",
-    log_callback: Optional[Callable[[str], None]] = None
+    log_callback: Optional[Callable[[str], None]] = None,
+    default_dir: Optional[str] = None
 ) -> Optional[str]:
     """
     프레임을 파일로 저장
@@ -87,6 +88,7 @@ def save_snapshot(
         parent: 부모 위젯 (파일 다이얼로그용)
         prefix: 파일명 접두사
         log_callback: 로그 콜백 함수
+        default_dir: 기본 저장 디렉토리 (None이면 파일 다이얼로그 기본값)
 
     Returns:
         저장된 파일 경로 또는 None (취소 시)
@@ -97,6 +99,10 @@ def save_snapshot(
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     default_name = f"{prefix}_{timestamp}.png"
+
+    if default_dir:
+        os.makedirs(default_dir, exist_ok=True)
+        default_name = os.path.join(default_dir, default_name)
 
     filepath, _ = QFileDialog.getSaveFileName(
         parent, "스냅샷 저장", default_name, "PNG Files (*.png);;All Files (*)"

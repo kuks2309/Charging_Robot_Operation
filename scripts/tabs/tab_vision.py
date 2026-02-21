@@ -142,7 +142,8 @@ class TabVision(QWidget):
     @require_camera_running
     def _on_snapshot(self):
         """스냅샷 저장"""
-        save_snapshot(self.current_frame, self, "vision", self._log)
+        vision_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'images', 'vision')
+        save_snapshot(self.current_frame, self, "vision", self._log, default_dir=vision_dir)
 
     # ==================== 정렬 버튼 핸들러 ====================
 
