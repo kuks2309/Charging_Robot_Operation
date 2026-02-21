@@ -489,3 +489,72 @@ IPPE 2해 × 2마커 = 4가지 조합의 마커 간 거리 비교:
 **주의:** 로봇 컨트롤러 Modbus 서버에 레지스터 `fx(313)`, `fy(314)`, `fz(315)` 등록 필요
 
 ---
+
+## 2026-02-21 | Base Y 보정 알고리즘 수정 + PRS fine translate 레지스터 오류 + wait_for_done 레이스 컨디션
+
+### 문제 1: `send_base_translate` 메서드 미존재
+
+**증상:** `'ModbusClient' object has no attribute 'send_base_translate'`
+
+**수정:** `main_window.py`에서 `send_base_translate` → `send_base_linear` 전체 치환
+
+### 문제 2: PRS `read_register()` 정수 주소 불가
+
+**증상:** PRS 377줄 `invalid argument[1]:type of string data`. fine translate 실행 불가.
+
+**원인:** Doosan PRS `modserv.read_register()`는 문자열 이름만 허용. 레지스터 313-315는 미등록 이름.
+
+**수정:** 미사용 `'x2'(307)`, `'y2'(308)`, `'z2'(309)` 레지스터로 변경
+
+| 파일 | 변경 |
+|------|------|
+| `Main_task.prs` CMD 60-63 | `read_register(313/314/315)` → `read_register('x2'/'y2'/'z2')` |
+| `modbus_client.py` | `REGISTER_FINE_X/Y/Z = 313/314/315` → `307/308/309` |
+
+### 문제 3: `wait_for_done()` 0.3초 IDLE 조기반환
+
+**증상:** 로봇 이동 전 "완료" 반환. 후속 측정이 이동 전 좌표를 읽음.
+
+**원인:** PRS 루프(50ms) 명령 읽기 전, 0.3초 IDLE을 "빠른 명령 완료"로 오판.
+
+**수정:** `modbus_client.py` — `saw_running` 플래그 추가. RUNNING(1)을 감지한 후에만 IDLE을 완료로 판정.
+
+### 문제 4: Base Y 보정 알고리즘 개선
+
+**증상:** 보정 후 잔여 오차 50px+, 과대보정(-98mm) 산출.
+
+**수정 (`main_window.py` `_on_ar_tag_align_base_y`):**
+- 테스트 방향: 항상 +5mm → 오프셋 반대 방향 (`d0>0` → Y-, `d0<0` → Y+)
+- 위치 안정화 폴링: 연속 3회 변화 < 0.05mm일 때 이동 완료 판정
+- 비율 산출: 명령값 → `read_current_pose()` 실측값(`actual_mm`) 기반
+- 보정 이동: `send_base_fine_translate` (0.1mm 해상도)
+- 보정 후 재측정 검증 추가
+
+---
+
+## 2026-02-21 | 이미지 저장 경로 정리 (images/ 폴더 구조화)
+
+**증상:** 이미지가 `images/` 루트 및 `aruco_analysis/` 등 분산 저장되어 관리 어려움
+
+**수정 파일:**
+- `scripts/tabs/tab_aruco_reliability.py`
+- `scripts/tabs/tab_vision.py`
+- `scripts/utils/common.py`
+
+**수정 내용:**
+- ArUco 탭 캡처 이미지 저장 경로: `aruco_analysis/` → `images/aruco_mark/`
+- ArUco 탭 CSV 기본 저장 경로: `aruco_analysis/` → `images/aruco_mark/`
+- Vision 탭 스냅샷 기본 저장 경로: `images/vision/` 설정
+- `save_snapshot()` 유틸에 `default_dir` 파라미터 추가 (기존 호출 호환)
+- 기존 `images/` 루트 이미지 17장을 `vision/`으로, ArUco 마커 사진 1장을 `aruco_mark/`으로 이동
+- 빈 날짜 폴더(`20260117/`, `20260124/`) 제거
+
+**최종 폴더 구조:**
+```
+images/
+├── aruco_mark/   # ArUco 탭 관련 이미지
+├── vision/       # Vision 탭 관련 이미지, 로봇 참고 스크린샷
+└── laser/        # 레이저 캘리브레이션 이미지
+```
+
+---
