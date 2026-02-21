@@ -3,7 +3,7 @@
 Modbus TCP Client - 로봇 컨트롤러 통신
 
 Main_task.prs 레지스터 정의:
-- 301~306: pose_main (x, y, z, Rx, Ry, Rz) - int16, mm×10/deg×10
+- 301~306: pose_main (x, y, z, Rx, Ry, Rz) - int16, mm×10/deg×10 (0.1mm/0.1° 해상도)
 - 307~312: pose_back (x2, y2, z2, Rx2, Ry2, Rz2) - int16, mm×10/deg×10
 - 351: task_number (command)
 - 352: task_done (status): 0=Idle, 1=Running, 2=Done, 3=Error
@@ -74,15 +74,15 @@ class ModbusClient:
     CMD_BASE_ROTATE_X = 54      # rotx(rx) - 베이스 좌표계 X축 회전
     CMD_BASE_ROTATE_Y = 55      # roty(ry) - 베이스 좌표계 Y축 회전
     CMD_BASE_ROTATE_Z = 56      # rotz(rz) - 베이스 좌표계 Z축 회전
-    CMD_BASE_FINE_X = 60        # transx(fx/10) - 베이스 정밀 X 이동 (0.1mm)
-    CMD_BASE_FINE_Y = 61        # transy(fy/10) - 베이스 정밀 Y 이동 (0.1mm)
-    CMD_BASE_FINE_Z = 62        # transz(fz/10) - 베이스 정밀 Z 이동 (0.1mm)
-    CMD_BASE_FINE_XYZ = 63      # trans(fx/10,fy/10,fz/10) - 베이스 정밀 XYZ 이동 (0.1mm)
+    CMD_BASE_FINE_X = 60        # DEPRECATED: CMD 50 사용. transx(fx/10)
+    CMD_BASE_FINE_Y = 61        # DEPRECATED: CMD 51 사용. transy(fy/10)
+    CMD_BASE_FINE_Z = 62        # DEPRECATED: CMD 52 사용. transz(fz/10)
+    CMD_BASE_FINE_XYZ = 63      # DEPRECATED: CMD 53 사용. trans(fx/10,fy/10,fz/10)
 
-    # 정밀 이동 레지스터 (CMD 60-63 전용)
-    REGISTER_FINE_X = 313       # fx (int16, mm×10)
-    REGISTER_FINE_Y = 314       # fy (int16, mm×10)
-    REGISTER_FINE_Z = 315       # fz (int16, mm×10)
+    # 정밀 이동 레지스터 (CMD 60-63 전용, PRS 'x2'/'y2'/'z2')
+    REGISTER_FINE_X = 307       # DEPRECATED: x2 (int16, mm×10)
+    REGISTER_FINE_Y = 308       # DEPRECATED: y2 (int16, mm×10)
+    REGISTER_FINE_Z = 309       # DEPRECATED: z2 (int16, mm×10)
 
     def __init__(self, ip: str = "192.168.0.29", port: int = 1502, timeout: float = 1.0):
         """
@@ -301,39 +301,37 @@ class ModbusClient:
             stop_flag_callback: 중지 확인 콜백 (True 반환 시 즉시 중지)
         """
         start = time.time()
+        saw_running = False
 
         # 1단계: Running 상태 감지 대기 (최대 5초)
-        # 빠른 명령(toolframe, workframe 등)은 즉시 완료되어 IDLE로 돌아갈 수 있음
-        initial_status = self.read_status()
         while time.time() - start < 5.0:
             if process_events_callback:
                 process_events_callback()
 
-            # 중지 요청 확인
             if stop_flag_callback and stop_flag_callback():
                 return False, "사용자 중지"
 
             status = self.read_status()
             if status == self.STATUS_RUNNING:
+                saw_running = True
                 break
             elif status == self.STATUS_DONE:
                 return True, "명령 완료"
             elif status == self.STATUS_ERROR:
                 return False, "로봇 오류 발생"
-            elif status == self.STATUS_IDLE and time.time() - start > 0.3:
-                # 빠른 명령이 이미 완료된 경우 (0.3초 후에도 IDLE이면 완료로 간주)
+            elif status == self.STATUS_IDLE and saw_running:
+                # Running을 거친 후 IDLE이면 완료 (빠른 명령)
                 return True, "명령 완료"
 
             time.sleep(0.1)
         else:
-            return False, "Running 상태 감지 실패"
+            return False, "Running 상태 감지 실패 (5초 타임아웃)"
 
         # 2단계: 완료 대기 (Running → Done/Idle)
         while time.time() - start < timeout:
             if process_events_callback:
                 process_events_callback()
 
-            # 중지 요청 확인
             if stop_flag_callback and stop_flag_callback():
                 return False, "사용자 중지"
 
@@ -389,25 +387,25 @@ class ModbusClient:
             process_events_callback: UI 이벤트 처리 콜백
 
         Note:
-            Main_task.prs의 tool.trans 명령은 mm 단위 그대로 사용 (×10 스케일링 없음)
+            Main_task.prs의 tool.trans 명령은 ×10 스케일링 적용 (0.1mm 해상도)
         """
         if axis.lower() == 'x':
             # x 레지스터(301)에 값 쓰기 (mm 단위 정수)
-            val = self.to_uint16(int(distance))
+            val = self.to_uint16(int(round(distance * 10)))
             self.write_register(self.REGISTER_POSE_X, val)
             self.write_command(self.CMD_TCP_LINEAR_X)
         elif axis.lower() == 'y':
-            val = self.to_uint16(int(distance))
+            val = self.to_uint16(int(round(distance * 10)))
             self.write_register(self.REGISTER_POSE_Y, val)
             self.write_command(self.CMD_TCP_LINEAR_Y)
         elif axis.lower() == 'z':
-            val = self.to_uint16(int(distance))
+            val = self.to_uint16(int(round(distance * 10)))
             self.write_register(self.REGISTER_POSE_Z, val)
             self.write_command(self.CMD_TCP_LINEAR_Z)
         elif axis.lower() == 'xyz' and isinstance(distance, (list, tuple)):
-            x_val = self.to_uint16(int(distance[0]))
-            y_val = self.to_uint16(int(distance[1]))
-            z_val = self.to_uint16(int(distance[2]))
+            x_val = self.to_uint16(int(round(distance[0] * 10)))
+            y_val = self.to_uint16(int(round(distance[1] * 10)))
+            z_val = self.to_uint16(int(round(distance[2] * 10)))
             self.write_registers(self.REGISTER_POSE_MAIN, [x_val, y_val, z_val])
             self.write_command(self.CMD_TCP_LINEAR_XYZ)
         else:
@@ -490,12 +488,12 @@ class ModbusClient:
         """
         # mm×10, deg×10 스케일링 후 uint16 변환
         regs = [
-            self.to_uint16(int(x * 10)),
-            self.to_uint16(int(y * 10)),
-            self.to_uint16(int(z * 10)),
-            self.to_uint16(int(rx * 10)),
-            self.to_uint16(int(ry * 10)),
-            self.to_uint16(int(rz * 10)),
+            self.to_uint16(int(round(x * 10))),
+            self.to_uint16(int(round(y * 10))),
+            self.to_uint16(int(round(z * 10))),
+            self.to_uint16(int(round(rx * 10))),
+            self.to_uint16(int(round(ry * 10))),
+            self.to_uint16(int(round(rz * 10))),
         ]
 
         # 레지스터 301~306에 쓰기
@@ -585,24 +583,24 @@ class ModbusClient:
         print(f"[BASE LINEAR] 명령: axis={axis}, distance={distance}mm")
 
         if axis.lower() == 'x':
-            val = self.to_uint16(int(distance))
+            val = self.to_uint16(int(round(distance * 10)))
             self.write_register(self.REGISTER_POSE_X, val)
             print(f"[BASE LINEAR] 레지스터: X(301)={val}, CMD(351)={self.CMD_BASE_LINEAR_X}")
             self.write_command(self.CMD_BASE_LINEAR_X)
         elif axis.lower() == 'y':
-            val = self.to_uint16(int(distance))
+            val = self.to_uint16(int(round(distance * 10)))
             self.write_register(self.REGISTER_POSE_Y, val)
             print(f"[BASE LINEAR] 레지스터: Y(302)={val}, CMD(351)={self.CMD_BASE_LINEAR_Y}")
             self.write_command(self.CMD_BASE_LINEAR_Y)
         elif axis.lower() == 'z':
-            val = self.to_uint16(int(distance))
+            val = self.to_uint16(int(round(distance * 10)))
             self.write_register(self.REGISTER_POSE_Z, val)
             print(f"[BASE LINEAR] 레지스터: Z(303)={val}, CMD(351)={self.CMD_BASE_LINEAR_Z}")
             self.write_command(self.CMD_BASE_LINEAR_Z)
         elif axis.lower() == 'xyz' and isinstance(distance, (list, tuple)):
-            x_val = self.to_uint16(int(distance[0]))
-            y_val = self.to_uint16(int(distance[1]))
-            z_val = self.to_uint16(int(distance[2]))
+            x_val = self.to_uint16(int(round(distance[0] * 10)))
+            y_val = self.to_uint16(int(round(distance[1] * 10)))
+            z_val = self.to_uint16(int(round(distance[2] * 10)))
             self.write_registers(self.REGISTER_POSE_MAIN, [x_val, y_val, z_val])
             self.write_command(self.CMD_BASE_LINEAR_XYZ)
         else:
@@ -624,7 +622,8 @@ class ModbusClient:
     def send_base_fine_translate(self, axis: str, distance: float, wait: bool = True,
                                 process_events_callback=None) -> Tuple[bool, str]:
         """
-        베이스 좌표계 정밀 이동 (0.1mm 단위, CMD 60-63, 레지스터 313-315)
+        DEPRECATED: send_base_linear이 0.1mm 해상도를 지원하므로 send_base_linear 사용 권장.
+        하위 호환성을 위해 유지. 내부적으로 send_base_linear를 호출합니다.
 
         Args:
             axis: 'x', 'y', 'z', 'xyz'
@@ -632,46 +631,13 @@ class ModbusClient:
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
         """
-        before_pose = self.read_current_pose()
-        if before_pose:
-            print(f"[BASE FINE] 이동 전: X={before_pose[0]:.2f}, Y={before_pose[1]:.2f}, Z={before_pose[2]:.2f}")
-        print(f"[BASE FINE] 명령: axis={axis}, distance={distance}mm")
-
-        if axis.lower() == 'x':
-            val = self.to_uint16(int(round(distance * 10)))
-            self.write_register(self.REGISTER_FINE_X, val)
-            print(f"[BASE FINE] 레지스터: fx(313)={val}, CMD(351)={self.CMD_BASE_FINE_X}")
-            self.write_command(self.CMD_BASE_FINE_X)
-        elif axis.lower() == 'y':
-            val = self.to_uint16(int(round(distance * 10)))
-            self.write_register(self.REGISTER_FINE_Y, val)
-            print(f"[BASE FINE] 레지스터: fy(314)={val}, CMD(351)={self.CMD_BASE_FINE_Y}")
-            self.write_command(self.CMD_BASE_FINE_Y)
-        elif axis.lower() == 'z':
-            val = self.to_uint16(int(round(distance * 10)))
-            self.write_register(self.REGISTER_FINE_Z, val)
-            print(f"[BASE FINE] 레지스터: fz(315)={val}, CMD(351)={self.CMD_BASE_FINE_Z}")
-            self.write_command(self.CMD_BASE_FINE_Z)
-        elif axis.lower() == 'xyz' and isinstance(distance, (list, tuple)):
-            fx_val = self.to_uint16(int(round(distance[0] * 10)))
-            fy_val = self.to_uint16(int(round(distance[1] * 10)))
-            fz_val = self.to_uint16(int(round(distance[2] * 10)))
-            self.write_registers(self.REGISTER_FINE_X, [fx_val, fy_val, fz_val])
-            print(f"[BASE FINE] 레지스터: fx={fx_val}, fy={fy_val}, fz={fz_val}, CMD={self.CMD_BASE_FINE_XYZ}")
-            self.write_command(self.CMD_BASE_FINE_XYZ)
-        else:
-            return False, "잘못된 축 지정"
-
-        if wait:
-            result = self.wait_for_done(process_events_callback=process_events_callback)
-            after_pose = self.read_current_pose()
-            if after_pose:
-                print(f"[BASE FINE] 이동 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}")
-                if before_pose:
-                    print(f"[BASE FINE] 변화량: dX={after_pose[0]-before_pose[0]:.2f}, dY={after_pose[1]-before_pose[1]:.2f}, "
-                          f"dZ={after_pose[2]-before_pose[2]:.2f}")
-            return result
-        return True, "명령 전송됨"
+        import warnings
+        warnings.warn(
+            "send_base_fine_translate는 deprecated. send_base_linear 사용",
+            DeprecationWarning, stacklevel=2
+        )
+        return self.send_base_linear(axis, distance, wait=wait,
+                                     process_events_callback=process_events_callback)
 
     def send_base_rotate(self, axis: str, angle: float, wait: bool = True,
                          process_events_callback=None) -> Tuple[bool, str]:
@@ -805,12 +771,12 @@ class ModbusClient:
                         rx: float, ry: float, rz: float) -> bool:
         """Pose Main (301~306) 쓰기"""
         regs = [
-            self.to_uint16(int(x * 10)),
-            self.to_uint16(int(y * 10)),
-            self.to_uint16(int(z * 10)),
-            self.to_uint16(int(rx * 10)),
-            self.to_uint16(int(ry * 10)),
-            self.to_uint16(int(rz * 10)),
+            self.to_uint16(int(round(x * 10))),
+            self.to_uint16(int(round(y * 10))),
+            self.to_uint16(int(round(z * 10))),
+            self.to_uint16(int(round(rx * 10))),
+            self.to_uint16(int(round(ry * 10))),
+            self.to_uint16(int(round(rz * 10))),
         ]
         return self.write_registers(self.REGISTER_POSE_MAIN, regs)
 
@@ -818,12 +784,12 @@ class ModbusClient:
                         rx: float, ry: float, rz: float) -> bool:
         """Pose Back (307~312) 쓰기"""
         regs = [
-            self.to_uint16(int(x * 10)),
-            self.to_uint16(int(y * 10)),
-            self.to_uint16(int(z * 10)),
-            self.to_uint16(int(rx * 10)),
-            self.to_uint16(int(ry * 10)),
-            self.to_uint16(int(rz * 10)),
+            self.to_uint16(int(round(x * 10))),
+            self.to_uint16(int(round(y * 10))),
+            self.to_uint16(int(round(z * 10))),
+            self.to_uint16(int(round(rx * 10))),
+            self.to_uint16(int(round(ry * 10))),
+            self.to_uint16(int(round(rz * 10))),
         ]
         return self.write_registers(self.REGISTER_POSE_BACK, regs)
 

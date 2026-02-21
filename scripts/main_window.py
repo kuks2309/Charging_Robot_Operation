@@ -929,71 +929,128 @@ class MainWindow(QMainWindow):
             self._log(f"[ArUco] Rz + Y 보정 오류: {e}")
 
     def _on_ar_tag_align_base_y(self, dy_px: float):
-        """ArUco 정렬 탭 - 적응형 Base Y 위치 보정 (2단계)
+        """ArUco 정렬 탭 - 적응형 Base Y 위치 보정
 
-        1단계: 5mm 테스트 이동 → 픽셀 변화율 산출
-        2단계: 잔여 오프셋 보정
+        1단계: +5mm 테스트 이동 → px/mm 비율 산출 (부호 자동 결정)
+        2단계: 비율 기반 보정 이동 (fine translate, 0.1mm 해상도)
+        3단계: 재측정 검증
         """
         if not self.robot or not self.robot.is_connected:
             QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
             return
-        if abs(dy_px) < 3:
+
+        DEAD_ZONE_PX = 3
+        TEST_MM = 5.0
+        MAX_CORRECTION_MM = 50.0
+
+        if abs(dy_px) < DEAD_ZONE_PX:
             self._log("[ArUco] Base Y: 오프셋 3px 미만, 보정 불필요")
             return
+
         try:
             import time
             from PyQt5.QtWidgets import QApplication
 
-            test_mm = 5.0
-            # 부호: dY<0 → robot Y+, dY>0 → robot Y-
-            sign = -1.0 if dy_px > 0 else 1.0
+            d0 = dy_px
+            # 오프셋 반대 방향으로 테스트 (d0>0: 마커 오른쪽 → Y-, d0<0: 마커 왼쪽 → Y+)
+            test_cmd = -TEST_MM if d0 > 0 else TEST_MM
+            self._log(f"[ArUco] Base Y 보정 시작: d0={d0:.1f}px")
 
-            self._log(f"[ArUco] Base Y 보정 시작: dY={dy_px:.1f}px")
+            # --- 1단계: 테스트 이동으로 px/mm 비율 산출 ---
+            # 이동 전 로봇 Y 좌표 기록
+            pose_before = self.robot.read_current_pose()
+            if pose_before is None:
+                self._log("[ArUco] 현재 포즈 읽기 실패")
+                return
+            y_before = pose_before[1]
 
-            # 1단계: 테스트 이동
-            self._log(f"[ArUco] 1단계: {sign * test_mm:.1f}mm 테스트 이동")
-            success, msg = self.robot.send_base_translate(
-                'y', int(sign * test_mm), wait=True,
+            self._log(f"[ArUco] 1단계: {test_cmd:+.1f}mm 테스트 이동")
+            success, msg = self.robot.send_base_linear(
+                'y', test_cmd, wait=True,
                 process_events_callback=QApplication.processEvents)
             if not success:
                 self._log(f"[ArUco] 테스트 이동 실패: {msg}")
                 return
 
-            # 새 프레임으로 dY' 측정
-            time.sleep(0.5)  # 카메라 프레임 안정화
-            QApplication.processEvents()
+            # 위치 안정화 대기: 이동 후 위치가 변하지 않을 때까지 폴링 (최대 10초)
+            actual_mm = 0.0
+            last_y = y_before
+            stable_count = 0
+            deadline = time.time() + 10.0
+            while time.time() < deadline:
+                time.sleep(0.2)
+                QApplication.processEvents()
+                pose_now = self.robot.read_current_pose()
+                if pose_now is None:
+                    continue
+                current_y = pose_now[1]
+                if abs(current_y - last_y) < 0.05:
+                    stable_count += 1
+                    if stable_count >= 3 and abs(current_y - y_before) > 0.1:
+                        break  # 3회 연속 안정 + 실제 이동 있음
+                else:
+                    stable_count = 0
+                last_y = current_y
+            actual_mm = last_y - y_before
+            self._log(f"[ArUco] 실제 이동: {actual_mm:.2f}mm (명령: {test_cmd:+.1f}mm)")
 
-            new_dy_px = self._measure_marker_dy_px()
-            if new_dy_px is None:
-                self._log("[ArUco] 테스트 이동 후 마커 감지 실패, 복귀")
-                self.robot.send_base_translate(
-                    'y', int(-sign * test_mm), wait=True,
+            if abs(actual_mm) < 0.5:
+                self._log("[ArUco] 실제 이동 < 0.5mm, 로봇 이동 불가. 복귀")
+                self.robot.send_base_linear(
+                    'y', -test_cmd, wait=True,
                     process_events_callback=QApplication.processEvents)
                 return
 
-            pixel_change = dy_px - new_dy_px
-            self._log(f"[ArUco] 테스트 결과: dY'={new_dy_px:.1f}px, 변화={pixel_change:.1f}px")
-
-            if abs(pixel_change) < 2:
-                self._log("[ArUco] 픽셀 변화 없음 (< 2px), 부호 확인 필요")
+            d1 = self._measure_marker_dy_px()
+            if d1 is None:
+                self._log("[ArUco] 테스트 후 마커 감지 실패, 복귀")
+                self.robot.send_base_linear(
+                    'y', -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
                 return
 
-            # 2단계: 비율 계산 후 잔여 이동
-            mm_per_px = (sign * test_mm) / pixel_change  # 실제 이동 방향 반영
-            remaining_mm = new_dy_px * mm_per_px
-            self._log(f"[ArUco] 비율: {abs(mm_per_px):.3f} mm/px, 잔여: {remaining_mm:.1f}mm")
+            delta_px = d1 - d0
+            self._log(f"[ArUco] 테스트 결과: d1={d1:.1f}px, 변화={delta_px:.1f}px")
 
-            if abs(remaining_mm) > 50:
-                self._log(f"[ArUco] 잔여 이동 과대 ({remaining_mm:.1f}mm > 50mm), 안전 중단")
+            if abs(delta_px) < 2:
+                self._log("[ArUco] 픽셀 변화 < 2px, 측정 불안정. 복귀")
+                self.robot.send_base_linear(
+                    'y', -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
                 return
 
-            success, msg = self.robot.send_base_translate(
-                'y', int(round(remaining_mm)), wait=True,
+            # 실제 이동량 기반 비율 산출
+            px_per_mm = delta_px / actual_mm
+            self._log(f"[ArUco] 비율: {px_per_mm:.2f} px/mm ({abs(1.0/px_per_mm):.3f} mm/px)")
+
+            # --- 2단계: 비율 기반 보정 이동 ---
+            correction_mm = -d1 / px_per_mm
+            self._log(f"[ArUco] 2단계: 보정 {correction_mm:.1f}mm")
+
+            if abs(correction_mm) > MAX_CORRECTION_MM:
+                self._log(f"[ArUco] 보정 과대 ({correction_mm:.1f}mm > {MAX_CORRECTION_MM}mm), 안전 중단")
+                return
+
+            # 0.1mm 해상도 정밀 이동 사용
+            success, msg = self.robot.send_base_linear(
+                'y', correction_mm, wait=True,
                 process_events_callback=QApplication.processEvents)
-            if success:
-                self._log(f"[ArUco] Base Y 보정 완료 (총 {sign * test_mm + remaining_mm:.1f}mm)")
+            if not success:
+                self._log(f"[ArUco] 보정 이동 실패: {msg}")
+                return
+
+            total_mm = test_cmd + correction_mm
+
+            # --- 3단계: 이동완료 대기 후 검증 ---
+            time.sleep(0.5)
+            QApplication.processEvents()
+
+            d_final = self._measure_marker_dy_px()
+            if d_final is not None:
+                self._log(f"[ArUco] Base Y 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
             else:
-                self._log(f"[ArUco] 잔여 이동 실패: {msg}")
+                self._log(f"[ArUco] Base Y 보정 완료: 총 {total_mm:.1f}mm (검증 측정 실패)")
+
             self._update_statusbar()
         except Exception as e:
             self._log(f"[ArUco] Base Y 보정 오류: {e}")
