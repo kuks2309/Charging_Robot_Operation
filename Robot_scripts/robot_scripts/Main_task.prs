@@ -7,6 +7,7 @@ modserv = modbus_server()
 -- 'task_number' (351) -> command
 -- 'task_done' (352) -> status
 -- 상태 코드: 0=Idle, 1=Running, 2=Done, 3=Error
+-- 모든 이송(translation) 명령: ×10 스케일, 0.1mm 단위 (CMD 10-13, 50-53, 60-63)
 
 modserv.write_register('task_done', 0)
 
@@ -32,7 +33,7 @@ while true do
         if  x>32767  then
             x= x-65536
         end
-        tool.transx(x)
+        tool.transx(x/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -43,7 +44,7 @@ while true do
         if  y>32767  then
             y= y-65536
         end
-        tool.transy(y)
+        tool.transy(y/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -54,7 +55,7 @@ while true do
         if  z>32767  then
             z= z-65536
         end
-        tool.transz(z)
+        tool.transz(z/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -73,7 +74,7 @@ while true do
         if  z>32767  then
             z= z-65536
         end
-        tool.trans(x, y, z)
+        tool.trans(x/10, y/10, z/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -280,7 +281,7 @@ while true do
         if x > 32767 then
             x = x - 65536
         end
-        transx(x)
+        transx(x/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -291,7 +292,7 @@ while true do
         if y > 32767 then
             y = y - 65536
         end
-        transy(y)
+        transy(y/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -302,7 +303,7 @@ while true do
         if z > 32767 then
             z = z - 65536
         end
-        transz(z)
+        transz(z/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -321,7 +322,7 @@ while true do
         if z > 32767 then
             z = z - 65536
         end
-        trans(x, y, z)
+        trans(x/10, y/10, z/10)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
@@ -360,10 +361,10 @@ while true do
         modserv.write_register('task_number', 0)
         modserv.write_register('task_done', 0)
 
-    -- command 60-63: 베이스 좌표계 정밀 이동 (×10 스케일, 0.1mm 단위, 레지스터 fx/fy/fz = 313-315)
+    -- command 60-63: DEPRECATED - CMD 50-53이 0.1mm 지원으로 대체. 하위호환을 위해 유지
     elseif command == 60 then
         modserv.write_register('task_done', 1)
-        fx = modserv.read_register('fx')
+        fx = modserv.read_register('x2')
         if fx > 32767 then
             fx = fx - 65536
         end
@@ -374,7 +375,7 @@ while true do
 
     elseif command == 61 then
         modserv.write_register('task_done', 1)
-        fy = modserv.read_register('fy')
+        fy = modserv.read_register('y2')
         if fy > 32767 then
             fy = fy - 65536
         end
@@ -385,7 +386,7 @@ while true do
 
     elseif command == 62 then
         modserv.write_register('task_done', 1)
-        fz = modserv.read_register('fz')
+        fz = modserv.read_register('z2')
         if fz > 32767 then
             fz = fz - 65536
         end
@@ -396,9 +397,9 @@ while true do
 
     elseif command == 63 then
         modserv.write_register('task_done', 1)
-        fx = modserv.read_register('fx')
-        fy = modserv.read_register('fy')
-        fz = modserv.read_register('fz')
+        fx = modserv.read_register('x2')
+        fy = modserv.read_register('y2')
+        fz = modserv.read_register('z2')
         if fx > 32767 then
             fx = fx - 65536
         end
