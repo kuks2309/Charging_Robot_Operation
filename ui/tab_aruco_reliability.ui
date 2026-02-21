@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1200</width>
-    <height>700</height>
+    <height>858</height>
    </rect>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayoutArucoReliability">
@@ -26,547 +26,691 @@
    <property name="bottomMargin">
     <number>4</number>
    </property>
-
-   <!-- ========== LEFT PANEL: Camera + Statistics ========== -->
    <item>
-    <widget class="QWidget" name="widgetLeft">
-     <layout class="QVBoxLayout" name="verticalLayoutLeft">
-      <property name="spacing">
-       <number>2</number>
-      </property>
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-
-      <!-- Camera Stream -->
-      <item>
-       <widget class="QGroupBox" name="groupCameraStream">
-        <property name="title">
-         <string>Camera Stream</string>
+    <layout class="QVBoxLayout" name="verticalLayoutLeft">
+     <property name="spacing">
+      <number>2</number>
+     </property>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QGroupBox" name="groupCameraStream">
+       <property name="title">
+        <string>Camera Stream</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayoutCamera">
+        <property name="spacing">
+         <number>2</number>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayoutCamera">
-         <property name="spacing">
-          <number>2</number>
-         </property>
-         <property name="leftMargin">
-          <number>4</number>
-         </property>
-         <property name="topMargin">
-          <number>4</number>
-         </property>
-         <property name="rightMargin">
-          <number>4</number>
-         </property>
-         <property name="bottomMargin">
-          <number>4</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="labelCameraView">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>320</width>
-             <height>400</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>400</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string>background-color: #333333; border: 1px solid #555555;</string>
-           </property>
-           <property name="text">
-            <string>카메라 미연결</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
-           <item>
-            <widget class="QRadioButton" name="radioDS435">
-             <property name="text">
-              <string>DS435</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QRadioButton" name="radioArduCam">
-             <property name="text">
-              <string>ArduCam</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnSetDetectionPose">
-             <property name="text">
-              <string>Set Detection Pose</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerCameraSelect">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnStartCamera">
-             <property name="text">
-              <string>카메라 시작</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btnStopCamera">
-             <property name="text">
-              <string>카메라 정지</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
-      </item>
-
-      <!-- Statistics Results -->
-      <item>
-       <widget class="QGroupBox" name="groupStatistics">
-        <property name="title">
-         <string>통계 결과</string>
+        <property name="leftMargin">
+         <number>4</number>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayoutStatistics">
-         <property name="spacing">
-          <number>2</number>
-         </property>
-         <property name="leftMargin">
-          <number>4</number>
-         </property>
-         <property name="topMargin">
-          <number>4</number>
-         </property>
-         <property name="rightMargin">
-          <number>4</number>
-         </property>
-         <property name="bottomMargin">
-          <number>4</number>
-         </property>
-
-         <!-- Dual Marker Statistics -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutDualStats">
-           <property name="spacing">
-            <number>4</number>
-           </property>
-           <!-- Marker1 -->
-           <item>
-            <widget class="QGroupBox" name="groupMarker1Stats">
-             <property name="title">
-              <string>마커1 (ID:0)</string>
+        <property name="topMargin">
+         <number>4</number>
+        </property>
+        <property name="rightMargin">
+         <number>4</number>
+        </property>
+        <property name="bottomMargin">
+         <number>4</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="labelCameraView">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>640</width>
+            <height>360</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>640</width>
+            <height>360</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #333333; border: 1px solid #555555;</string>
+          </property>
+          <property name="text">
+           <string>카메라 미연결</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
+          <item>
+           <widget class="QRadioButton" name="radioDS435">
+            <property name="text">
+             <string>DS435</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="radioArduCam">
+            <property name="text">
+             <string>ArduCam</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnSetDetectionPose">
+            <property name="text">
+             <string>Set Detection Pose</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerCameraSelect">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnStartCamera">
+            <property name="text">
+             <string>카메라 시작</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnStopCamera">
+            <property name="text">
+             <string>카메라 정지</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="groupStatistics">
+       <property name="title">
+        <string>통계 결과</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayoutStatistics">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <property name="leftMargin">
+         <number>4</number>
+        </property>
+        <property name="topMargin">
+         <number>4</number>
+        </property>
+        <property name="rightMargin">
+         <number>4</number>
+        </property>
+        <property name="bottomMargin">
+         <number>4</number>
+        </property>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutDualStats">
+          <property name="spacing">
+           <number>4</number>
+          </property>
+          <item>
+           <widget class="QGroupBox" name="groupMarker1Stats">
+            <property name="title">
+             <string>마커1 (ID:0)</string>
+            </property>
+            <layout class="QFormLayout" name="formLayoutMarker1">
+             <property name="horizontalSpacing">
+              <number>8</number>
              </property>
-             <layout class="QFormLayout" name="formLayoutMarker1">
-              <property name="horizontalSpacing">
-               <number>8</number>
-              </property>
-              <property name="verticalSpacing">
-               <number>2</number>
-              </property>
-              <item row="0" column="0">
-               <widget class="QLabel" name="labelXM1">
-                <property name="text"><string>X:</string></property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLabel" name="labelXMeanValue">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="labelYM1">
-                <property name="text"><string>Y:</string></property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLabel" name="labelYMeanValue">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="labelZM1">
-                <property name="text"><string>Z:</string></property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QLabel" name="labelZMeanValue">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="labelRxM1">
-                <property name="text"><string>Rx:</string></property>
-               </widget>
-              </item>
-              <item row="3" column="1">
-               <widget class="QLabel" name="labelRxMeanValue">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="4" column="0">
-               <widget class="QLabel" name="labelRyM1">
-                <property name="text"><string>Ry:</string></property>
-               </widget>
-              </item>
-              <item row="4" column="1">
-               <widget class="QLabel" name="labelRyMeanValue">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="5" column="0">
-               <widget class="QLabel" name="labelRzM1">
-                <property name="text"><string>Rz:</string></property>
-               </widget>
-              </item>
-              <item row="5" column="1">
-               <widget class="QLabel" name="labelRzMeanValue">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
-           </item>
-           <!-- Marker2 -->
-           <item>
-            <widget class="QGroupBox" name="groupMarker2Stats">
-             <property name="title">
-              <string>마커2 (ID:1)</string>
+             <property name="verticalSpacing">
+              <number>2</number>
              </property>
-             <layout class="QFormLayout" name="formLayoutMarker2">
-              <property name="horizontalSpacing">
-               <number>8</number>
-              </property>
-              <property name="verticalSpacing">
-               <number>2</number>
-              </property>
-              <item row="0" column="0">
-               <widget class="QLabel" name="labelXM2L">
-                <property name="text"><string>X:</string></property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLabel" name="labelXMeanValueM2">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="labelYM2L">
-                <property name="text"><string>Y:</string></property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLabel" name="labelYMeanValueM2">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="labelZM2L">
-                <property name="text"><string>Z:</string></property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QLabel" name="labelZMeanValueM2">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="labelRxM2L">
-                <property name="text"><string>Rx:</string></property>
-               </widget>
-              </item>
-              <item row="3" column="1">
-               <widget class="QLabel" name="labelRxMeanValueM2">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="4" column="0">
-               <widget class="QLabel" name="labelRyM2L">
-                <property name="text"><string>Ry:</string></property>
-               </widget>
-              </item>
-              <item row="4" column="1">
-               <widget class="QLabel" name="labelRyMeanValueM2">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-              <item row="5" column="0">
-               <widget class="QLabel" name="labelRzM2L">
-                <property name="text"><string>Rz:</string></property>
-               </widget>
-              </item>
-              <item row="5" column="1">
-               <widget class="QLabel" name="labelRzMeanValueM2">
-                <property name="text"><string>-</string></property>
-                <property name="styleSheet"><string>font-weight: bold; color: #2196F3;</string></property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
-           </item>
-          </layout>
-         </item>
-
-         <!-- Detection Rate -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutDetectionRate">
-           <item>
-            <widget class="QLabel" name="labelDetectionRate">
-             <property name="text"><string>검출 성공률:</string></property>
-             <property name="styleSheet"><string>font-weight: bold;</string></property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="labelDetectionRateValue">
-             <property name="text"><string>-</string></property>
-             <property name="styleSheet"><string>font-weight: bold; color: #4CAF50;</string></property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacerDetectionRate">
-             <property name="orientation"><enum>Qt::Horizontal</enum></property>
-             <property name="sizeHint" stdset="0">
-              <size><width>40</width><height>20</height></size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </item>
-
-         <!-- Separator -->
-         <item>
-          <widget class="QLabel" name="labelSeparator">
-           <property name="styleSheet"><string>color: gray; margin-top: 10px;</string></property>
-           <property name="text"><string>────────────────────────────────────────────────────────────────────────────────</string></property>
-          </widget>
-         </item>
-
-         <!-- Plane Results + Robot Pose -->
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutPlaneRobot">
-           <!-- Left: Plane Results -->
-           <item>
-            <layout class="QVBoxLayout" name="verticalLayoutPlaneResults">
-             <item>
-              <widget class="QLabel" name="labelPlaneHeader">
-               <property name="styleSheet"><string>font-weight: bold; font-size: 12px; color: #9C27B0; margin-top: 5px;</string></property>
-               <property name="text"><string>평면 결과 (Dual ArUco)</string></property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="labelXM1">
+               <property name="text">
+                <string>X:</string>
+               </property>
               </widget>
              </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayoutPlanePos">
-               <item>
-                <widget class="QLabel" name="labelPlanePosLabel">
-                 <property name="text"><string>위치:</string></property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="labelPlanePosition">
-                 <property name="text"><string>-</string></property>
-                 <property name="styleSheet"><string>color: #2196F3;</string></property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="spacerPlanePos">
-                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
-                 <property name="sizeHint" stdset="0">
-                  <size><width>20</width><height>20</height></size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayoutPlaneOri">
-               <item>
-                <widget class="QLabel" name="labelPlaneOriLabel">
-                 <property name="text"><string>자세:</string></property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="labelPlaneOrientation">
-                 <property name="text"><string>-</string></property>
-                 <property name="styleSheet"><string>color: #4CAF50;</string></property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="spacerPlaneOri">
-                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
-                 <property name="sizeHint" stdset="0">
-                  <size><width>20</width><height>20</height></size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayoutTCPCorr">
-               <item>
-                <widget class="QLabel" name="labelTCPCorrLabel">
-                 <property name="text"><string>TCP 보정:</string></property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="labelTCPCorrection">
-                 <property name="text"><string>-</string></property>
-                 <property name="styleSheet"><string>color: #FF5722;</string></property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="spacerTCPCorr">
-                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
-                 <property name="sizeHint" stdset="0">
-                  <size><width>20</width><height>20</height></size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <spacer name="spacerPlaneBottom">
-               <property name="orientation"><enum>Qt::Vertical</enum></property>
-               <property name="sizeHint" stdset="0">
-                <size><width>20</width><height>10</height></size>
+             <item row="0" column="1">
+              <widget class="QLabel" name="labelXMeanValue">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
                </property>
-              </spacer>
-             </item>
-            </layout>
-           </item>
-           <!-- Vertical Separator -->
-           <item>
-            <widget class="QLabel" name="labelVSeparator">
-             <property name="styleSheet"><string>color: gray; margin: 0 10px;</string></property>
-             <property name="text"><string>│
-│
-│
-│</string></property>
-             <property name="alignment"><set>Qt::AlignCenter</set></property>
-            </widget>
-           </item>
-           <!-- Right: Robot Pose -->
-           <item>
-            <layout class="QVBoxLayout" name="verticalLayoutRobotPose">
-             <item>
-              <widget class="QLabel" name="labelRobotHeader">
-               <property name="styleSheet"><string>font-weight: bold; font-size: 12px; color: #E91E63; margin-top: 5px;</string></property>
-               <property name="text"><string>현재 Robot Pose</string></property>
+               <property name="text">
+                <string>-</string>
+               </property>
               </widget>
              </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayoutRobotPos">
-               <item>
-                <widget class="QLabel" name="labelRobotPosLabel">
-                 <property name="text"><string>위치:</string></property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="labelRobotPosition">
-                 <property name="text"><string>-</string></property>
-                 <property name="styleSheet"><string>color: #E91E63;</string></property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="spacerRobotPos">
-                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
-                 <property name="sizeHint" stdset="0">
-                  <size><width>20</width><height>20</height></size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayoutRobotOri">
-               <item>
-                <widget class="QLabel" name="labelRobotOriLabel">
-                 <property name="text"><string>자세:</string></property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="labelRobotOrientation">
-                 <property name="text"><string>-</string></property>
-                 <property name="styleSheet"><string>color: #E91E63;</string></property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="spacerRobotOri">
-                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
-                 <property name="sizeHint" stdset="0">
-                  <size><width>20</width><height>20</height></size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <spacer name="spacerRobotBottom">
-               <property name="orientation"><enum>Qt::Vertical</enum></property>
-               <property name="sizeHint" stdset="0">
-                <size><width>20</width><height>10</height></size>
+             <item row="1" column="0">
+              <widget class="QLabel" name="labelYM1">
+               <property name="text">
+                <string>Y:</string>
                </property>
-              </spacer>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLabel" name="labelYMeanValue">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="labelZM1">
+               <property name="text">
+                <string>Z:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLabel" name="labelZMeanValue">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="labelRxM1">
+               <property name="text">
+                <string>Rx:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QLabel" name="labelRxMeanValue">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="labelRyM1">
+               <property name="text">
+                <string>Ry:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QLabel" name="labelRyMeanValue">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="labelRzM1">
+               <property name="text">
+                <string>Rz:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QLabel" name="labelRzMeanValue">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
              </item>
             </layout>
-           </item>
-          </layout>
-         </item>
-
-        </layout>
-       </widget>
-      </item>
-     </layout>
-    </widget>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupMarker2Stats">
+            <property name="title">
+             <string>마커2 (ID:1)</string>
+            </property>
+            <layout class="QFormLayout" name="formLayoutMarker2">
+             <property name="horizontalSpacing">
+              <number>8</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>2</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="labelXM2L">
+               <property name="text">
+                <string>X:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLabel" name="labelXMeanValueM2">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="labelYM2L">
+               <property name="text">
+                <string>Y:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QLabel" name="labelYMeanValueM2">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="labelZM2L">
+               <property name="text">
+                <string>Z:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLabel" name="labelZMeanValueM2">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="labelRxM2L">
+               <property name="text">
+                <string>Rx:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QLabel" name="labelRxMeanValueM2">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="labelRyM2L">
+               <property name="text">
+                <string>Ry:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QLabel" name="labelRyMeanValueM2">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="labelRzM2L">
+               <property name="text">
+                <string>Rz:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QLabel" name="labelRzMeanValueM2">
+               <property name="styleSheet">
+                <string>font-weight: bold; color: #2196F3;</string>
+               </property>
+               <property name="text">
+                <string>-</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutDetectionRate">
+          <item>
+           <widget class="QLabel" name="labelDetectionRate">
+            <property name="styleSheet">
+             <string>font-weight: bold;</string>
+            </property>
+            <property name="text">
+             <string>검출 성공률:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelDetectionRateValue">
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #4CAF50;</string>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacerDetectionRate">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelSeparator">
+          <property name="styleSheet">
+           <string>color: gray; margin-top: 10px;</string>
+          </property>
+          <property name="text">
+           <string>────────────────────────────────────────────────────────────────────────────────</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayoutPlaneRobot">
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayoutPlaneResults">
+            <item>
+             <widget class="QLabel" name="labelPlaneHeader">
+              <property name="styleSheet">
+               <string>font-weight: bold; font-size: 12px; color: #9C27B0; margin-top: 5px;</string>
+              </property>
+              <property name="text">
+               <string>평면 결과 (Dual ArUco)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayoutPlanePos">
+              <item>
+               <widget class="QLabel" name="labelPlanePosLabel">
+                <property name="text">
+                 <string>위치:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelPlanePosition">
+                <property name="styleSheet">
+                 <string>color: #2196F3;</string>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="spacerPlanePos">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayoutPlaneOri">
+              <item>
+               <widget class="QLabel" name="labelPlaneOriLabel">
+                <property name="text">
+                 <string>자세:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelPlaneOrientation">
+                <property name="styleSheet">
+                 <string>color: #4CAF50;</string>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="spacerPlaneOri">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayoutTCPCorr">
+              <item>
+               <widget class="QLabel" name="labelTCPCorrLabel">
+                <property name="text">
+                 <string>TCP 보정:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelTCPCorrection">
+                <property name="styleSheet">
+                 <string>color: #FF5722;</string>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="spacerTCPCorr">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <spacer name="spacerPlaneBottom">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>10</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="labelVSeparator">
+            <property name="styleSheet">
+             <string>color: gray; margin: 0 10px;</string>
+            </property>
+            <property name="text">
+             <string>│
+│
+│
+│</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayoutRobotPose">
+            <item>
+             <widget class="QLabel" name="labelRobotHeader">
+              <property name="styleSheet">
+               <string>font-weight: bold; font-size: 12px; color: #E91E63; margin-top: 5px;</string>
+              </property>
+              <property name="text">
+               <string>현재 Robot Pose</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayoutRobotPos">
+              <item>
+               <widget class="QLabel" name="labelRobotPosLabel">
+                <property name="text">
+                 <string>위치:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelRobotPosition">
+                <property name="styleSheet">
+                 <string>color: #E91E63;</string>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="spacerRobotPos">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayoutRobotOri">
+              <item>
+               <widget class="QLabel" name="labelRobotOriLabel">
+                <property name="text">
+                 <string>자세:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelRobotOrientation">
+                <property name="styleSheet">
+                 <string>color: #E91E63;</string>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="spacerRobotOri">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <spacer name="spacerRobotBottom">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>10</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
    </item>
-
-   <!-- ========== RIGHT PANEL: QTabWidget with 3 sub-tabs ========== -->
    <item>
     <widget class="QTabWidget" name="rightTabWidget">
      <property name="minimumSize">
@@ -576,199 +720,273 @@
       </size>
      </property>
      <property name="currentIndex">
-      <number>0</number>
+      <number>2</number>
      </property>
-
-     <!-- ===== Tab 0: aruco 정렬 ===== -->
      <widget class="QWidget" name="widgetArucoAlign">
       <attribute name="title">
        <string>aruco 정렬</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutArucoAlign">
-       <property name="spacing"><number>4</number></property>
-       <property name="leftMargin"><number>4</number></property>
-       <property name="topMargin"><number>4</number></property>
-       <property name="rightMargin"><number>4</number></property>
-       <property name="bottomMargin"><number>4</number></property>
-
-       <!-- Marker Row: Left / Center / Right -->
+       <property name="spacing">
+        <number>4</number>
+       </property>
+       <property name="leftMargin">
+        <number>4</number>
+       </property>
+       <property name="topMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>4</number>
+       </property>
+       <property name="bottomMargin">
+        <number>4</number>
+       </property>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutMarkerRow">
-         <!-- Left Marker Group -->
          <item>
           <widget class="QGroupBox" name="groupMarkerLeft">
-           <property name="title"><string>왼쪽</string></property>
+           <property name="title">
+            <string>왼쪽</string>
+           </property>
            <layout class="QGridLayout" name="gridLayoutMarkerLeft">
             <item row="0" column="0">
              <widget class="QLabel" name="labelM1CXLabel">
-              <property name="text"><string>X (px)</string></property>
+              <property name="text">
+               <string>X (px)</string>
+              </property>
              </widget>
             </item>
             <item row="0" column="1">
              <widget class="QLabel" name="labelM1CenterX">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
             <item row="1" column="0">
              <widget class="QLabel" name="labelM1CYLabel">
-              <property name="text"><string>Y (px)</string></property>
+              <property name="text">
+               <string>Y (px)</string>
+              </property>
              </widget>
             </item>
             <item row="1" column="1">
              <widget class="QLabel" name="labelM1CenterY">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
             <item row="2" column="0">
              <widget class="QLabel" name="labelM1DepthLabel">
-              <property name="text"><string>Z_d (mm)</string></property>
+              <property name="text">
+               <string>Z_d (mm)</string>
+              </property>
              </widget>
             </item>
             <item row="2" column="1">
              <widget class="QLabel" name="labelM1Depth">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
             <item row="3" column="0">
              <widget class="QLabel" name="labelM1ZArLabel">
-              <property name="text"><string>Z_ar (mm)</string></property>
+              <property name="text">
+               <string>Z_ar (mm)</string>
+              </property>
              </widget>
             </item>
             <item row="3" column="1">
              <widget class="QLabel" name="labelM1ZAr">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
            </layout>
           </widget>
          </item>
-
-         <!-- Center: Ry / Rz / Offsets -->
          <item>
-          <widget class="QWidget" name="widgetAngleCenter">
-           <layout class="QVBoxLayout" name="verticalLayoutAngleCenter">
-            <property name="leftMargin"><number>0</number></property>
-            <property name="topMargin"><number>0</number></property>
-            <property name="rightMargin"><number>0</number></property>
-            <property name="bottomMargin"><number>0</number></property>
-            <!-- Ry label -->
-            <item>
-             <widget class="QLabel" name="labelRyTitle">
-              <property name="text"><string>Ry(°)</string></property>
-              <property name="alignment"><set>Qt::AlignCenter</set></property>
-             </widget>
-            </item>
-            <!-- Ry 2D / 3D row -->
-            <item>
-             <layout class="QHBoxLayout" name="horizontalLayoutRyValues">
-              <item>
-               <widget class="QLabel" name="labelMarkerAngle">
-                <property name="text"><string>-</string></property>
-                <property name="alignment"><set>Qt::AlignCenter</set></property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="labelRySlash">
-                <property name="text"><string>/</string></property>
-                <property name="alignment"><set>Qt::AlignCenter</set></property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="labelMarkerAngle3D">
-                <property name="text"><string>-</string></property>
-                <property name="alignment"><set>Qt::AlignCenter</set></property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <!-- Rz label -->
-            <item>
-             <widget class="QLabel" name="labelRzTitle">
-              <property name="text"><string>Rz(°)</string></property>
-              <property name="alignment"><set>Qt::AlignCenter</set></property>
-             </widget>
-            </item>
-            <!-- Rz value -->
-            <item>
-             <widget class="QLabel" name="labelMarkerRx">
-              <property name="text"><string>-</string></property>
-              <property name="alignment"><set>Qt::AlignCenter</set></property>
-             </widget>
-            </item>
-            <!-- dY / dZ row -->
-            <item>
-             <layout class="QHBoxLayout" name="horizontalLayoutOffsets">
-              <item>
-               <widget class="QLabel" name="labelDYTitle">
-                <property name="text"><string>dY</string></property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="labelOffsetY">
-                <property name="text"><string>-</string></property>
-                <property name="alignment"><set>Qt::AlignCenter</set></property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="labelDZTitle">
-                <property name="text"><string>dZ</string></property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QLabel" name="labelOffsetZ">
-                <property name="text"><string>-</string></property>
-                <property name="alignment"><set>Qt::AlignCenter</set></property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-           </layout>
-          </widget>
+          <layout class="QVBoxLayout" name="verticalLayoutAngleCenter">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="labelRyTitle">
+             <property name="text">
+              <string>Ry(°)</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutRyValues">
+             <item>
+              <widget class="QLabel" name="labelMarkerAngle">
+               <property name="text">
+                <string>-</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelRySlash">
+               <property name="text">
+                <string>/</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelMarkerAngle3D">
+               <property name="text">
+                <string>-</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelRzTitle">
+             <property name="text">
+              <string>Rz(°)</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="labelMarkerRx">
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayoutOffsets">
+             <item>
+              <widget class="QLabel" name="labelDYTitle">
+               <property name="text">
+                <string>dY</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelOffsetY">
+               <property name="text">
+                <string>-</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelDZTitle">
+               <property name="text">
+                <string>dZ</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelOffsetZ">
+               <property name="text">
+                <string>-</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
          </item>
-
-         <!-- Right Marker Group -->
          <item>
           <widget class="QGroupBox" name="groupMarkerRight">
-           <property name="title"><string>오른쪽</string></property>
+           <property name="title">
+            <string>오른쪽</string>
+           </property>
            <layout class="QGridLayout" name="gridLayoutMarkerRight">
             <item row="0" column="0">
              <widget class="QLabel" name="labelM2CXLabel">
-              <property name="text"><string>X (px)</string></property>
+              <property name="text">
+               <string>X (px)</string>
+              </property>
              </widget>
             </item>
             <item row="0" column="1">
              <widget class="QLabel" name="labelM2CenterX">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
             <item row="1" column="0">
              <widget class="QLabel" name="labelM2CYLabel">
-              <property name="text"><string>Y (px)</string></property>
+              <property name="text">
+               <string>Y (px)</string>
+              </property>
              </widget>
             </item>
             <item row="1" column="1">
              <widget class="QLabel" name="labelM2CenterY">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
             <item row="2" column="0">
              <widget class="QLabel" name="labelM2DepthLabel">
-              <property name="text"><string>Z_d (mm)</string></property>
+              <property name="text">
+               <string>Z_d (mm)</string>
+              </property>
              </widget>
             </item>
             <item row="2" column="1">
              <widget class="QLabel" name="labelM2Depth">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
             <item row="3" column="0">
              <widget class="QLabel" name="labelM2ZArLabel">
-              <property name="text"><string>Z_ar (mm)</string></property>
+              <property name="text">
+               <string>Z_ar (mm)</string>
+              </property>
              </widget>
             </item>
             <item row="3" column="1">
              <widget class="QLabel" name="labelM2ZAr">
-              <property name="text"><string>-</string></property>
+              <property name="text">
+               <string>-</string>
+              </property>
              </widget>
             </item>
            </layout>
@@ -776,262 +994,413 @@
          </item>
         </layout>
        </item>
-
-       <!-- Alignment Buttons -->
        <item>
         <widget class="QPushButton" name="btnAlignRxFromAngle">
-         <property name="text"><string>TCP ry 보정</string></property>
-         <property name="enabled"><bool>false</bool></property>
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>TCP ry 보정</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="btnAlignRzFromAngle">
-         <property name="text"><string>TCP rz 보정</string></property>
-         <property name="enabled"><bool>false</bool></property>
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>TCP rz 보정</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="btnAlignBaseY">
-         <property name="text"><string>Base Y 보정</string></property>
-         <property name="enabled"><bool>false</bool></property>
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>Base Y 보정</string>
+         </property>
         </widget>
        </item>
        <item>
         <spacer name="spacerArucoAlignBottom">
-         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
          <property name="sizeHint" stdset="0">
-          <size><width>20</width><height>40</height></size>
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
          </property>
         </spacer>
        </item>
       </layout>
      </widget>
-
-     <!-- ===== Tab 1: 신뢰성 검증 설정 ===== -->
      <widget class="QWidget" name="widgetReliabilitySettings">
       <attribute name="title">
        <string>신뢰성 검증 설정</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutReliability">
-       <property name="spacing"><number>4</number></property>
-       <property name="leftMargin"><number>4</number></property>
-       <property name="topMargin"><number>4</number></property>
-       <property name="rightMargin"><number>4</number></property>
-       <property name="bottomMargin"><number>4</number></property>
-
-       <!-- Settings Row -->
+       <property name="spacing">
+        <number>4</number>
+       </property>
+       <property name="leftMargin">
+        <number>4</number>
+       </property>
+       <property name="topMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>4</number>
+       </property>
+       <property name="bottomMargin">
+        <number>4</number>
+       </property>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutSettings">
          <item>
           <widget class="QLabel" name="labelTagID1">
-           <property name="text"><string>마커1 ID:</string></property>
+           <property name="text">
+            <string>마커1 ID:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QSpinBox" name="spinTagID1">
-           <property name="minimum"><number>0</number></property>
-           <property name="maximum"><number>1000</number></property>
-           <property name="value"><number>0</number></property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+           <property name="value">
+            <number>0</number>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="labelTagID2">
-           <property name="text"><string>마커2 ID:</string></property>
+           <property name="text">
+            <string>마커2 ID:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QSpinBox" name="spinTagID2">
-           <property name="minimum"><number>0</number></property>
-           <property name="maximum"><number>1000</number></property>
-           <property name="value"><number>1</number></property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+           <property name="value">
+            <number>1</number>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="labelRepeatCount">
-           <property name="text"><string>반복:</string></property>
+           <property name="text">
+            <string>반복:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QSpinBox" name="spinRepeatCount">
-           <property name="minimum"><number>10</number></property>
-           <property name="maximum"><number>1000</number></property>
-           <property name="singleStep"><number>10</number></property>
-           <property name="value"><number>50</number></property>
+           <property name="minimum">
+            <number>10</number>
+           </property>
+           <property name="maximum">
+            <number>1000</number>
+           </property>
+           <property name="singleStep">
+            <number>10</number>
+           </property>
+           <property name="value">
+            <number>50</number>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="labelStabilizationDelay">
-           <property name="text"><string>안정화 시간:</string></property>
-           <property name="toolTip"><string>캡처 간 대기 시간</string></property>
+           <property name="toolTip">
+            <string>캡처 간 대기 시간</string>
+           </property>
+           <property name="text">
+            <string>안정화 시간:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QSpinBox" name="spinStabilizationDelay">
-           <property name="minimum"><number>0</number></property>
-           <property name="maximum"><number>2000</number></property>
-           <property name="singleStep"><number>50</number></property>
-           <property name="value"><number>100</number></property>
-           <property name="suffix"><string>ms</string></property>
+           <property name="suffix">
+            <string>ms</string>
+           </property>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>2000</number>
+           </property>
+           <property name="singleStep">
+            <number>50</number>
+           </property>
+           <property name="value">
+            <number>100</number>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QCheckBox" name="checkSaveImages">
-           <property name="text"><string>Save Images</string></property>
-           <property name="toolTip"><string>캡처 시 이미지와 CSV를 타임스탬프 폴더에 저장</string></property>
+           <property name="toolTip">
+            <string>캡처 시 이미지와 CSV를 타임스탬프 폴더에 저장</string>
+           </property>
+           <property name="text">
+            <string>Save Images</string>
+           </property>
           </widget>
          </item>
          <item>
           <spacer name="horizontalSpacerSettings">
-           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
            <property name="sizeHint" stdset="0">
-            <size><width>40</width><height>20</height></size>
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
            </property>
           </spacer>
          </item>
         </layout>
        </item>
-
-       <!-- Control Buttons -->
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutControlButtons">
          <item>
           <widget class="QPushButton" name="btnStartCapture">
-           <property name="text"><string>캡처 시작</string></property>
-           <property name="styleSheet"><string>background-color: #4CAF50; color: white;</string></property>
+           <property name="styleSheet">
+            <string>background-color: #4CAF50; color: white;</string>
+           </property>
+           <property name="text">
+            <string>캡처 시작</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QPushButton" name="btnStopCapture">
-           <property name="text"><string>중지</string></property>
-           <property name="styleSheet"><string>background-color: #F44336; color: white;</string></property>
-           <property name="enabled"><bool>false</bool></property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="styleSheet">
+            <string>background-color: #F44336; color: white;</string>
+           </property>
+           <property name="text">
+            <string>중지</string>
+           </property>
           </widget>
          </item>
         </layout>
        </item>
        <item>
         <widget class="QPushButton" name="btnReset">
-         <property name="text"><string>초기화</string></property>
+         <property name="text">
+          <string>초기화</string>
+         </property>
         </widget>
        </item>
-
-       <!-- Progress Bar -->
        <item>
         <widget class="QProgressBar" name="progressBar">
-         <property name="value"><number>0</number></property>
-         <property name="textVisible"><bool>true</bool></property>
+         <property name="value">
+          <number>0</number>
+         </property>
+         <property name="textVisible">
+          <bool>true</bool>
+         </property>
         </widget>
        </item>
-
-       <!-- Disambiguation Row -->
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutDisambiguation">
          <item>
           <widget class="QCheckBox" name="checkUseDisambiguation">
-           <property name="text"><string>Use Disambiguation</string></property>
-           <property name="checked"><bool>true</bool></property>
+           <property name="text">
+            <string>Use Disambiguation</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="labelKnownDistanceLabel">
-           <property name="text"><string>Known Distance:</string></property>
+           <property name="text">
+            <string>Known Distance:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QDoubleSpinBox" name="spinKnownDistance">
-           <property name="minimum"><double>50.000000000000000</double></property>
-           <property name="maximum"><double>500.000000000000000</double></property>
-           <property name="singleStep"><double>0.100000000000000</double></property>
-           <property name="decimals"><number>2</number></property>
-           <property name="value"><double>58.000000000000000</double></property>
-           <property name="suffix"><string> mm</string></property>
+           <property name="suffix">
+            <string> mm</string>
+           </property>
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="minimum">
+            <double>50.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>500.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.100000000000000</double>
+           </property>
+           <property name="value">
+            <double>58.000000000000000</double>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="labelDistanceError">
-           <property name="text"><string>Distance Error: -- mm</string></property>
+           <property name="text">
+            <string>Distance Error: -- mm</string>
+           </property>
           </widget>
          </item>
          <item>
           <spacer name="spacerDisambiguation">
-           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
            <property name="sizeHint" stdset="0">
-            <size><width>20</width><height>20</height></size>
+            <size>
+             <width>20</width>
+             <height>20</height>
+            </size>
            </property>
           </spacer>
          </item>
         </layout>
        </item>
-
-       <!-- Precision Row -->
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutPrecision">
          <item>
           <widget class="QLabel" name="labelSigmaLabel">
-           <property name="text"><string>Sigma:</string></property>
+           <property name="text">
+            <string>Sigma:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QDoubleSpinBox" name="spinSigmaMultiplier">
-           <property name="minimum"><double>1.500000000000000</double></property>
-           <property name="maximum"><double>4.000000000000000</double></property>
-           <property name="singleStep"><double>0.500000000000000</double></property>
-           <property name="decimals"><number>1</number></property>
-           <property name="value"><double>2.000000000000000</double></property>
-           <property name="suffix"><string> sigma</string></property>
+           <property name="suffix">
+            <string> sigma</string>
+           </property>
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="minimum">
+            <double>1.500000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>4.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.500000000000000</double>
+           </property>
+           <property name="value">
+            <double>2.000000000000000</double>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="labelMinSamplesLabel">
-           <property name="text"><string>Min Samples:</string></property>
+           <property name="text">
+            <string>Min Samples:</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QSpinBox" name="spinMinSamples">
-           <property name="minimum"><number>5</number></property>
-           <property name="maximum"><number>30</number></property>
-           <property name="value"><number>10</number></property>
+           <property name="minimum">
+            <number>5</number>
+           </property>
+           <property name="maximum">
+            <number>30</number>
+           </property>
+           <property name="value">
+            <number>10</number>
+           </property>
           </widget>
          </item>
          <item>
           <spacer name="spacerPrecision">
-           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
            <property name="sizeHint" stdset="0">
-            <size><width>20</width><height>20</height></size>
+            <size>
+             <width>20</width>
+             <height>20</height>
+            </size>
            </property>
           </spacer>
          </item>
         </layout>
        </item>
-
-       <!-- Graph Area -->
        <item>
         <widget class="QGroupBox" name="groupGraphs">
-         <property name="title"><string>분포 그래프</string></property>
+         <property name="title">
+          <string>분포 그래프</string>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayoutGraphs">
-          <property name="spacing"><number>2</number></property>
-          <property name="leftMargin"><number>4</number></property>
-          <property name="topMargin"><number>4</number></property>
-          <property name="rightMargin"><number>4</number></property>
-          <property name="bottomMargin"><number>4</number></property>
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutGraphSelect">
             <item>
              <widget class="QRadioButton" name="radioGraphID0">
-              <property name="text"><string>ID 0</string></property>
-              <property name="checked"><bool>true</bool></property>
+              <property name="text">
+               <string>ID 0</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
              </widget>
             </item>
             <item>
              <widget class="QRadioButton" name="radioGraphID1">
-              <property name="text"><string>ID 1</string></property>
+              <property name="text">
+               <string>ID 1</string>
+              </property>
              </widget>
             </item>
             <item>
              <spacer name="horizontalSpacerGraphSelect">
-              <property name="orientation"><enum>Qt::Horizontal</enum></property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
               <property name="sizeHint" stdset="0">
-               <size><width>40</width><height>20</height></size>
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
               </property>
              </spacer>
             </item>
@@ -1040,369 +1409,635 @@
           <item>
            <widget class="QWidget" name="widgetGraphCanvas" native="true">
             <property name="minimumSize">
-             <size><width>300</width><height>250</height></size>
+             <size>
+              <width>300</width>
+              <height>250</height>
+             </size>
             </property>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
-
-       <!-- Export Buttons -->
        <item>
         <layout class="QHBoxLayout" name="horizontalLayoutExport">
          <item>
           <widget class="QPushButton" name="btnLoadCSV">
-           <property name="text"><string>CSV 읽기</string></property>
+           <property name="text">
+            <string>CSV 읽기</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QPushButton" name="btnExportCSV">
-           <property name="text"><string>CSV 저장</string></property>
+           <property name="text">
+            <string>CSV 저장</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QPushButton" name="btnExportGraph">
-           <property name="text"><string>그래프 저장</string></property>
+           <property name="text">
+            <string>그래프 저장</string>
+           </property>
           </widget>
          </item>
         </layout>
        </item>
-
-       <!-- Log Area -->
        <item>
         <widget class="QGroupBox" name="groupLog">
-         <property name="title"><string>로그</string></property>
+         <property name="title">
+          <string>로그</string>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayoutLog">
-          <property name="spacing"><number>2</number></property>
-          <property name="leftMargin"><number>4</number></property>
-          <property name="topMargin"><number>4</number></property>
-          <property name="rightMargin"><number>4</number></property>
-          <property name="bottomMargin"><number>4</number></property>
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>4</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>4</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
           <item>
            <widget class="QPlainTextEdit" name="textLog">
             <property name="minimumSize">
-             <size><width>0</width><height>100</height></size>
+             <size>
+              <width>0</width>
+              <height>100</height>
+             </size>
             </property>
             <property name="maximumSize">
-             <size><width>16777215</width><height>100</height></size>
+             <size>
+              <width>16777215</width>
+              <height>100</height>
+             </size>
             </property>
-            <property name="readOnly"><bool>true</bool></property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
-
        <item>
         <spacer name="verticalSpacerReliability">
-         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
          <property name="sizeHint" stdset="0">
-          <size><width>20</width><height>40</height></size>
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
          </property>
         </spacer>
        </item>
       </layout>
      </widget>
-
-     <!-- ===== Tab 2: ar tag tcp align ===== -->
      <widget class="QWidget" name="widgetArTagTcpAlign">
       <attribute name="title">
        <string>ar tag tcp align</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutArTagTcpAlign">
-       <property name="spacing"><number>4</number></property>
-       <property name="leftMargin"><number>4</number></property>
-       <property name="topMargin"><number>4</number></property>
-       <property name="rightMargin"><number>4</number></property>
-       <property name="bottomMargin"><number>4</number></property>
-
-       <!-- Jog Move Group -->
+       <property name="spacing">
+        <number>4</number>
+       </property>
+       <property name="leftMargin">
+        <number>4</number>
+       </property>
+       <property name="topMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>4</number>
+       </property>
+       <property name="bottomMargin">
+        <number>4</number>
+       </property>
        <item>
         <widget class="QGroupBox" name="groupJogMove">
-         <property name="title"><string>조그 이동</string></property>
+         <property name="title">
+          <string>조그 이동(Robot Base)</string>
+         </property>
          <layout class="QGridLayout" name="gridLayoutJogMove">
-          <!-- Row 0: X -->
           <item row="0" column="0">
            <widget class="QLabel" name="labelJogX">
-            <property name="text"><string>X:</string></property>
+            <property name="text">
+             <string>X:</string>
+            </property>
            </widget>
           </item>
           <item row="0" column="1">
            <widget class="QPushButton" name="btnJogXMinus">
-            <property name="text"><string>-</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
            </widget>
           </item>
           <item row="0" column="2">
            <widget class="QDoubleSpinBox" name="spinJogStepX">
-            <property name="suffix"><string> mm</string></property>
-            <property name="decimals"><number>1</number></property>
-            <property name="minimum"><double>0.100000000000000</double></property>
-            <property name="maximum"><double>100.000000000000000</double></property>
-            <property name="singleStep"><double>1.000000000000000</double></property>
-            <property name="value"><double>10.000000000000000</double></property>
+            <property name="suffix">
+             <string> mm</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="0" column="3">
            <widget class="QPushButton" name="btnJogXPlus">
-            <property name="text"><string>+</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+</string>
+            </property>
            </widget>
           </item>
-          <!-- Row 1: Y -->
           <item row="1" column="0">
            <widget class="QLabel" name="labelJogY">
-            <property name="text"><string>Y:</string></property>
+            <property name="text">
+             <string>Y:</string>
+            </property>
            </widget>
           </item>
           <item row="1" column="1">
            <widget class="QPushButton" name="btnJogYMinus">
-            <property name="text"><string>-</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
            </widget>
           </item>
           <item row="1" column="2">
            <widget class="QDoubleSpinBox" name="spinJogStepY">
-            <property name="suffix"><string> mm</string></property>
-            <property name="decimals"><number>1</number></property>
-            <property name="minimum"><double>0.100000000000000</double></property>
-            <property name="maximum"><double>100.000000000000000</double></property>
-            <property name="singleStep"><double>1.000000000000000</double></property>
-            <property name="value"><double>10.000000000000000</double></property>
+            <property name="suffix">
+             <string> mm</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="1" column="3">
            <widget class="QPushButton" name="btnJogYPlus">
-            <property name="text"><string>+</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+</string>
+            </property>
            </widget>
           </item>
-          <!-- Row 2: Z -->
           <item row="2" column="0">
            <widget class="QLabel" name="labelJogZ">
-            <property name="text"><string>Z:</string></property>
+            <property name="text">
+             <string>Z:</string>
+            </property>
            </widget>
           </item>
           <item row="2" column="1">
            <widget class="QPushButton" name="btnJogZMinus">
-            <property name="text"><string>-</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
            </widget>
           </item>
           <item row="2" column="2">
            <widget class="QDoubleSpinBox" name="spinJogStepZ">
-            <property name="suffix"><string> mm</string></property>
-            <property name="decimals"><number>1</number></property>
-            <property name="minimum"><double>0.100000000000000</double></property>
-            <property name="maximum"><double>100.000000000000000</double></property>
-            <property name="singleStep"><double>1.000000000000000</double></property>
-            <property name="value"><double>10.000000000000000</double></property>
+            <property name="suffix">
+             <string> mm</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="2" column="3">
            <widget class="QPushButton" name="btnJogZPlus">
-            <property name="text"><string>+</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+</string>
+            </property>
            </widget>
           </item>
-          <!-- Row 3: Rx -->
           <item row="3" column="0">
            <widget class="QLabel" name="labelJogRx">
-            <property name="text"><string>Rx:</string></property>
+            <property name="text">
+             <string>Rx:</string>
+            </property>
            </widget>
           </item>
           <item row="3" column="1">
            <widget class="QPushButton" name="btnJogRxMinus">
-            <property name="text"><string>-</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
            </widget>
           </item>
           <item row="3" column="2">
            <widget class="QDoubleSpinBox" name="spinJogStepRx">
-            <property name="suffix"><string> deg</string></property>
-            <property name="decimals"><number>1</number></property>
-            <property name="minimum"><double>0.100000000000000</double></property>
-            <property name="maximum"><double>30.000000000000000</double></property>
-            <property name="singleStep"><double>1.000000000000000</double></property>
-            <property name="value"><double>5.000000000000000</double></property>
+            <property name="suffix">
+             <string> deg</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>30.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>5.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="3" column="3">
            <widget class="QPushButton" name="btnJogRxPlus">
-            <property name="text"><string>+</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+</string>
+            </property>
            </widget>
           </item>
-          <!-- Row 4: Ry -->
           <item row="4" column="0">
            <widget class="QLabel" name="labelJogRy">
-            <property name="text"><string>Ry:</string></property>
+            <property name="text">
+             <string>Ry:</string>
+            </property>
            </widget>
           </item>
           <item row="4" column="1">
            <widget class="QPushButton" name="btnJogRyMinus">
-            <property name="text"><string>-</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
            </widget>
           </item>
           <item row="4" column="2">
            <widget class="QDoubleSpinBox" name="spinJogStepRy">
-            <property name="suffix"><string> deg</string></property>
-            <property name="decimals"><number>1</number></property>
-            <property name="minimum"><double>0.100000000000000</double></property>
-            <property name="maximum"><double>30.000000000000000</double></property>
-            <property name="singleStep"><double>1.000000000000000</double></property>
-            <property name="value"><double>5.000000000000000</double></property>
+            <property name="suffix">
+             <string> deg</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>30.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>5.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="4" column="3">
            <widget class="QPushButton" name="btnJogRyPlus">
-            <property name="text"><string>+</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+</string>
+            </property>
            </widget>
           </item>
-          <!-- Row 5: Rz -->
           <item row="5" column="0">
            <widget class="QLabel" name="labelJogRz">
-            <property name="text"><string>Rz:</string></property>
+            <property name="text">
+             <string>Rz:</string>
+            </property>
            </widget>
           </item>
           <item row="5" column="1">
            <widget class="QPushButton" name="btnJogRzMinus">
-            <property name="text"><string>-</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>-</string>
+            </property>
            </widget>
           </item>
           <item row="5" column="2">
            <widget class="QDoubleSpinBox" name="spinJogStepRz">
-            <property name="suffix"><string> deg</string></property>
-            <property name="decimals"><number>1</number></property>
-            <property name="minimum"><double>0.100000000000000</double></property>
-            <property name="maximum"><double>30.000000000000000</double></property>
-            <property name="singleStep"><double>1.000000000000000</double></property>
-            <property name="value"><double>5.000000000000000</double></property>
+            <property name="suffix">
+             <string> deg</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>30.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>5.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="5" column="3">
            <widget class="QPushButton" name="btnJogRzPlus">
-            <property name="text"><string>+</string></property>
-            <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+            <property name="minimumSize">
+             <size>
+              <width>30</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+</string>
+            </property>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
-
-       <!-- Marker Parallel Alignment Group -->
        <item>
         <widget class="QGroupBox" name="groupAlignParallel">
-         <property name="title"><string>마커 평행 정렬 (TF4)</string></property>
+         <property name="title">
+          <string>마커 평행 정렬 (TF4)</string>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayoutAlignParallel">
           <item>
            <widget class="QLabel" name="labelAlignCorrection">
-            <property name="text"><string>TCP 보정값: 검증 미완료</string></property>
-            <property name="styleSheet"><string>color: gray;</string></property>
+            <property name="styleSheet">
+             <string>color: gray;</string>
+            </property>
+            <property name="text">
+             <string>TCP 보정값: 검증 미완료</string>
+            </property>
            </widget>
           </item>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayoutAlignAxis">
             <item>
              <widget class="QPushButton" name="btnAlignRx">
-              <property name="text"><string>Rx 정렬</string></property>
-              <property name="enabled"><bool>false</bool></property>
-              <property name="styleSheet"><string>padding: 6px;</string></property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="styleSheet">
+               <string>padding: 6px;</string>
+              </property>
+              <property name="text">
+               <string>Rx 정렬</string>
+              </property>
              </widget>
             </item>
             <item>
              <widget class="QPushButton" name="btnAlignRy">
-              <property name="text"><string>Ry 정렬</string></property>
-              <property name="enabled"><bool>false</bool></property>
-              <property name="styleSheet"><string>padding: 6px;</string></property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="styleSheet">
+               <string>padding: 6px;</string>
+              </property>
+              <property name="text">
+               <string>Ry 정렬</string>
+              </property>
              </widget>
             </item>
             <item>
              <widget class="QPushButton" name="btnAlignRz">
-              <property name="text"><string>Rz 정렬</string></property>
-              <property name="enabled"><bool>false</bool></property>
-              <property name="styleSheet"><string>padding: 6px;</string></property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="styleSheet">
+               <string>padding: 6px;</string>
+              </property>
+              <property name="text">
+               <string>Rz 정렬</string>
+              </property>
              </widget>
             </item>
            </layout>
           </item>
           <item>
            <widget class="QPushButton" name="btnAlignParallel">
-            <property name="text"><string>전체 정렬 (RxRyRz CMD 17)</string></property>
-            <property name="styleSheet"><string>font-weight: bold; padding: 8px;</string></property>
-            <property name="enabled"><bool>false</bool></property>
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="styleSheet">
+             <string>font-weight: bold; padding: 8px;</string>
+            </property>
+            <property name="text">
+             <string>전체 정렬 (RxRyRz CMD 17)</string>
+            </property>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
-
-       <!-- Detection Pose Group -->
        <item>
         <widget class="QGroupBox" name="groupDetectionPose">
-         <property name="title"><string>Detection Pose (Rx, Ry, Rz)</string></property>
+         <property name="title">
+          <string>Detection Pose (Rx, Ry, Rz)</string>
+         </property>
          <layout class="QGridLayout" name="gridLayoutDetectionPose">
           <item row="0" column="0">
            <widget class="QLabel" name="labelDetPoseRx">
-            <property name="text"><string>Rx</string></property>
+            <property name="text">
+             <string>Rx</string>
+            </property>
            </widget>
           </item>
           <item row="0" column="1">
            <widget class="QDoubleSpinBox" name="spinDetPoseRx">
-            <property name="minimum"><double>-360.000000000000000</double></property>
-            <property name="maximum"><double>360.000000000000000</double></property>
-            <property name="decimals"><number>2</number></property>
-            <property name="suffix"><string> °</string></property>
-            <property name="value"><double>90.000000000000000</double></property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-360.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>90.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="labelDetPoseRy">
-            <property name="text"><string>Ry</string></property>
+            <property name="text">
+             <string>Ry</string>
+            </property>
            </widget>
           </item>
           <item row="1" column="1">
            <widget class="QDoubleSpinBox" name="spinDetPoseRy">
-            <property name="minimum"><double>-360.000000000000000</double></property>
-            <property name="maximum"><double>360.000000000000000</double></property>
-            <property name="decimals"><number>2</number></property>
-            <property name="suffix"><string> °</string></property>
-            <property name="value"><double>0.000000000000000</double></property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-360.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.000000000000000</double>
+            </property>
            </widget>
           </item>
           <item row="2" column="0">
            <widget class="QLabel" name="labelDetPoseRz">
-            <property name="text"><string>Rz</string></property>
+            <property name="text">
+             <string>Rz</string>
+            </property>
            </widget>
           </item>
           <item row="2" column="1">
            <widget class="QDoubleSpinBox" name="spinDetPoseRz">
-            <property name="minimum"><double>-360.000000000000000</double></property>
-            <property name="maximum"><double>360.000000000000000</double></property>
-            <property name="decimals"><number>2</number></property>
-            <property name="suffix"><string> °</string></property>
-            <property name="value"><double>90.000000000000000</double></property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>2</number>
+            </property>
+            <property name="minimum">
+             <double>-360.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>360.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>90.000000000000000</double>
+            </property>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
-
-       <!-- Align Debug Log -->
        <item>
         <widget class="QTextEdit" name="txtAlignDebug">
-         <property name="readOnly"><bool>true</bool></property>
-         <property name="styleSheet"><string>font-family: monospace; font-size: 11px; border: 1px solid #ccc;</string></property>
-         <property name="placeholderText"><string>정렬 전후 자세 로그가 여기에 표시됩니다...</string></property>
+         <property name="styleSheet">
+          <string>font-family: monospace; font-size: 11px; border: 1px solid #ccc;</string>
+         </property>
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+         <property name="placeholderText">
+          <string>정렬 전후 자세 로그가 여기에 표시됩니다...</string>
+         </property>
         </widget>
        </item>
       </layout>
      </widget>
-
     </widget>
    </item>
   </layout>

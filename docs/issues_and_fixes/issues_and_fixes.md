@@ -532,6 +532,56 @@ IPPE 2해 × 2마커 = 4가지 조합의 마커 간 거리 비교:
 
 ---
 
+## 2026-02-21 | PRS 0.1mm 이송 명령 통일 업데이트
+
+**변경:** 모든 이송(translation) 명령이 0.1mm 해상도로 통일됨
+
+### PRS 변경 (Main_task.prs)
+
+| CMD | 변경 전 | 변경 후 |
+|-----|---------|---------|
+| 10-12 (tool.trans) | `tool.transx(x)` raw mm | `tool.transx(x/10)` 0.1mm |
+| 13 (tool.trans xyz) | `tool.trans(x,y,z)` raw mm | `tool.trans(x/10,y/10,z/10)` 0.1mm |
+| 50-52 (base trans) | `transx(x)` raw mm | `transx(x/10)` 0.1mm |
+| 53 (base trans xyz) | `trans(x,y,z)` raw mm | `trans(x/10,y/10,z/10)` 0.1mm |
+| 60-63 (fine trans) | 변경 없음 | deprecated 주석 추가 (CMD 50-53으로 대체) |
+
+### Python 변경 (modbus_client.py)
+
+1. **`send_tcp_linear`**: `int(distance)` → `int(round(distance * 10))` (4개 분기)
+2. **`send_base_linear`**: `int(distance)` → `int(round(distance * 10))` (4개 분기)
+3. **`send_base_fine_translate`**: deprecation 래퍼로 교체 → `send_base_linear` 호출
+4. **`send_move_to_pose`**: `int(x * 10)` → `int(round(x * 10))` (6개 값, truncation 수정)
+5. **`write_pose_main`**: 동일 truncation 수정 (6개 값)
+6. **`write_pose_back`**: 동일 truncation 수정 (6개 값)
+7. CMD_BASE_FINE_*, REGISTER_FINE_* 상수: DEPRECATED 주석 추가
+
+### Python 변경 (main_window.py)
+
+- `_on_ar_tag_align_base_y`: `int(test_cmd)` 래핑 제거 4곳 (float 그대로 전달)
+- `send_base_fine_translate` → `send_base_linear` 교체 1곳
+
+### 로봇 실측 검증 (02-21 10:37)
+
+PRS 배포 전 테스트에서 10배 이동 확인 → PRS 업로드 후 정상 동작 확인:
+
+| 명령 | 기대값 | 레지스터 | 실제 이동 | 오차 | 판정 |
+| ------ | -------- | --------- | ---------- | ------ | ------ |
+| Base Z +0.1mm | 0.1mm | 1 | 0.02mm | -0.08mm | OK (로봇 분해능 한계) |
+| Base Z +0.5mm | 0.5mm | 5 | 0.47mm | -0.03mm | PASS |
+| Base Z +1.0mm | 1.0mm | 10 | 0.98mm | -0.02mm | PASS |
+| Base Z +5.0mm | 5.0mm | 50 | 4.99mm | -0.01mm | PASS |
+
+**결론:** 0.5mm 이상 오차 ±0.05mm 이내. 0.1mm는 기구부 분해능 한계로 오차 있으나 명령 동작 정상.
+
+### 설계 결정
+
+- **CMD 60-63 PRS에서 유지**: 배포 시차 안전성을 위해 제거하지 않고 deprecated 유지
+- **deprecation 래퍼**: 단순 alias 대신 warnings.warn() 래퍼로 점진적 마이그레이션 지원
+- **`int(round())` 통일**: `int(x*10)` truncation 문제를 코드베이스 전체에서 수정
+
+---
+
 ## 2026-02-21 | 이미지 저장 경로 정리 (images/ 폴더 구조화)
 
 **증상:** 이미지가 `images/` 루트 및 `aruco_analysis/` 등 분산 저장되어 관리 어려움
@@ -556,5 +606,162 @@ images/
 ├── vision/       # Vision 탭 관련 이미지, 로봇 참고 스크린샷
 └── laser/        # 레이저 캘리브레이션 이미지
 ```
+
+---
+
+## 2026-02-21 | tab_aruco_reliability 프로그래밍 UI → .ui 파일 전환
+
+**증상:** `tab_aruco_reliability.py`에서 3개 서브탭(aruco 정렬, 신뢰성 검증 설정, ar tag tcp align)의 UI를 Python 코드로 동적 생성하고 있어 Qt Designer로 편집 불가. 92개+ 위젯이 `_setup_right_panel_tabs()`, `_setup_disambiguation_ui()`, `_setup_plane_result_labels()` 3개 메서드에서 프로그래밍으로 생성됨.
+
+**원인:** 초기 개발 시 `.ui` 파일에는 좌측 패널(카메라+통계)과 우측 `groupControl`만 정의하고, 나머지 탭 UI는 Python 코드로 추가하는 방식으로 구현됨. Qt Designer 활용 불가 및 UI 유지보수 어려움.
+
+**수정 파일:**
+- `ui/tab_aruco_reliability.ui` — 전면 재작성
+- `scripts/tabs/tab_aruco_reliability.py` — 3개 setup 메서드 제거, signal 연결 통합
+
+**수정 내용:**
+
+1. **`.ui` 파일 전면 재작성** — QTabWidget(`rightTabWidget`) 포함 전체 레이아웃:
+   ```
+   HBoxLayout
+   ├── Left: widgetLeft
+   │   ├── groupCameraStream (카메라 뷰 + 버튼)
+   │   └── groupStatistics (통계 + 평면결과 + 로봇포즈)
+   └── Right: rightTabWidget (QTabWidget)
+       ├── Tab 0: "aruco 정렬" — 마커 정보, 각도, 보정 버튼
+       ├── Tab 1: "신뢰성 검증 설정" — 캡처 설정, disambiguation, 그래프, 로그
+       └── Tab 2: "ar tag tcp align" — 6축 조그, 평행정렬, 디버그
+   ```
+
+2. **Python 코드 정리** (~360줄 삭제):
+   - `_setup_right_panel_tabs()` (155-369줄) 전체 삭제
+   - `_setup_disambiguation_ui()` (371-429줄) 전체 삭제
+   - `_setup_plane_result_labels()` (431-513줄) 전체 삭제
+   - `__init__`에서 삭제된 메서드 호출 제거
+   - `_connect_signals()`로 시그널 연결 통합 (기존 setup 메서드 내 연결 이동)
+   - 불필요 import 정리 (`QDoubleSpinBox`, `QSpinBox`, `QCheckBox`, `QGroupBox`, `QGridLayout`, `QPushButton`, `QHBoxLayout`, `QLabel`)
+
+3. **JogMixin 호환성 유지**: `.ui`에서 정확한 위젯 이름 사용
+   - 버튼: `btnJog{X,Y,Z,Rx,Ry,Rz}{Plus,Minus}`
+   - 스핀: `spinJogStep{X,Y,Z,Rx,Ry,Rz}`
+
+**검증:**
+- Python 구문 검증 통과
+- 89개 위젯 이름 매칭 확인 (Python self.* 참조 ↔ .ui name 속성)
+- 런타임 로드 테스트 성공 (3개 탭, JogMixin, matplotlib 캔버스 정상)
+
+**교훈:** UI 위젯이 30개 이상이면 처음부터 `.ui` 파일로 정의할 것. 프로그래밍 UI 생성은 동적 위젯(런타임 개수 변동)에만 사용.
+
+---
+
+## 2026-02-21 | 레이저 캘리브레이션 탭 — undistort 미적용 + 이미지 저장 경로 오류
+
+### 문제 1: 카메라 보정(undistort) 미적용
+
+**증상:** 레이저 캘리브레이션 탭에서 원본(distorted) 이미지가 그대로 표시됨. 레이저 중심선 추출도 왜곡된 이미지에서 수행되어 정확도 저하.
+
+**원인:** ArUco 탭과 달리 캘리브레이션 로드 및 `cv2.undistort()` 로직이 누락되어 있었음.
+
+**수정 파일:** `scripts/tabs/tab_laser_calibration.py`, `ui/tab_laser_calibration.ui`
+
+**수정 내용:**
+1. **UI**: 우측 패널에 "이미지 모드" 그룹박스 추가 — `radioOriginal` / `radioUndistorted` (기본 선택)
+2. **Python**:
+   - `config/arducam_calibration.yaml`에서 `camera_matrix`, `dist_coeffs` 로드 (`_load_calibration()`)
+   - `update_frame()`: `radioUndistorted` 선택 시 `cv2.undistort()` 적용 후 표시
+   - 레이저 추출은 항상 표시 중인 프레임(보정된 이미지)에서 수행
+   - `display_frame` 별도 저장 — 이미지 저장 시 보정된 프레임 기반
+
+### 문제 2: 이미지 저장 경로 오류
+
+**증상:** 로그에 "이미지 저장: /home/argoon/images/laser/..." 표시되나, 프로젝트 폴더(`images/laser/`)에는 파일 없음.
+
+**원인:** `os.path.expanduser("~/images/laser")` → `/home/argoon/images/laser/`로 해석. 프로젝트 내 `images/laser/`가 아닌 홈 디렉토리에 저장됨.
+
+**수정:** `_get_save_dir()` — 프로젝트 루트 기준 `images/laser/` 경로로 변경
+```python
+project_root = os.path.join(os.path.dirname(__file__), '..', '..')
+save_dir = os.path.join(os.path.abspath(project_root), 'images', 'laser')
+```
+
+### 문제 3: 이미지 저장 검증 강화
+
+**수정:** `.jpg` → `.png` (무손실), `os.path.exists()` + `os.path.getsize() > 0` 검증 추가
+
+---
+
+## 2026-02-21 | 레이저 색상 분리 HSV → RGB 기반으로 변경
+
+**증상:** HSV 마스크가 레이저 과포화(blooming) 영역을 누락
+
+**원인:** HSV 색공간의 S(채도) 채널 특성. 레이저 중심부는 R,G,B 모두 포화 → S→0이 되어 S≥50 조건에서 탈락. 레이저가 가장 강한 지점에서 마스크가 빠지는 구조적 문제.
+
+**이론적 근거:** 레이저는 단색광(~650nm)이므로 카메라 센서에서 항상 R≥G, R≥B. 과포화 시에도 R이 먼저 포화되어 이 관계 유지. HSV는 범용 색상 분류에 적합하나, 단색광 레이저 특성을 직접 활용하는 RGB 판별이 이론적으로 올바른 접근.
+
+**수정 파일:** `scripts/Sensor/laser/extract_laser_center.py`
+
+**수정 내용:**
+- `extract_red_mask()` — HSV `inRange` 방식 → RGB 채널 차이 방식으로 변경
+- 판별 조건: `(R - G) > 30 AND (R - B) > 30 AND R ≥ 80`
+- dilation(7x7 ellipse) 추가: 레이저 경계 확장 후 line mask 필터 ROI로 사용
+
+**검증 결과 (저장 이미지 3장):**
+
+| 이미지 | HSV 검출 | RGB 검출 | RGB 추가분 |
+|--------|----------|----------|-----------|
+| 102549.jpg | 18,627 px | 21,086 px | +13% |
+| 103942.jpg | 33,555 px | 43,795 px | +31% |
+| 104350.png | 35,533 px | 40,851 px | +15% |
+
+- RGB가 모든 이미지에서 더 많은 레이저 픽셀 검출
+- 속도: RGB 2.0ms vs HSV 2.2ms (색공간 변환 불필요)
+
+---
+
+## 2026-02-21 | 레이저 캘리브레이션 탭 display_type 리팩터링 및 버튼 재구성
+
+**수정 파일:** `scripts/tabs/tab_laser_calibration.py`, `ui/tab_laser_calibration.ui`
+
+**수정 내용:**
+- HSV 마스크 버튼 → `RGB 레이저 추출`로 이름 변경 (btnHsvMask → btnRgbMask)
+- 버튼 순서: RGB 레이저 추출(맨 위) → 중심 추출 → 직선 추출 → 레이저 표시(맨 아래)
+- display_type 키: `'hsv'` → `'rgb'`
+
+---
+
+## 2026-02-21 | 로봇 이동 중 카메라 이미지 업데이트 정지
+
+**증상:** 조그 이동 중 카메라 프레임이 멈추고, 이동 완료 후에야 갱신
+
+**원인:** `_on_jog_move_from_tab()` / `_on_jog_rotate_from_tab()`에서 `send_base_linear()` / `send_base_rotate()` 호출 시 `process_events_callback`을 전달하지 않음. `wait_for_done()` 내부의 `time.sleep(0.1)` 루프가 메인 Qt 스레드를 블로킹 → `frame_ready` 시그널 처리 불가.
+
+**수정 파일:** `scripts/main_window.py`
+
+**수정 내용:**
+- `QApplication`을 상단 import에 추가
+- 두 핸들러 모두 `process_events_callback=QApplication.processEvents` 전달
+- `wait_for_done()` 루프에서 100ms마다 Qt 이벤트 처리 → 카메라 프레임 정상 갱신
+
+**참고:** Thread 방식도 가능하나, Modbus 통신 스레드 안전성 및 동시 명령 방지 로직 필요. 현재 `wait_for_done()`에 이미 설계된 `process_events_callback` 패턴이 더 적합.
+
+---
+
+## 2026-02-21 | Hough 직선 검출 — 밀도 필터 제거 및 갭 기반 라인 분리
+
+**증상:** 레이저 중심점(conv center)은 정상 검출되지만 Hough 직선 피팅 결과가 표시되지 않거나, 충전포트 양쪽의 물리적으로 분리된 레이저를 하나의 라인으로 묶음
+
+**원인:**
+1. `min_density` 필터가 희소 영역의 유효 직선을 제거
+2. Hough 변환이 동일 직선(collinear) 위의 점을 하나의 라인으로 그룹화 — 충전포트 갭(빈 영역)을 무시하고 양쪽 점을 하나로 합침
+
+**수정 파일:**
+- `scripts/Sensor/laser/extract_laser_center.py`
+- `scripts/tabs/tab_laser_calibration.py`
+
+**수정 내용:**
+1. **밀도 필터 완전 제거**: `fit_multiple_lines_hough`, `fit_multiple_lines_ransac`, `fit_multiple_lines` 래퍼에서 `min_density` 파라미터 및 필터 블록 삭제
+2. **갭 기반 라인 분리**: `fit_multiple_lines_hough`에 `gap_threshold=10.0` 파라미터 추가. Hough inlier 수집 후 x좌표 정렬 → 10px 이상 갭 발생 시 별도 라인으로 분리 → 각 세그먼트별 독립 least-squares refit
+3. **세그먼트 기반 라인 그리기**: `_draw_line_overlay`에서 전체 직선 대신 inlier 연속 구간에서만 라인 표시, 시작/끝점에 원 마커(반지름 6px) 추가
+4. **라벨 위치**: 가장 긴 세그먼트 중심에 배치 (갭 위에 라벨 표시 방지)
 
 ---

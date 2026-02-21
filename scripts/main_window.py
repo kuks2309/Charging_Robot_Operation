@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 from PyQt5 import uic
 from PyQt5.QtWidgets import (
-    QMainWindow, QMessageBox, QFileDialog, QTableWidgetItem
+    QMainWindow, QMessageBox, QFileDialog, QTableWidgetItem, QApplication
 )
 from PyQt5.QtCore import QTimer
 
@@ -169,7 +169,7 @@ class MainWindow(QMainWindow):
 
         # 레이저 캘리브레이션 탭 (인덱스 6에 삽입)
         self.tabLaserCalibration = TabLaserCalibration(self)
-        self.tabWidget.insertTab(6, self.tabLaserCalibration, "레이저 캘리브레이션")
+        self.tabWidget.insertTab(6, self.tabLaserCalibration, "Laser Calibration")
 
         # 탭 시그널 연결
         self._connect_tab_signals()
@@ -228,6 +228,8 @@ class MainWindow(QMainWindow):
         self.tabLaserCalibration.log_message.connect(self._log)
         self.tabLaserCalibration.camera_start_requested.connect(self._on_start_camera)
         self.tabLaserCalibration.camera_stop_requested.connect(self._on_stop_camera)
+        self.tabLaserCalibration.jog_move_requested.connect(self._on_jog_move_from_tab)
+        self.tabLaserCalibration.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
         self.tabLaserCalibration.arducam_required.connect(
             lambda: self._on_camera_type_changed(CAMERA_ARDUCAM)
         )
@@ -853,8 +855,10 @@ class MainWindow(QMainWindow):
             self._log(f"알 수 없는 축: {axis}")
             return
 
-        # 베이스 좌표계 이동
-        success, message = self.robot.send_base_linear(axis, distance)
+        # 베이스 좌표계 이동 (processEvents 콜백으로 UI 블로킹 방지)
+        success, message = self.robot.send_base_linear(
+            axis, distance,
+            process_events_callback=QApplication.processEvents)
         if not success:
             self._log(f"조그 이동 실패: {message}")
             QMessageBox.warning(self, "오류", f"조그 이동 실패:\n{message}")
@@ -867,8 +871,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
             return
 
-        # 베이스 좌표계 회전
-        success, message = self.robot.send_base_rotate(axis, angle)
+        # 베이스 좌표계 회전 (processEvents 콜백으로 UI 블로킹 방지)
+        success, message = self.robot.send_base_rotate(
+            axis, angle,
+            process_events_callback=QApplication.processEvents)
         if not success:
             self._log(f"조그 회전 실패: {message}")
             QMessageBox.warning(self, "오류", f"조그 회전 실패:\n{message}")
