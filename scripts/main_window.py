@@ -22,7 +22,7 @@ from job_types import JOB_TYPES
 # 카메라 타입 상수
 CAMERA_DS435 = "DS435"
 CAMERA_ARDUCAM = "ArduCam"
-from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration, TabStereoCalibration
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration, TabStereoCalibration, TabLaserScan
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
@@ -182,6 +182,10 @@ class MainWindow(QMainWindow):
         self.tabStereoCalibration = TabStereoCalibration(self)
         self.tabWidget.insertTab(7, self.tabStereoCalibration, "Stereo Calibration")
 
+        # 레이저 스캔 탭 (인덱스 8에 삽입)
+        self.tabLaserScan = TabLaserScan(self)
+        self.tabWidget.insertTab(8, self.tabLaserScan, "Laser Scan")
+
         # 탭 시그널 연결
         self._connect_tab_signals()
 
@@ -251,6 +255,16 @@ class MainWindow(QMainWindow):
         self.tabLaserCalibration.calib_save_compare_requested.connect(self._on_calib_save_compare)
         self.tabLaserCalibration.calib_auto_requested.connect(self._on_calib_auto)
         self.tabLaserCalibration.calib_cancel_requested.connect(self._on_calib_cancel)
+
+        # 레이저 스캔 탭 시그널
+        self.tabLaserScan.log_message.connect(self._log)
+        self.tabLaserScan.camera_start_requested.connect(self._on_start_camera)
+        self.tabLaserScan.camera_stop_requested.connect(self._on_stop_camera)
+        self.tabLaserScan.jog_move_requested.connect(self._on_jog_move_from_tab)
+        self.tabLaserScan.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
+        self.tabLaserScan.arducam_required.connect(
+            lambda: self._on_camera_type_changed(CAMERA_ARDUCAM)
+        )
 
         # 스테레오 캘리브레이션 탭 시그널
         self.tabStereoCalibration.log_message.connect(self._log)
@@ -1524,6 +1538,7 @@ class MainWindow(QMainWindow):
         """AR Tag TCP Align - 개별 축 tool.rot 테스트"""
         if not self._require_robot():
             return
+        tf_changed = False
         try:
             dbg = self.tabArucoReliability.txtAlignDebug
 
@@ -1536,6 +1551,7 @@ class MainWindow(QMainWindow):
             if not success:
                 self._log(f"[AR Tag] TF4 설정 실패: {msg}")
                 return
+            tf_changed = True
             self._log("[AR Tag] TF4 설정 완료")
             time.sleep(0.2)
 
@@ -1561,17 +1577,19 @@ class MainWindow(QMainWindow):
                 dbg.append(f"  Δ ) dRx={after[3]-before[3]:.2f}, dRy={after[4]-before[4]:.2f}, dRz={after[5]-before[5]:.2f}")
 
             self._log(f"[AR Tag] {axis.upper()} 완료")
-            # TF3 복원 (조그용 기본 툴프레임)
-            self._ensure_toolframe(3)
-            self._update_statusbar()
         except Exception as e:
             self._log(f"[AR Tag] 오류: {e}")
+        finally:
+            if tf_changed:
+                self._ensure_toolframe(3)
+            self._update_statusbar()
 
     def _on_ar_tag_align_parallel(self, drx: float, dry: float, drz: float):
         """AR Tag TCP Align - TF4 기준 tool.rot 회전으로 마커 평행 정렬"""
         if not self._require_robot():
             return
 
+        tf_changed = False
         try:
             dbg = self.tabArucoReliability.txtAlignDebug
 
@@ -1581,6 +1599,7 @@ class MainWindow(QMainWindow):
                 self._log(f"[AR Tag] TF4 설정 실패: {msg}")
                 QMessageBox.warning(self, "오류", f"TF4 설정 실패:\n{msg}")
                 return
+            tf_changed = True
             self._log("[AR Tag] TF4 설정 완료")
             time.sleep(0.2)  # PRS 클린업 대기
 
@@ -1619,13 +1638,13 @@ class MainWindow(QMainWindow):
                 dbg.append("")
 
             self._log("[AR Tag] 마커 평행 정렬 완료")
-            # TF3 복원 (조그용 기본 툴프레임)
-            self._ensure_toolframe(3)
-            self._update_statusbar()
-
         except Exception as e:
             self._log(f"[AR Tag] 정렬 오류: {e}")
             QMessageBox.warning(self, "오류", f"정렬 실패:\n{e}")
+        finally:
+            if tf_changed:
+                self._ensure_toolframe(3)
+            self._update_statusbar()
 
     def _update_robot_status(self):
         """로봇 상태 업데이트 (TCP 위치, 레지스터 등)"""
@@ -3367,6 +3386,10 @@ class MainWindow(QMainWindow):
                 self.tabLaserCalibration.set_markers([])
             self.tabLaserCalibration.update_frame(frame)
 
+        # 레이저 스캔 탭이 활성화된 경우
+        elif current_tab == 8:  # 레이저 스캔 탭
+            self.tabLaserScan.update_frame(frame)
+
     def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
         """특정 Aruco 태그 감지 (VisionManager 위임)"""
         return self.vision_manager.detect_tag(tag_id, timeout, num_samples)
@@ -3663,6 +3686,7 @@ class MainWindow(QMainWindow):
         # 각 탭의 카메라 관련 UI 초기화
         self.tabStereoCalibration.deactivate()
         self.tabLaserCalibration.deactivate()
+        self.tabLaserScan.deactivate()
         if stopped:
             self._log("탭 전환: 카메라 자동 정지")
 
@@ -3690,12 +3714,9 @@ class MainWindow(QMainWindow):
                     self._log(f"Tool Frame 설정 오류: {e}")
         # Eye in Hand 탭 (인덱스 4)이 선택되면 Tool Frame 4로 설정
         elif index == 4:
-            print(f"[DEBUG] Eye in Hand 탭 선택됨 (index={index})")
             if self.robot and self.robot.is_connected:
-                print(f"[DEBUG] 로봇 연결 상태: {self.robot.is_connected}")
                 try:
                     success, msg = self.robot.send_set_toolframe(4, wait=True)
-                    print(f"[DEBUG] send_set_toolframe(4) 결과: success={success}, msg={msg}")
                     if success:
                         self._log("Eye in Hand 탭 선택: Tool Frame 4로 설정 완료")
                         self.tabEyeInHand.update_current_toolframe(4)
@@ -3703,10 +3724,7 @@ class MainWindow(QMainWindow):
                     else:
                         self._log(f"Tool Frame 설정 실패: {msg}")
                 except Exception as e:
-                    print(f"[DEBUG] 예외 발생: {e}")
                     self._log(f"Tool Frame 설정 오류: {e}")
-            else:
-                print(f"[DEBUG] 로봇 미연결 - robot={self.robot}, is_connected={self.robot.is_connected if self.robot else 'N/A'}")
         # 레이저 캘리브레이션 탭 (인덱스 6) → ArduCam 강제 전환
         elif index == 6:
             self._on_camera_type_changed(CAMERA_ARDUCAM)

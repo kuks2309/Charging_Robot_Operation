@@ -1201,3 +1201,97 @@ Phase 3 — combined 재구성 (-35줄):
 **결과:** 3960줄 → 3779줄 (총 -181줄, 4.6% 감소). 헬퍼 함수 10개 추출.
 
 ---
+
+## 2026-02-28 | 리팩터링 후 코드 리뷰 — 버그 수정 7건
+
+### 1. `_require_robot()` 무한 재귀 (CRITICAL)
+
+**증상:** 조그 이동 시 `RecursionError: maximum recursion depth exceeded` → 프로그램 크래시
+
+**원인:** `_require_robot()` 헬퍼 본문에서 `self.robot` 체크 대신 `self._require_robot()` 자기 호출
+
+**수정:** `if not self._require_robot()` → `if not self.robot or not self.robot.is_connected`
+
+**수정 파일:** `scripts/main_window.py:298-303`
+
+### 2. `_on_ar_tag_align_parallel` — `axis` NameError (CRITICAL)
+
+**증상:** tool.rot 회전 성공/실패 시 `NameError: name 'axis' is not defined` → 크래시
+
+**원인:** 루프 변수 `vision_axis`를 사용해야 하는데 미정의 `axis` 변수 참조 (4곳)
+
+**수정:** `axis.upper()` → `vision_axis.upper()` (line 1605-1610)
+
+**수정 파일:** `scripts/main_window.py`
+
+### 3. `_fine_align_axis` — 이중 sleep (CRITICAL)
+
+**증상:** 0.1mm 미세 정렬 루프에서 불필요한 450ms 지연 (0.3s + 0.15s). 20회 반복 시 3초 손실
+
+**원인:** `time.sleep(0.3)` 후 `self._settle(0.15)` 추가 호출 (settle 내부에도 sleep 존재)
+
+**수정:** 두 호출을 `self._settle(0.3)` 하나로 통합
+
+**수정 파일:** `scripts/main_window.py`
+
+### 4. TF4→TF3 미복원 — `_on_ar_tag_align_single_axis` / `_parallel` (HIGH)
+
+**증상:** tool.rot 실패 또는 예외 발생 시 로봇이 TF4 상태로 방치 → 후속 조그 이동이 잘못된 좌표계에서 실행
+
+**원인:** `except` 블록과 중간 `return`에서 `_ensure_toolframe(3)` 미호출
+
+**수정:** `try/finally` 패턴 + `tf_changed` 플래그로 TF3 항상 복원 보장
+
+**수정 파일:** `scripts/main_window.py:1523-1571, 1573-1632`
+
+### 5. `_on_jog_move_from_tab` — cmd_map 데드코드 (MEDIUM)
+
+**증상:** `cmd_map` dict를 만들고 `cmd` 검증하지만, 실제 호출에서 `axis` 문자열 직접 전달 → 유지보수 혼란
+
+**수정:** cmd_map 제거, `if axis not in ('x', 'y', 'z')` 단순 가드로 대체
+
+**수정 파일:** `scripts/main_window.py:891`
+
+### 6. spinbox singleStep 불일치 (MEDIUM)
+
+**증상:** 조그 스핀박스 화살표 클릭 시 1.0mm씩 증가. 0.1mm 해상도를 지원하지만 UI에서 미반영
+
+**수정:** `spinJogStepX/Y/Z`의 `singleStep`을 `0.1`로 설정 (두 UI 파일)
+
+**수정 파일:** `ui/tab_task_edit.ui`, `ui/tab_aruco_reliability.ui`
+
+### 7. Eye in Hand 탭 — DEBUG print() 잔존 (LOW)
+
+**증상:** 탭 전환 시 `[DEBUG]` 메시지 5개가 stdout으로 출력
+
+**수정:** print() 제거, 필요한 로그는 `self._log()`로 유지
+
+**수정 파일:** `scripts/main_window.py:3698-3714`
+
+### 0.1mm 파이프라인 검증 결과
+
+End-to-End 스케일링 확인:
+
+```text
+UI spinbox(0.1mm) → signal(str, float) → send_base_linear(axis, 0.1)
+  → int(round(0.1 × 10)) = 1 → to_uint16() → write_register
+  → PRS: transx(1/10) = 0.1mm  ✓
+```
+
+- `int(round(val*10))` 사용 (truncation 방지): PASS
+- CMD 50-53 사용 (deprecated 60-63 아님): PASS
+- `to_uint16()` 음수 처리: PASS
+- UI minimum=0.1, singleStep=0.1: PASS
+
+### 향후 개선 권고 (미적용)
+
+| 우선   | 내용                                                         |
+| ------ | ------------------------------------------------------------ |
+| MEDIUM | `_settle()` 50ms 간격 이벤트 펌핑 (E-stop 반응성 개선) |
+| MEDIUM | 조그 거리/각도 상한 바운드 체크 (`MAX_JOG_DISTANCE_MM`) |
+| MEDIUM | `_on_ar_tag_align_base_rz` 무제한 보정 클램핑 |
+| LOW | `_measure_marker_dy_px`에 `_find_dual_marker_centers` 헬퍼 적용 |
+| LOW | `QInputDialog` 인라인 import → top-level 이동 |
+| LOW | ModbusClient 레지스터+커맨드 쓰기 Lock 보호 |
+
+---
