@@ -5,6 +5,7 @@ ArduCam 카메라로 라인 레이저 중심선을 추출하여 핑크색으로 
 """
 
 import os
+import json
 import cv2
 import yaml
 import numpy as np
@@ -31,6 +32,7 @@ TAB_LASER_CALIBRATION_UI = os.path.join(UI_DIR, 'tab_laser_calibration.ui')
 # 캘리브레이션 파일 경로
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
 ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'arducam_calibration.yaml')
+LASER_CALIB_FILE = os.path.join(CONFIG_DIR, 'laser_calibration.json')
 
 
 class TabLaserCalibration(QWidget, JogMixin):
@@ -42,6 +44,13 @@ class TabLaserCalibration(QWidget, JogMixin):
     arducam_required = pyqtSignal()
     jog_move_requested = pyqtSignal(str, float)
     jog_rotate_requested = pyqtSignal(str, float)
+    calib_align_aruco_requested = pyqtSignal()
+    calib_adjust_z_requested = pyqtSignal()
+    calib_save_pos_requested = pyqtSignal()
+    calib_move_x_adjust_z_requested = pyqtSignal()
+    calib_save_compare_requested = pyqtSignal()
+    calib_auto_requested = pyqtSignal()
+    calib_cancel_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,8 +61,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         # === 레이아웃 고정 (내용 변화에도 UI 안정) ===
         self.labelCameraView.setFixedSize(640, 360)      # 카메라 1280x720의 1/2
         self.widgetLeft.setFixedWidth(710)                # 좌측 패널 폭 고정
-        self.widgetRight.setFixedWidth(450)               # 우측 패널 폭 고정
-        self.groupResult.setFixedHeight(220)              # 추출 결과 높이 고정
+        # widgetRight, groupResult 크기는 UI 파일에서 관리
         self.labelAngle.setWordWrap(True)                 # 긴 기울기 텍스트 줄바꿈
 
         self.camera_manager = None
@@ -67,6 +75,19 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.dist_coeffs = None
         self._calibration_loaded = False
 
+        # 캘리브레이션 데이터
+        self._calib_data = []
+        self._calib_pos1 = None
+        self._calib_step = 0
+        self._z_adjust_cancel = False
+        self._auto_calib_running = False
+        self._current_pose = None
+        self._show_aruco_overlay = False
+
+        # ArUco 기반 레이저 ROI
+        self._marker_list = []  # detect_marker_centers 결과
+        self._roi_mask = None   # 프레임 크기 bool mask
+
         # 마지막 추출 결과 캐시
         self._last_coeffs = None
         self._last_angle_deg = None
@@ -75,6 +96,7 @@ class TabLaserCalibration(QWidget, JogMixin):
 
         self._load_calibration()
         self._connect_signals()
+        self._init_calib_table()
 
     def _connect_signals(self):
         """시그널 연결"""
@@ -86,6 +108,15 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.btnRgbMask.toggled.connect(self._on_toggle_rgb_mask)
         self.btnSaveImage.clicked.connect(self._on_save_image)
         self._connect_jog_buttons()
+        # 캘리브레이션 버튼
+        self.btnAlignAruco.clicked.connect(self._on_btn_align_aruco)
+        self.btnAdjustZ.clicked.connect(self._on_btn_adjust_z)
+        self.btnSavePosition.clicked.connect(self.calib_save_pos_requested.emit)
+        self.btnMoveXAdjustZ.clicked.connect(self.calib_move_x_adjust_z_requested.emit)
+        self.btnSaveCompare.clicked.connect(self.calib_save_compare_requested.emit)
+        self.btnAutoCalib.clicked.connect(self._on_btn_auto_calib)
+        self.btnClearCalibData.clicked.connect(self._clear_calib_data)
+        self.btnSaveCalibResult.clicked.connect(self._save_calib_result)
 
     def _load_calibration(self):
         """ArduCam 캘리브레이션 파일 로드"""
@@ -118,12 +149,12 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.arducam_required.emit()
         self.camera_start_requested.emit()
 
-    # 버튼 ↔ display_type 매핑
+    # 버튼 ↔ display_type 매핑 (UI 버튼 텍스트와 일치)
     _DISPLAY_BUTTONS = {
-        'laser': ('btnToggleLaser', '레이저 표시 ON', '레이저 표시 OFF'),
-        'conv':  ('btnConvCenter',  '레이저 중심 추출', '중심 추출 OFF'),
-        'lines': ('btnFitLines',    '직선 추출',       '직선 추출 OFF'),
-        'rgb':   ('btnRgbMask',     'RGB 레이저 추출', 'RGB 추출 OFF'),
+        'laser': ('btnToggleLaser', '레이저 표시',  '레이저 표시 OFF'),
+        'conv':  ('btnConvCenter',  '중심 추출',    '중심 추출 OFF'),
+        'lines': ('btnFitLines',    '직선 추출',    '직선 추출 OFF'),
+        'rgb':   ('btnRgbMask',     'RGB 추출',     'RGB 추출 OFF'),
     }
 
     def _on_display_toggle(self, dtype: str, checked: bool):
@@ -166,8 +197,81 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._last_coeffs = None
         self._last_angle_deg = None
 
+    def deactivate(self):
+        """탭 비활성화 시 표시 모드 토글 버튼 초기화"""
+        self.display_type = None
+        for key, (btn_name, text_off, _) in self._DISPLAY_BUTTONS.items():
+            btn = getattr(self, btn_name, None)
+            if btn:
+                btn.setChecked(False)
+                btn.setText(text_off)
+        self._clear_result_labels()
+
     def set_camera_manager(self, camera_manager):
         self.camera_manager = camera_manager
+
+    def set_markers(self, markers: list):
+        """ArUco 마커 검출 결과 저장 + ROI 마스크 갱신.
+
+        Args:
+            markers: detect_marker_centers 결과 list[dict]
+                     각 dict에 'corners' (4x2 ndarray) 포함
+        """
+        self._marker_list = markers if markers else []
+
+    def compute_roi_mask(self, frame_shape):
+        """마커 corners 기반 레이저 검출 ROI 마스크 생성.
+
+        각 마커 아래쪽에 ROI 박스를 설정:
+          - 상단: 마커 하단 가장자리
+          - 하단: 프레임 하단
+          - 좌/우: 마커 좌우 가장자리 ± 마커 폭 만큼 확장
+
+        Returns:
+            np.ndarray (bool): ROI mask (H, W), 마커 미검출 시 전체 True
+        """
+        h, w = frame_shape[:2]
+        mask = np.zeros((h, w), dtype=bool)
+
+        if not self._marker_list:
+            return mask  # 마커 없으면 전체 False → 검출 안함
+
+        for m in self._marker_list:
+            corners = m['corners']
+            if len(corners.shape) == 3:
+                corners = corners[0]
+            # 마커 경계
+            x_min_m = corners[:, 0].min()
+            x_max_m = corners[:, 0].max()
+            y_max_m = corners[:, 1].max()  # 마커 하단
+            marker_w = x_max_m - x_min_m
+
+            # ROI: 마커 아래, 마커 폭 × 마커 폭 (정사각형)
+            roi_x0 = max(0, int(x_min_m))
+            roi_x1 = min(w, int(x_max_m))
+            roi_y0 = int(y_max_m)
+            roi_y1 = min(h, int(y_max_m + marker_w))
+            mask[roi_y0:roi_y1, roi_x0:roi_x1] = True
+
+        self._roi_mask = mask
+        return mask
+
+    def _draw_roi_boxes(self, frame):
+        """ROI 영역을 빨간 박스로 표시"""
+        h, w = frame.shape[:2]
+        for m in self._marker_list:
+            corners = m['corners']
+            if len(corners.shape) == 3:
+                corners = corners[0]
+            x_min_m = corners[:, 0].min()
+            x_max_m = corners[:, 0].max()
+            y_max_m = corners[:, 1].max()
+            marker_w = x_max_m - x_min_m
+            roi_x0 = max(0, int(x_min_m))
+            roi_x1 = min(w, int(x_max_m))
+            roi_y0 = int(y_max_m)
+            roi_y1 = min(h, int(y_max_m + marker_w))
+            cv2.rectangle(frame, (roi_x0, roi_y0), (roi_x1, roi_y1), (0, 255, 255), 2)
 
     def update_frame(self, frame):
         """카메라 프레임 업데이트 — undistort 적용 후 레이저 오버레이"""
@@ -185,7 +289,15 @@ class TabLaserCalibration(QWidget, JogMixin):
         # 표시용 프레임 저장 (이미지 저장 시 사용)
         self.display_frame = base_frame.copy()
 
+        # ROI 마스크 갱신 (매 프레임 ArUco 위치 반영)
+        self.compute_roi_mask(base_frame.shape)
+
         display = base_frame.copy()
+
+        # ROI 영역 시각화 (빨간 박스)
+        if self._roi_mask is not None and self._marker_list:
+            self._draw_roi_boxes(display)
+
         _draw = {
             'rgb':   self._draw_rgb_overlay,
             'lines': self._draw_line_overlay,
@@ -194,6 +306,26 @@ class TabLaserCalibration(QWidget, JogMixin):
         }
         if self.display_type in _draw:
             display = _draw[self.display_type](display)
+
+        # target_y 참조선 + laser_y 현재 위치 표시
+        h, w = display.shape[:2]
+        target_y = self.get_target_y()
+        if target_y is not None:
+            ty = int(round(target_y))
+            if 0 <= ty < h:
+                cv2.line(display, (0, ty), (w, ty), (0, 255, 0), 1)
+                cv2.putText(display, f"target={target_y:.0f}px (offset={self.spinTargetLaserY.value()})",
+                            (w - 420, ty - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.68, (0, 255, 0), 2)
+
+        # 현재 laser_y 측정 (get_current_laser_y 재사용)
+        laser_y = self.get_current_laser_y(self.current_frame)
+        if laser_y is not None:
+            ly = int(round(laser_y))
+            if 0 <= ly < h:
+                cv2.line(display, (0, ly), (w, ly), (0, 0, 255), 1)
+                cv2.putText(display, f"laser={laser_y:.1f}px", (w - 160, ly + 15),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
 
         display_frame_on_label(display, self.labelCameraView)
 
@@ -258,6 +390,21 @@ class TabLaserCalibration(QWidget, JogMixin):
 
         return frame
 
+    def _filter_by_roi(self, cols, centers_y):
+        """ROI 마스크로 점 필터링. 마스크 없으면 전부 통과."""
+        if self._roi_mask is None or not self._marker_list:
+            return cols, centers_y
+        h, w = self._roi_mask.shape
+        keep = []
+        for i, (cx, cy) in enumerate(zip(cols, centers_y)):
+            ix, iy = int(round(cx)), int(round(cy))
+            if 0 <= iy < h and 0 <= ix < w and self._roi_mask[iy, ix]:
+                keep.append(i)
+        if not keep:
+            return np.array([]), np.array([])
+        keep = np.array(keep)
+        return cols[keep], centers_y[keep]
+
     def _draw_conv_overlay(self, frame):
         """Conv 마스크 기반 레이저 중심 추출 — 핑크 점만 표시 (라인 피팅 없음)"""
         min_hw = max(1, int(self.spinMinStripe.value()) // 2)
@@ -268,6 +415,9 @@ class TabLaserCalibration(QWidget, JogMixin):
             min_half_width=min_hw,
             max_half_width=max_hw,
         )
+
+        # ROI 필터링
+        cols, centers_y = self._filter_by_roi(cols, centers_y)
 
         if len(cols) == 0:
             self._clear_result_labels()
@@ -297,6 +447,9 @@ class TabLaserCalibration(QWidget, JogMixin):
         cols, centers_y, est_width = extract_laser_center_conv(
             frame, min_half_width=min_hw, max_half_width=max_hw,
         )
+
+        # ROI 필터링
+        cols, centers_y = self._filter_by_roi(cols, centers_y)
 
         if len(cols) == 0:
             self._clear_result_labels()
@@ -410,12 +563,14 @@ class TabLaserCalibration(QWidget, JogMixin):
             return
 
         save_frame = self.display_frame.copy()
-        if self.show_line_overlay:
+        if self.display_type == 'lines':
             save_frame = self._draw_line_overlay(save_frame)
-        elif self.show_conv_overlay:
+        elif self.display_type == 'conv':
             save_frame = self._draw_conv_overlay(save_frame)
-        elif self.show_laser_overlay:
+        elif self.display_type == 'laser':
             save_frame = self._draw_laser_overlay(save_frame)
+        elif self.display_type == 'rgb':
+            save_frame = self._draw_rgb_overlay(save_frame)
 
         save_dir = self._get_save_dir()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -426,6 +581,172 @@ class TabLaserCalibration(QWidget, JogMixin):
             self.log_message.emit(f"이미지 저장: {filepath}")
         else:
             self.log_message.emit(f"이미지 저장 실패: {filepath}")
+
+    # ==================== 캘리브레이션 메서드 ====================
+
+    def _init_calib_table(self):
+        """캘리브레이션 테이블 초기화"""
+        table = self.tableCalibData
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(['#', 'X1(mm)', 'Z1(mm)', 'X2(mm)', 'Z2(mm)', 'ΔX(mm)', 'ΔZ(mm)'])
+        table.setColumnWidth(0, 30)
+        for col in range(1, 7):
+            table.setColumnWidth(col, 65)
+        table.setRowCount(0)
+        # 프로그레스바 초기화
+        self.progressCalib.setMaximum(self.spinRepeatCount.value())
+        self.progressCalib.setValue(0)
+
+    def _on_btn_align_aruco(self):
+        """ArUco 정렬 버튼 → ArUco 검출 + Ry/Y 보정 + Z 조정 (재클릭=취소)"""
+        if self._calib_step > 0:
+            # 이미 실행 중이면 취소
+            self._z_adjust_cancel = True
+            self._update_calib_step(0, "취소 중...")
+            return
+        self._z_adjust_cancel = False
+        self._update_calib_step(1, "ArUco 정렬 요청...")
+        self.calib_align_aruco_requested.emit()
+
+    def _on_btn_adjust_z(self):
+        """Z 조정 버튼 토글 (실행/취소)"""
+        if self._calib_step == 0:
+            self._z_adjust_cancel = False
+            self._update_calib_step(2, "Z 조정 요청 중...")
+            self.calib_adjust_z_requested.emit()
+        else:
+            self._z_adjust_cancel = True
+            self._update_calib_step(0, "Z 조정 취소됨")
+
+    def _on_btn_auto_calib(self):
+        """자동 캘리브레이션 버튼 토글"""
+        if not self._auto_calib_running:
+            self._auto_calib_running = True
+            self._z_adjust_cancel = False
+            self.progressCalib.setMaximum(self.spinRepeatCount.value())
+            self.progressCalib.setValue(0)
+            self.btnAutoCalib.setText("자동 캘리브레이션 취소")
+            self.btnAutoCalib.setStyleSheet(
+                "QPushButton { padding: 8px; font-weight: bold; font-size: 14px; "
+                "background-color: #C62828; color: white; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #E53935; }")
+            self.calib_auto_requested.emit()
+        else:
+            self._auto_calib_running = False
+            self._z_adjust_cancel = True
+            self.calib_cancel_requested.emit()
+            self._reset_auto_calib_ui()
+
+    def _reset_auto_calib_ui(self):
+        """자동 캘리브레이션 UI 초기 상태로 복원"""
+        self._auto_calib_running = False
+        self.btnAutoCalib.setText("자동 캘리브레이션")
+        self.btnAutoCalib.setStyleSheet(
+            "QPushButton { padding: 8px; font-weight: bold; font-size: 14px; "
+            "background-color: #1565C0; color: white; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #1976D2; }"
+            "QPushButton:pressed { background-color: #0D47A1; }"
+            "QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }")
+
+    def _update_calib_step(self, step_num, message):
+        """캘리브레이션 단계 라벨 업데이트"""
+        self._calib_step = step_num
+        self.labelCalibStep.setText(message)
+
+    def set_current_pose(self, x, y, z, rx, ry, rz):
+        """main_window에서 TCP 위치 전달받기"""
+        self._current_pose = (x, y, z, rx, ry, rz)
+
+    def set_z_adjust_status(self, running):
+        """Z 조정 상태 → 버튼 텍스트 토글"""
+        if running:
+            self.btnAdjustZ.setText("2. Z 조정 취소")
+            self._z_adjust_cancel = False
+        else:
+            self.btnAdjustZ.setText("2. Z 조정")
+            self._z_adjust_cancel = False
+            self._calib_step = 0
+
+    def get_marker_center_y(self):
+        """검출된 ArUco 마커들의 평균 중심 Y 반환. 마커 없으면 None."""
+        if not self._marker_list:
+            return None
+        ys = [m['center'][1] for m in self._marker_list if 'center' in m]
+        if not ys:
+            return None
+        return float(np.mean(ys))
+
+    def get_target_y(self):
+        """마커 중심 Y + 오프셋 = 레이저 목표 Y (절대 픽셀). 마커 없으면 None."""
+        marker_cy = self.get_marker_center_y()
+        if marker_cy is None:
+            return None
+        return marker_cy + self.spinTargetLaserY.value()
+
+    def get_current_laser_y(self, frame):
+        """프레임에서 레이저 라인 Y 위치 측정 (main_window에서 호출)"""
+        if frame is None:
+            return None
+        min_hw = max(1, int(self.spinMinStripe.value()) // 2)
+        max_hw = max(min_hw + 1, int(self.spinMaxStripe.value()) // 2)
+        cols, centers_y, est_width = extract_laser_center_conv(
+            frame, min_half_width=min_hw, max_half_width=max_hw)
+        if len(cols) == 0:
+            return None
+        coeffs, inlier_cols, inlier_y = fit_laser_line(
+            cols, centers_y, mad_scale=self.spinMadScale.value())
+        if coeffs is None or len(coeffs) < 2:
+            return None
+        center_x = frame.shape[1] // 2
+        laser_y = float(np.polyval(coeffs, center_x))
+        return laser_y
+
+    def _add_calib_row(self, x1, z1, x2, z2):
+        """캘리브레이션 데이터 행 추가"""
+        dx = x2 - x1
+        dz = z2 - z1
+        self._calib_data.append({
+            'x1': x1, 'z1': z1, 'x2': x2, 'z2': z2, 'dx': dx, 'dz': dz
+        })
+        row = self.tableCalibData.rowCount()
+        self.tableCalibData.insertRow(row)
+        from PyQt5.QtWidgets import QTableWidgetItem
+        values = [str(row + 1), f"{x1:.2f}", f"{z1:.2f}", f"{x2:.2f}", f"{z2:.2f}", f"{dx:.2f}", f"{dz:.2f}"]
+        for col, val in enumerate(values):
+            self.tableCalibData.setItem(row, col, QTableWidgetItem(val))
+
+    def _clear_calib_data(self):
+        """캘리브레이션 데이터 초기화"""
+        self._calib_data.clear()
+        self._calib_pos1 = None
+        self._calib_step = 0
+        self.tableCalibData.setRowCount(0)
+        self.progressCalib.setValue(0)
+        self._update_calib_step(0, "대기 중")
+        self._log("캘리브레이션 데이터 초기화")
+
+    def _save_calib_result(self):
+        """캘리브레이션 결과 JSON 저장"""
+        if not self._calib_data:
+            self._log("저장할 캘리브레이션 데이터가 없습니다")
+            return
+        os.makedirs(os.path.dirname(LASER_CALIB_FILE), exist_ok=True)
+        result = {
+            'timestamp': datetime.now().isoformat(),
+            'marker_y_offset_px': self.spinTargetLaserY.value(),
+            'marker_center_y_px': self.get_marker_center_y(),
+            'target_laser_y_px': self.get_target_y(),
+            'x_move_step_mm': self.spinXMoveStep.value(),
+            'data': self._calib_data,
+            'summary': {
+                'count': len(self._calib_data),
+                'avg_dx': sum(d['dx'] for d in self._calib_data) / len(self._calib_data),
+                'avg_dz': sum(d['dz'] for d in self._calib_data) / len(self._calib_data),
+            }
+        }
+        with open(LASER_CALIB_FILE, 'w') as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        self._log(f"캘리브레이션 결과 저장: {LASER_CALIB_FILE}")
 
     def _log(self, msg):
         self.log_message.emit(msg)

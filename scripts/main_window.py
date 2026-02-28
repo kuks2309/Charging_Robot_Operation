@@ -5,7 +5,10 @@ Charging Robot Task Manager - Main Window
 
 import os
 from datetime import datetime
+import time
+import cv2
 import numpy as np
+from Sensor.aruco.aruco_detector import compute_dual_alignment, draw_dual_marker_overlay
 from PyQt5 import uic
 from PyQt5.QtWidgets import (
     QMainWindow, QMessageBox, QFileDialog, QTableWidgetItem, QApplication
@@ -19,7 +22,7 @@ from job_types import JOB_TYPES
 # 카메라 타입 상수
 CAMERA_DS435 = "DS435"
 CAMERA_ARDUCAM = "ArduCam"
-from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration, TabStereoCalibration
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
@@ -79,6 +82,10 @@ class MainWindow(QMainWindow):
         # ArUco 신뢰성 검증 탭에 매니저 전달
         self.tabArucoReliability.set_camera_manager(self.camera_manager)
         self.tabArucoReliability.set_vision_manager(self.vision_manager)
+
+        # 스테레오 캘리브레이션 탭에 양쪽 카메라 매니저 전달
+        self.tabStereoCalibration.set_camera_managers(
+            self.ds435_camera_manager, self.arducam_manager)
 
 
         # 정렬 서비스 초기화
@@ -171,6 +178,10 @@ class MainWindow(QMainWindow):
         self.tabLaserCalibration = TabLaserCalibration(self)
         self.tabWidget.insertTab(6, self.tabLaserCalibration, "Laser Calibration")
 
+        # 스테레오 캘리브레이션 탭 (인덱스 7에 삽입)
+        self.tabStereoCalibration = TabStereoCalibration(self)
+        self.tabWidget.insertTab(7, self.tabStereoCalibration, "Stereo Calibration")
+
         # 탭 시그널 연결
         self._connect_tab_signals()
 
@@ -233,6 +244,33 @@ class MainWindow(QMainWindow):
         self.tabLaserCalibration.arducam_required.connect(
             lambda: self._on_camera_type_changed(CAMERA_ARDUCAM)
         )
+        self.tabLaserCalibration.calib_align_aruco_requested.connect(self._on_calib_align_aruco)
+        self.tabLaserCalibration.calib_adjust_z_requested.connect(self._on_calib_adjust_z)
+        self.tabLaserCalibration.calib_save_pos_requested.connect(self._on_calib_save_pos)
+        self.tabLaserCalibration.calib_move_x_adjust_z_requested.connect(self._on_calib_move_x_adjust_z)
+        self.tabLaserCalibration.calib_save_compare_requested.connect(self._on_calib_save_compare)
+        self.tabLaserCalibration.calib_auto_requested.connect(self._on_calib_auto)
+        self.tabLaserCalibration.calib_cancel_requested.connect(self._on_calib_cancel)
+
+        # 스테레오 캘리브레이션 탭 시그널
+        self.tabStereoCalibration.log_message.connect(self._log)
+        self.tabStereoCalibration.calib_align_aruco_requested.connect(
+            self._on_stereo_calib_align_aruco)
+        self.tabStereoCalibration.calib_align_ds435_requested.connect(
+            self._on_stereo_calib_align_ds435)
+        self.tabStereoCalibration.sweep_start_requested.connect(
+            self._on_sweep_start)
+        self.tabStereoCalibration.sweep_cancel_requested.connect(
+            self._on_sweep_cancel)
+
+        # 스윕 캘리브레이션 서비스
+        self._sweep_service = None
+
+        # 자동 캘리브레이션 상태 변수 초기화
+        self._auto_calib_state = None
+        self._auto_calib_iteration = 0
+        self._auto_calib_total = 0
+        self._auto_calib_pos1 = None
 
         # 카메라 선택 라디오 버튼 시그널 연결
         self._connect_camera_selection_signals()
@@ -1356,6 +1394,1062 @@ class MainWindow(QMainWindow):
         """카메라 정지"""
         self.camera_manager.stop()
 
+    # ==================== 레이저 캘리브레이션 핸들러 ====================
+
+    def _on_calib_align_aruco(self):
+        """ArUco 정렬 버튼: 검출 → Ry 보정 → Y 중심 정렬"""
+        self._cached_error_per_mm = None  # 정렬 변경 → 감도 캐시 무효화
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        tab = self.tabLaserCalibration
+        tab._update_calib_step(1, "ArUco 마커 검출 중...")
+
+        try:
+            # 1) 검출
+            result = self._calib_detect_aruco_alignment()
+            if result is None:
+                tab._update_calib_step(0, "ArUco 검출 실패 - 마커를 확인하세요")
+                return
+            angle_ry, offset_y = result
+
+            # 2) Ry 보정 (0.5° 이상)
+            if abs(angle_ry) >= 0.5:
+                tab._update_calib_step(1, f"Ry 보정 중: {angle_ry:.2f}°")
+                self._on_ar_tag_align_base_ry(angle_ry)
+                time.sleep(0.3)
+                QApplication.processEvents()
+                self._log(f"[Calib] Ry 보정 완료: {angle_ry:.2f}°")
+            else:
+                self._log(f"[Calib] Ry 보정 불필요: {angle_ry:.2f}°")
+
+            # 3) 재검출 후 Y 중심 정렬 (5px 이상)
+            result2 = self._calib_detect_aruco_alignment()
+            if result2 is not None:
+                _, offset_y2 = result2
+                if abs(offset_y2) >= 5.0:
+                    tab._update_calib_step(1, f"Y 보정 중: {offset_y2:.1f}px")
+                    self._on_ar_tag_align_base_y(offset_y2)
+                    time.sleep(0.3)
+                    QApplication.processEvents()
+                    self._log(f"[Calib] Y 보정 완료: {offset_y2:.1f}px")
+                else:
+                    self._log(f"[Calib] Y 보정 불필요: {offset_y2:.1f}px")
+
+            # 4) ArUco 오버레이 ON + 최종 결과 표시
+            tab._show_aruco_overlay = True
+            result3 = self._calib_detect_aruco_alignment()
+            if result3 is not None:
+                ry_f, oy_f = result3
+                msg = f"정렬 완료: Ry={ry_f:.2f}°, offset_y={oy_f:.1f}px"
+                self._log(f"[Calib] {msg}")
+                tab._update_calib_step(0, msg)
+            else:
+                tab._update_calib_step(0, "정렬 후 재검출 실패")
+
+        except Exception as e:
+            self._log(f"[Calib] ArUco 정렬 오류: {e}")
+            tab._update_calib_step(0, f"오류: {e}")
+
+    def _calib_detect_aruco_alignment(self):
+        """자동 캘리브레이션용 ArUco 마커 정렬값 검출 + 카메라 뷰에 시각화.
+
+        Returns:
+            (angle_ry, offset_y) tuple, or None if detection fails.
+            angle_ry: Ry 보정 각도 (°), offset_y: 이미지 중심 대비 마커 중점 X 오프셋 (px)
+        """
+        from utils.common import display_frame_on_label
+
+        try:
+            frame = self.tabLaserCalibration.current_frame
+            if frame is None:
+                self._log("[Calib] ArUco 검출 실패: 프레임 없음 (카메라 시작 필요)")
+                return None
+            frame = frame.copy()
+
+            camera_matrix = self.tabArucoReliability.camera_matrix
+            dist_coeffs = self.tabArucoReliability.dist_coeffs
+            tag_id1 = self.tabArucoReliability.spinTagID1.value()
+            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+
+            markers = self.vision_manager.detect_marker_centers(
+                frame, camera_matrix, dist_coeffs, estimate_pose=True
+            )
+            self._log(f"[Calib] ArUco 검출 결과: {len(markers)}개 마커, IDs={[m['id'] for m in markers]}, 찾는 ID={tag_id1},{tag_id2}")
+
+            h, w = frame.shape[:2]
+            alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
+
+            # Draw overlay on display copy
+            display = frame.copy()
+            draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
+            display_frame_on_label(display, self.tabLaserCalibration.labelCameraView)
+
+            if alignment is None:
+                self._log(f"[Calib] ArUco 검출 실패: 마커 {tag_id1}/{tag_id2} 미검출")
+                return None
+
+            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
+            self._log(f"[Calib] ArUco 검출: Ry={active_ry:.2f}°, offset_y={alignment.offset_y:.1f}px")
+            return (active_ry, alignment.offset_y)
+
+        except Exception as e:
+            self._log(f"[Calib] ArUco 검출 오류: {e}")
+            return None
+
+    # ==================== 스테레오 캘리브레이션 핸들러 ====================
+
+    def _on_stereo_calib_align_aruco(self):
+        """스테레오 탭 ArUco 정렬: ArduCam 프레임으로 검출 → Ry/Y 보정"""
+        self._cached_error_per_mm = None
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        tab = self.tabStereoCalibration
+        tab._update_calib_step(1, "ArUco 마커 검출 중...")
+
+        try:
+            result = self._stereo_detect_aruco_alignment()
+            if result is None:
+                tab._update_calib_step(0, "ArUco 검출 실패 - 마커를 확인하세요")
+                return
+            angle_ry, offset_y = result
+
+            # Ry 보정 (0.5° 이상)
+            if abs(angle_ry) >= 0.5:
+                tab._update_calib_step(1, f"Ry 보정 중: {angle_ry:.2f}°")
+                self._on_ar_tag_align_base_ry(angle_ry)
+                time.sleep(0.3)
+                QApplication.processEvents()
+                self._log(f"[StereoCalib] Ry 보정 완료: {angle_ry:.2f}°")
+            else:
+                self._log(f"[StereoCalib] Ry 보정 불필요: {angle_ry:.2f}°")
+
+            # 재검출 후 Y 중심 정렬 (5px 이상)
+            result2 = self._stereo_detect_aruco_alignment()
+            if result2 is not None:
+                _, offset_y2 = result2
+                if abs(offset_y2) >= 5.0:
+                    tab._update_calib_step(1, f"Y 보정 중: {offset_y2:.1f}px")
+                    self._on_ar_tag_align_base_y(offset_y2)
+                    time.sleep(0.3)
+                    QApplication.processEvents()
+                    self._log(f"[StereoCalib] Y 보정 완료: {offset_y2:.1f}px")
+                else:
+                    self._log(f"[StereoCalib] Y 보정 불필요: {offset_y2:.1f}px")
+
+            # 최종 결과 표시
+            result3 = self._stereo_detect_aruco_alignment()
+            if result3 is not None:
+                ry_f, oy_f = result3
+                msg = f"정렬 완료: Ry={ry_f:.2f}°, offset_y={oy_f:.1f}px"
+                self._log(f"[StereoCalib] {msg}")
+                tab._update_calib_step(0, msg)
+            else:
+                tab._update_calib_step(0, "정렬 후 재검출 실패")
+
+        except Exception as e:
+            self._log(f"[StereoCalib] ArUco 정렬 오류: {e}")
+            tab._update_calib_step(0, f"오류: {e}")
+
+    def _stereo_detect_aruco_alignment(self):
+        """스테레오 탭 ArduCam 프레임에서 ArUco 정렬값 검출 + 시각화.
+
+        Returns:
+            (angle_ry, offset_y) tuple, or None if detection fails.
+        """
+        from utils.common import display_frame_on_label
+
+        try:
+            frame = self.tabStereoCalibration.current_frame
+            if frame is None:
+                self._log("[StereoCalib] ArUco 검출 실패: 프레임 없음")
+                return None
+            frame = frame.copy()
+
+            camera_matrix = self.tabArucoReliability.camera_matrix
+            dist_coeffs = self.tabArucoReliability.dist_coeffs
+            tag_id1 = self.tabArucoReliability.spinTagID1.value()
+            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+
+            markers = self.vision_manager.detect_marker_centers(
+                frame, camera_matrix, dist_coeffs, estimate_pose=True
+            )
+            self._log(f"[StereoCalib] ArUco 검출: {len(markers)}개, IDs={[m['id'] for m in markers]}")
+
+            h, w = frame.shape[:2]
+            alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
+
+            display = frame.copy()
+            draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
+            self.tabStereoCalibration._display_fixed(display, self.tabStereoCalibration.labelArduCamView)
+
+            if alignment is None:
+                self._log(f"[StereoCalib] 마커 {tag_id1}/{tag_id2} 미검출")
+                return None
+
+            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
+            self._log(f"[StereoCalib] Ry={active_ry:.2f}°, offset_y={alignment.offset_y:.1f}px")
+            return (active_ry, alignment.offset_y)
+
+        except Exception as e:
+            self._log(f"[StereoCalib] ArUco 검출 오류: {e}")
+            return None
+
+    # ==================== DS435 ArUco 센터링 ====================
+
+    def _on_stereo_calib_align_ds435(self):
+        """스테레오 탭 DS435 ArUco 정렬: DS435 프레임으로 검출 → Y/Z 센터링"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        tab = self.tabStereoCalibration
+        tab._update_ds435_calib_step(1, "ArUco 마커 검출 중...")
+
+        try:
+            import time
+            from PyQt5.QtWidgets import QApplication
+
+            result = self._stereo_detect_ds435_aruco_alignment()
+            if result is None:
+                tab._update_ds435_calib_step(0, "ArUco 검출 실패 - 마커를 확인하세요")
+                return
+            offset_y, offset_z = result
+
+            # Y 센터링 (horizontal, 5px 이상)
+            if abs(offset_y) >= 5.0:
+                tab._update_ds435_calib_step(1, f"Y 보정 중: {offset_y:.1f}px")
+                self._ds435_adaptive_align('y', offset_y)
+                time.sleep(0.3)
+                QApplication.processEvents()
+            else:
+                self._log(f"[DS435Calib] Y 보정 불필요: {offset_y:.1f}px")
+
+            # 재검출 후 Z 센터링 (vertical, 5px 이상)
+            result2 = self._stereo_detect_ds435_aruco_alignment()
+            if result2 is not None:
+                _, offset_z2 = result2
+                if abs(offset_z2) >= 5.0:
+                    tab._update_ds435_calib_step(1, f"Z 보정 중: {offset_z2:.1f}px")
+                    self._ds435_adaptive_align('z', offset_z2)
+                    time.sleep(0.3)
+                    QApplication.processEvents()
+                else:
+                    self._log(f"[DS435Calib] Z 보정 불필요: {offset_z2:.1f}px")
+
+            # 최종 결과 표시
+            result3 = self._stereo_detect_ds435_aruco_alignment()
+            if result3 is not None:
+                oy_f, oz_f = result3
+                msg = f"정렬 완료: dY={oy_f:.1f}px, dZ={oz_f:.1f}px"
+                self._log(f"[DS435Calib] {msg}")
+                tab._update_ds435_calib_step(0, msg)
+            else:
+                tab._update_ds435_calib_step(0, "정렬 후 재검출 실패")
+
+        except Exception as e:
+            self._log(f"[DS435Calib] ArUco 정렬 오류: {e}")
+            tab._update_ds435_calib_step(0, f"오류: {e}")
+
+    def _stereo_detect_ds435_aruco_alignment(self):
+        """DS435 프레임에서 ArUco 정렬값 검출 + 시각화.
+
+        탭의 자체 ArUco estimator를 사용 (화면 표시와 동일한 검출기).
+
+        Returns:
+            (offset_y, offset_z) tuple, or None if detection fails.
+        """
+        try:
+            tab = self.tabStereoCalibration
+            frame = tab.current_ds435_frame
+            if frame is None:
+                self._log("[DS435Calib] 프레임 없음")
+                return None
+
+            intrinsics = self.ds435_camera_manager.intrinsics
+            if intrinsics is None:
+                self._log("[DS435Calib] DS435 intrinsics 없음")
+                return None
+
+            # 탭의 자체 estimator 사용 (화면 표시와 동일)
+            markers = tab._aruco_estimator.detect_and_estimate_pose(
+                frame.copy(), intrinsics)
+            if not markers:
+                self._log("[DS435Calib] 마커 미검출")
+                return None
+
+            tag_id1 = self.tabArucoReliability.spinTagID1.value()
+            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+
+            m1, m2 = None, None
+            for m in markers:
+                if m['id'] == tag_id1:
+                    m1 = m
+                elif m['id'] == tag_id2:
+                    m2 = m
+
+            if m1 is None or m2 is None:
+                detected_ids = [m['id'] for m in markers]
+                self._log(f"[DS435Calib] 대상 마커 미검출: 필요={tag_id1},{tag_id2}, 검출={detected_ids}")
+                return None
+
+            # 코너에서 중심점 계산
+            c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
+            c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+
+            h, w = frame.shape[:2]
+            mid_x = (c1[0] + c2[0]) / 2.0
+            mid_y = (c1[1] + c2[1]) / 2.0
+            offset_y = mid_x - w / 2.0   # horizontal: positive = right
+            offset_z = mid_y - h / 2.0   # vertical: positive = below
+
+            # 오버레이 표시
+            distances = tab._get_marker_distances(markers)
+            overlay = tab._draw_markers(frame, markers, distances)
+            tab._display_fixed(overlay, tab.labelDS435View)
+
+            self._log(f"[DS435Calib] offset_y={offset_y:.1f}px, offset_z={offset_z:.1f}px")
+            return (offset_y, offset_z)
+
+        except Exception as e:
+            self._log(f"[DS435Calib] 검출 오류: {e}")
+            return None
+
+    def _ds435_adaptive_align(self, axis: str, d0_px: float):
+        """DS435 기반 적응형 센터링 (Y 또는 Z 축)
+
+        1단계: 테스트 이동 → px/mm 비율 산출
+        2단계: 비율 기반 보정 이동
+        3단계: 재측정 검증
+
+        Args:
+            axis: 'y' (horizontal) or 'z' (vertical)
+            d0_px: 현재 오프셋 (px)
+        """
+        import time
+        from PyQt5.QtWidgets import QApplication
+
+        DEAD_ZONE_PX = 3
+        TEST_MM = 5.0
+        MAX_CORRECTION_MM = 50.0
+
+        if abs(d0_px) < DEAD_ZONE_PX:
+            self._log(f"[DS435Calib] Base {axis.upper()}: 오프셋 {DEAD_ZONE_PX}px 미만, 보정 불필요")
+            return
+
+        try:
+            test_cmd = -TEST_MM if d0_px > 0 else TEST_MM
+            self._log(f"[DS435Calib] Base {axis.upper()} 보정 시작: d0={d0_px:.1f}px")
+
+            # --- 1단계: 테스트 이동으로 px/mm 비율 산출 ---
+            pose_before = self.robot.read_current_pose()
+            if pose_before is None:
+                self._log("[DS435Calib] 현재 포즈 읽기 실패")
+                return
+            axis_idx = 1 if axis == 'y' else 2  # Y=1, Z=2
+            val_before = pose_before[axis_idx]
+
+            self._log(f"[DS435Calib] 1단계: {test_cmd:+.1f}mm 테스트 이동 ({axis.upper()})")
+            success, msg = self.robot.send_base_linear(
+                axis, test_cmd, wait=True,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                self._log(f"[DS435Calib] 테스트 이동 실패: {msg}")
+                return
+
+            # 위치 안정화 대기
+            last_val = val_before
+            stable_count = 0
+            deadline = time.time() + 10.0
+            while time.time() < deadline:
+                time.sleep(0.2)
+                QApplication.processEvents()
+                pose_now = self.robot.read_current_pose()
+                if pose_now is None:
+                    continue
+                current_val = pose_now[axis_idx]
+                if abs(current_val - last_val) < 0.05:
+                    stable_count += 1
+                    if stable_count >= 3 and abs(current_val - val_before) > 0.1:
+                        break
+                else:
+                    stable_count = 0
+                last_val = current_val
+            actual_mm = last_val - val_before
+            self._log(f"[DS435Calib] 실제 이동: {actual_mm:.2f}mm (명령: {test_cmd:+.1f}mm)")
+
+            if abs(actual_mm) < 0.5:
+                self._log(f"[DS435Calib] 실제 이동 < 0.5mm, 복귀")
+                self.robot.send_base_linear(
+                    axis, -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            # 재측정
+            time.sleep(0.3)
+            QApplication.processEvents()
+            d1 = self._measure_ds435_marker_offset(axis)
+            if d1 is None:
+                self._log(f"[DS435Calib] 테스트 후 마커 감지 실패, 복귀")
+                self.robot.send_base_linear(
+                    axis, -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            delta_px = d1 - d0_px
+            self._log(f"[DS435Calib] 테스트 결과: d1={d1:.1f}px, 변화={delta_px:.1f}px")
+
+            if abs(delta_px) < 2:
+                self._log(f"[DS435Calib] 픽셀 변화 < 2px, 측정 불안정. 복귀")
+                self.robot.send_base_linear(
+                    axis, -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            px_per_mm = delta_px / actual_mm
+            self._log(f"[DS435Calib] 비율: {px_per_mm:.2f} px/mm ({abs(1.0/px_per_mm):.3f} mm/px)")
+
+            # --- 2단계: 비율 기반 보정 이동 ---
+            correction_mm = -d1 / px_per_mm
+            self._log(f"[DS435Calib] 2단계: 보정 {correction_mm:.1f}mm")
+
+            if abs(correction_mm) > MAX_CORRECTION_MM:
+                self._log(f"[DS435Calib] 보정 과대 ({correction_mm:.1f}mm > {MAX_CORRECTION_MM}mm), 안전 중단")
+                return
+
+            success, msg = self.robot.send_base_linear(
+                axis, correction_mm, wait=True,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                self._log(f"[DS435Calib] 보정 이동 실패: {msg}")
+                return
+
+            total_mm = test_cmd + correction_mm
+
+            # --- 3단계: 검증 ---
+            time.sleep(0.5)
+            QApplication.processEvents()
+
+            d_final = self._measure_ds435_marker_offset(axis)
+            if d_final is not None:
+                self._log(f"[DS435Calib] Base {axis.upper()} 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
+            else:
+                self._log(f"[DS435Calib] Base {axis.upper()} 보정 완료: 총 {total_mm:.1f}mm (검증 측정 실패)")
+
+        except Exception as e:
+            self._log(f"[DS435Calib] Base {axis.upper()} 보정 오류: {e}")
+
+    def _measure_ds435_marker_offset(self, axis: str):
+        """DS435 프레임에서 마커 중점의 오프셋 측정
+
+        Args:
+            axis: 'y' (horizontal offset) or 'z' (vertical offset)
+
+        Returns:
+            float offset in pixels, or None if detection fails.
+        """
+        try:
+            tab = self.tabStereoCalibration
+            frame = tab.current_ds435_frame
+            if frame is None:
+                return None
+
+            intrinsics = self.ds435_camera_manager.intrinsics
+            if intrinsics is None:
+                return None
+
+            markers = tab._aruco_estimator.detect_and_estimate_pose(
+                frame.copy(), intrinsics)
+            if not markers:
+                return None
+
+            tag_id1 = self.tabArucoReliability.spinTagID1.value()
+            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+
+            m1, m2 = None, None
+            for m in markers:
+                if m['id'] == tag_id1:
+                    m1 = m
+                elif m['id'] == tag_id2:
+                    m2 = m
+
+            if m1 is None or m2 is None:
+                return None
+
+            c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
+            c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+
+            h, w = frame.shape[:2]
+            if axis == 'y':
+                mid_px = (c1[0] + c2[0]) / 2.0
+                return mid_px - w / 2.0
+            else:  # z
+                mid_px = (c1[1] + c2[1]) / 2.0
+                return mid_px - h / 2.0
+        except Exception as e:
+            self._log(f"[DS435Calib] 마커 측정 오류: {e}")
+            return None
+
+    # ==================== Sweep Calibration ====================
+
+    def _on_sweep_start(self, step_mm: float, count: int):
+        """스윕 캘리브레이션 시작 핸들러"""
+        if not self.robot or not self.robot.is_connected:
+            self._log("[Sweep] 로봇 미연결")
+            self.tabStereoCalibration.reset_sweep_ui()
+            return
+
+        # 안전 확인 대화상자
+        total_mm = step_mm * count
+        msg = (f"로봇-픽셀 관계 분석을 시작합니다.\n\n"
+               f"스텝: {step_mm}mm × {count}회 = {total_mm:.0f}mm\n"
+               f"축: Z(-{total_mm:.0f}mm), X(+{total_mm:.0f}mm), Y(+{total_mm:.0f}mm)\n\n"
+               f"로봇이 현재 위치에서 각 축 방향으로 이동합니다.\n"
+               f"주변에 장애물이 없는지 확인하세요.")
+        reply = QMessageBox.question(
+            self, "스윕 캘리브레이션",
+            msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            self.tabStereoCalibration.reset_sweep_ui()
+            return
+
+        # 서비스 생성
+        from services.sweep_calibration_service import SweepCalibrationService
+        tab = self.tabStereoCalibration
+
+        self._sweep_service = SweepCalibrationService(
+            robot=self.robot,
+            ds435_manager=self.ds435_camera_manager,
+            arducam_manager=self.arducam_manager,
+            aruco_estimator=tab._aruco_estimator,
+            parent=self,
+        )
+
+        # 시그널 연결
+        self._sweep_service.status_updated.connect(tab.update_sweep_status)
+        self._sweep_service.progress_updated.connect(tab.update_sweep_progress)
+        self._sweep_service.log_message.connect(self._log)
+        self._sweep_service.sweep_error.connect(self._on_sweep_error)
+        self._sweep_service.sweep_finished.connect(self._on_sweep_finished)
+
+        self._sweep_service.start(step_mm, count)
+
+    def _on_sweep_cancel(self):
+        """스윕 취소 핸들러"""
+        if self._sweep_service and self._sweep_service.is_running:
+            self._sweep_service.cancel()
+
+    def _on_sweep_error(self, error_msg: str):
+        """스윕 오류 핸들러"""
+        self._log(f"[Sweep] 오류: {error_msg}")
+        tab = self.tabStereoCalibration
+        tab.update_sweep_status(f"오류: {error_msg}")
+        tab.reset_sweep_ui()
+
+    def _on_sweep_finished(self, results: dict):
+        """스윕 완료 핸들러 - 결과 요약 표시"""
+        tab = self.tabStereoCalibration
+        tab.reset_sweep_ui()
+
+        # Build result summary
+        lines = []
+        for axis in ('z', 'x', 'y'):
+            if axis not in results:
+                continue
+            r = results[axis]
+            ardu = r.get('arducam', {})
+            ds = r.get('ds435', {})
+            lines.append(f"[{axis.upper()}축]")
+            if 'px_per_mm_x' in ardu:
+                lines.append(
+                    f"  ArduCam: dx={ardu['px_per_mm_x']:+.2f} px/mm, "
+                    f"dy={ardu['px_per_mm_y']:+.2f} px/mm "
+                    f"(R²={ardu.get('r_squared_x', 0):.3f}/{ardu.get('r_squared_y', 0):.3f})")
+            if 'px_per_mm_x' in ds:
+                lines.append(
+                    f"  DS435:   dx={ds['px_per_mm_x']:+.2f} px/mm, "
+                    f"dy={ds['px_per_mm_y']:+.2f} px/mm "
+                    f"(R²={ds.get('r_squared_x', 0):.3f}/{ds.get('r_squared_y', 0):.3f})")
+
+        summary = "\n".join(lines) if lines else "데이터 부족"
+        tab.set_sweep_result(summary)
+        self._log(f"[Sweep] 결과:\n{summary}")
+
+    # ==================== 레이저 캘리브레이션 Z 조정 ====================
+
+    def _on_calib_adjust_z(self):
+        """Z 조정 버튼: 레이저 Y 측정 + Z축 이동으로 목표 도달"""
+        tab = self.tabLaserCalibration
+        tab._show_aruco_overlay = True
+        tab.set_z_adjust_status(True)
+
+        try:
+            result = self._calib_adjust_z_to_target()
+            if result is True:
+                tab._update_calib_step(0, "Z 조정 완료")
+            elif result is False and not tab._z_adjust_cancel:
+                tab._update_calib_step(0, "Z 조정 실패")
+            # result is None → 감도 측정 완료 (메시지 이미 설정됨)
+        except Exception as e:
+            self._log(f"[Calib] Z 조정 오류: {e}")
+            tab._update_calib_step(0, f"오류: {e}")
+        finally:
+            tab.set_z_adjust_status(False)
+
+    def _calib_measure_error_per_mm(self):
+        """error_per_mm 측정 (테스트 2mm + 원위치 복귀).
+
+        error = laser_y - target_y 이므로,
+        마커/레이저 모두 Z에 따라 이동해도 error 변화율이 정확.
+        """
+        tab = self.tabLaserCalibration
+        tab._update_calib_step(2, "감도 측정 중 (2mm 테스트)...")
+
+        # 이동 전 측정 (laser+target 동시 median)
+        laser_y, target_y = self._calib_measure_state()
+        if target_y is None or laser_y is None:
+            self._log("[Calib] 감도 측정 실패: 검출 불가")
+            return None
+        error_before = laser_y - target_y
+
+        # 테스트 이동
+        test_move = -2.0
+        if not self._calib_move_z(test_move, tab):
+            return None
+
+        # 이동 후 측정 (laser+target 동시 median)
+        laser_y2, target_y2 = self._calib_measure_state()
+        if target_y2 is None or laser_y2 is None:
+            self._log("[Calib] 감도 측정: 이동 후 검출 실패 → 원위치 복귀")
+            self._calib_move_z(-test_move, tab)
+            return None
+
+        error_after = laser_y2 - target_y2
+        delta = error_after - error_before
+
+        # 원위치 복귀
+        if not self._calib_move_z(-test_move, tab):
+            self._log("[Calib] 원위치 복귀 실패 — Z 위치 오프셋됨")
+            return None
+
+        if abs(delta) < 0.3:
+            self._log(f"[Calib] 감도 측정: error 변화 미미 ({delta:.2f}px)")
+            return None
+
+        rate = delta / test_move
+        if abs(rate) < 0.5:
+            self._log(f"[Calib] 감도 너무 낮음: {rate:.2f} px/mm → 위치 변경 필요")
+            return None
+
+        self._log(f"[Calib] 감도 측정 완료: {rate:.2f} px/mm")
+        return rate
+
+    def _calib_adjust_z_to_target(self):
+        """레이저 라인을 목표 Y에 맞추는 Z 조정.
+
+        첫 호출: 감도 측정 (테스트+복귀) → 캐시 저장. 이동 없음.
+        이후 호출: 캐시된 감도로 1회 이동만 수행.
+        """
+        tab = self.tabLaserCalibration
+        max_move = 20.0  # 1회 최대 이동
+
+        # ── 감도 캐시 확인 ──
+        if not hasattr(self, '_cached_error_per_mm') or self._cached_error_per_mm is None:
+            rate = self._calib_measure_error_per_mm()
+            if rate is None:
+                tab._update_calib_step(0, "감도 측정 실패")
+                return False
+            self._cached_error_per_mm = rate
+            self._log(f"[Calib] error_per_mm={rate:.2f} 캐시됨. 다시 눌러서 이동하세요.")
+            tab._update_calib_step(0, f"감도={rate:.2f}px/mm. 다시 눌러 이동")
+            return None  # 감도 측정 완료 (실패가 아님)
+
+        # ── 현재 error 측정 (laser+target 동시 median) ──
+        laser_y, target_y = self._calib_measure_state()
+        if target_y is None or laser_y is None:
+            self._log("[Calib] 검출 실패 (마커 또는 레이저)")
+            tab._update_calib_step(0, "검출 실패")
+            return False
+
+        error = laser_y - target_y
+        self._log(f"[Calib] error={error:.1f}px (laser={laser_y:.1f}, target={target_y:.1f})")
+
+        if abs(error) <= 1:
+            self._log("[Calib] 목표 범위 내 (≤1px)")
+            return True
+
+        # ── 1회 이동 ──
+        move_z = -error / self._cached_error_per_mm
+        if abs(move_z) > max_move:
+            move_z = max_move if move_z > 0 else -max_move
+            self._log(f"[Calib] 이동 제한: {move_z:.1f}mm (최대 {max_move}mm)")
+
+        if abs(move_z) < 0.1:
+            self._log(f"[Calib] 이동량 미미: {move_z:.2f}mm")
+            return abs(error) <= 2
+
+        tab._update_calib_step(2, f"Z {move_z:.1f}mm 이동 중...")
+        self._log(f"[Calib] Z 이동: {move_z:.1f}mm")
+        if not self._calib_move_z(move_z, tab):
+            return False
+        self._cached_error_per_mm = None  # Z 위치 변경 → 감도 재측정 필요
+
+        # ── 결과 확인 (laser+target 동시 median) ──
+        laser_f, target_f = self._calib_measure_state()
+        if target_f is not None and laser_f is not None:
+            final_error = laser_f - target_f
+            self._log(f"[Calib] 결과: error={final_error:.1f}px (laser={laser_f:.1f}, target={target_f:.1f})")
+            return abs(final_error) <= 2
+        self._log("[Calib] 이동 후 검출 실패")
+        return False
+
+    def _calib_refresh_markers(self, frame):
+        """프레임에서 ArUco 마커 검출 → tab._marker_list 갱신"""
+        try:
+            tab_ar = self.tabArucoReliability
+            markers = self.vision_manager.detect_marker_centers(
+                frame, tab_ar.camera_matrix, tab_ar.dist_coeffs, estimate_pose=True)
+            self.tabLaserCalibration.set_markers(markers)
+        except Exception:
+            self.tabLaserCalibration.set_markers([])
+
+    def _calib_measure_laser_y(self, n_samples=3):
+        """레이저 Y 위치 측정 + ArUco 마커 갱신 (다중 프레임 median)"""
+        laser_y, _ = self._calib_measure_state(n_samples)
+        return laser_y
+
+    def _calib_measure_state(self, n_samples=3):
+        """laser_y, target_y 동시 측정 (다중 프레임 median, 노이즈 대칭 저감)"""
+        tab = self.tabLaserCalibration
+        laser_vals, target_vals = [], []
+        for _ in range(n_samples):
+            frame = self.camera_manager.get_frame()
+            if frame is None:
+                continue
+            self._calib_refresh_markers(frame)
+            ly = tab.get_current_laser_y(frame)
+            ty = tab.get_target_y()
+            if ly is not None and ty is not None:
+                laser_vals.append(ly)
+                target_vals.append(ty)
+            QApplication.processEvents()
+            time.sleep(0.1)
+        if not laser_vals:
+            return None, None
+        return float(np.median(laser_vals)), float(np.median(target_vals))
+
+    def _calib_move_z(self, distance, tab):
+        """Z축 이동 + 대기 + 안정화. 취소 시 False 반환"""
+        self.robot.send_base_linear('z', distance,
+            wait=False,
+            process_events_callback=QApplication.processEvents)
+        done_ok, done_msg = self.robot.wait_for_done(
+            process_events_callback=QApplication.processEvents,
+            stop_flag_callback=lambda: tab._z_adjust_cancel)
+        if not done_ok:
+            if tab._z_adjust_cancel:
+                self._log("[Calib] Z 이동 중 취소")
+                return False
+            self._log(f"[Calib] Z 이동 대기 실패: {done_msg}")
+            return False
+        time.sleep(0.2)  # PRS 클린업 대기
+        self._calib_wait_for_position_stable('z')
+        return not tab._z_adjust_cancel
+
+    def _calib_wait_for_position_stable(self, axis='z', timeout=10.0):
+        """이동 후 위치 안정화 폴링 (연속 3회 < 0.05mm)"""
+        axis_idx = {'x': 0, 'y': 1, 'z': 2}[axis]
+        stable_count = 0
+        deadline = time.time() + timeout
+        pose = self.robot.read_current_pose()
+        if pose is None:
+            return False
+        last_val = pose[axis_idx]
+        while time.time() < deadline:
+            time.sleep(0.2)
+            QApplication.processEvents()
+            if self.tabLaserCalibration._z_adjust_cancel:
+                return False
+            pose_now = self.robot.read_current_pose()
+            if pose_now is None:
+                continue
+            current_val = pose_now[axis_idx]
+            if abs(current_val - last_val) < 0.05:
+                stable_count += 1
+                if stable_count >= 3:
+                    return True
+            else:
+                stable_count = 0
+            last_val = current_val
+        return False
+
+    def _on_calib_save_pos(self):
+        """TCP 위치 저장 (pos1)"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        pose = self.robot.read_current_pose()
+        if pose is None:
+            self._log("[Calib] 위치 읽기 실패")
+            return
+
+        tab = self.tabLaserCalibration
+        tab.set_current_pose(*pose[:6])
+        tab._calib_pos1 = (pose[0], pose[2])  # x, z
+        tab._update_calib_step(3, f"위치 1 저장: X={pose[0]:.2f}, Z={pose[2]:.2f}")
+        self._log(f"[Calib] 위치 1 저장: X={pose[0]:.2f}, Z={pose[2]:.2f}")
+
+    def _on_calib_move_x_adjust_z(self):
+        """X 이동 + Z 재조정"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        tab = self.tabLaserCalibration
+        x_step = tab.spinXMoveStep.value()
+        tab._update_calib_step(4, f"X {x_step}mm 이동 중...")
+        self._log(f"[Calib] X {x_step}mm 이동 시작")
+
+        try:
+            # X 이동
+            success, msg = self.robot.send_base_linear(
+                'x', x_step,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                self._log(f"[Calib] X 이동 실패: {msg}")
+                tab._update_calib_step(0, f"X 이동 실패: {msg}")
+                return
+
+            self._calib_wait_for_position_stable('x')
+            time.sleep(0.2)  # PRS 클린업 대기
+
+            # Z 재조정
+            tab._update_calib_step(4, "Z 재조정 중...")
+            tab.set_z_adjust_status(True)
+            z_result = self._calib_adjust_z_to_target()
+            if z_result is None:  # 감도 측정됨 → 바로 재시도
+                z_result = self._calib_adjust_z_to_target()
+            tab.set_z_adjust_status(False)
+
+            if z_result:
+                tab._update_calib_step(4, "X 이동 + Z 재조정 완료")
+                self._log("[Calib] X 이동 + Z 재조정 완료")
+            else:
+                tab._update_calib_step(0, "Z 재조정 실패")
+                self._log("[Calib] Z 재조정 실패")
+        except Exception as e:
+            self._log(f"[Calib] X 이동 + Z 재조정 오류: {e}")
+            tab._update_calib_step(0, f"오류: {e}")
+            tab.set_z_adjust_status(False)
+
+    def _on_calib_save_compare(self):
+        """비교 저장 (pos2 저장 + 테이블에 추가)"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+
+        tab = self.tabLaserCalibration
+        if tab._calib_pos1 is None:
+            self._log("[Calib] 위치 1이 저장되지 않았습니다. 먼저 '3. 위치 저장'을 실행하세요.")
+            QMessageBox.warning(self, "오류", "위치 1이 저장되지 않았습니다.")
+            return
+
+        pose = self.robot.read_current_pose()
+        if pose is None:
+            self._log("[Calib] 위치 읽기 실패")
+            return
+
+        x1, z1 = tab._calib_pos1
+        x2, z2 = pose[0], pose[2]
+        tab._add_calib_row(x1, z1, x2, z2)
+
+        dx = x2 - x1
+        dz = z2 - z1
+        tab._update_calib_step(5, f"비교 저장: ΔX={dx:.2f}, ΔZ={dz:.2f}")
+        self._log(f"[Calib] 비교 저장: X1={x1:.2f}, Z1={z1:.2f}, X2={x2:.2f}, Z2={z2:.2f}, ΔX={dx:.2f}, ΔZ={dz:.2f}")
+
+        # 다음 반복을 위해 pos1 초기화
+        tab._calib_pos1 = None
+
+    def _on_calib_auto(self):
+        """자동 캘리브레이션 시작"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            self.tabLaserCalibration._reset_auto_calib_ui()
+            return
+
+        tab = self.tabLaserCalibration
+        self._auto_calib_state = 'ALIGNING'
+        self._auto_calib_iteration = 0
+        self._auto_calib_total = tab.spinRepeatCount.value()
+        self._auto_calib_pos1 = None
+
+        self._log(f"[Calib] 자동 캘리브레이션 시작 ({self._auto_calib_total}회)")
+        QTimer.singleShot(100, self._auto_calib_step)
+
+    def _auto_calib_step(self):
+        """자동 캘리브레이션 상태 머신"""
+        tab = self.tabLaserCalibration
+        state = self._auto_calib_state
+
+        if not tab._auto_calib_running:
+            self._auto_calib_state = 'CANCELLED'
+            tab._update_calib_step(0, "자동 캘리브레이션 취소됨")
+            tab._reset_auto_calib_ui()
+            self._log("[Calib] 자동 캘리브레이션 취소됨")
+            return
+
+        try:
+            if state == 'ALIGNING':
+                tab._update_calib_step(1, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] ArUco 정렬 중...")
+                result = self._calib_detect_aruco_alignment()
+                if result is not None:
+                    angle_ry, offset_y = result
+                    # Ry 보정 (임계값 0.5° 이상일 때만)
+                    if abs(angle_ry) >= 0.5:
+                        self._log(f"[Calib] Ry 보정 실행: {angle_ry:.2f}°")
+                        self._on_ar_tag_align_base_ry(angle_ry)
+                        time.sleep(0.3)
+                        QApplication.processEvents()
+                    else:
+                        self._log(f"[Calib] Ry 보정 불필요: {angle_ry:.2f}°")
+                    # 재측정 후 Y 보정 (임계값 5px 이상일 때만)
+                    result2 = self._calib_detect_aruco_alignment()
+                    if result2 is not None:
+                        _, offset_y2 = result2
+                        if abs(offset_y2) >= 5.0:
+                            self._log(f"[Calib] Y 보정 실행: {offset_y2:.1f}px")
+                            self._on_ar_tag_align_base_y(offset_y2)
+                            time.sleep(0.3)
+                            QApplication.processEvents()
+                        else:
+                            self._log(f"[Calib] Y 보정 불필요: {offset_y2:.1f}px")
+                else:
+                    self._log("[Calib] ArUco 정렬 스킵 (마커 미검출) - Z 조정으로 진행")
+                self._auto_calib_state = 'Z_ADJUSTING'
+                QTimer.singleShot(500, self._auto_calib_step)
+
+            elif state == 'Z_ADJUSTING':
+                tab._update_calib_step(2, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] Z 조정 중...")
+                tab.set_z_adjust_status(True)
+                success = self._calib_adjust_z_to_target()
+                if success is None:  # 감도 측정됨 → 바로 재시도
+                    success = self._calib_adjust_z_to_target()
+                tab.set_z_adjust_status(False)
+
+                if success is False and not tab._z_adjust_cancel:
+                    self._auto_calib_state = 'ERROR'
+                    tab._update_calib_step(0, "오류: Z 조정 실패")
+                    tab._reset_auto_calib_ui()
+                    self._log("[Calib] 자동 캘리브레이션 중단: Z 조정 실패")
+                    return
+                if tab._z_adjust_cancel:
+                    tab._reset_auto_calib_ui()
+                    return
+
+                self._auto_calib_state = 'SAVING_POS1'
+                QTimer.singleShot(100, self._auto_calib_step)
+
+            elif state == 'SAVING_POS1':
+                tab._update_calib_step(3, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] 위치 1 저장...")
+                pose = self.robot.read_current_pose()
+                if pose is None:
+                    self._auto_calib_state = 'ERROR'
+                    tab._update_calib_step(0, "오류: 위치 읽기 실패")
+                    tab._reset_auto_calib_ui()
+                    return
+                self._auto_calib_pos1 = (pose[0], pose[2])
+                tab.set_current_pose(*pose[:6])
+                self._log(f"[Calib] Auto 위치 1: X={pose[0]:.2f}, Z={pose[2]:.2f}")
+                self._auto_calib_state = 'MOVING_X'
+                QTimer.singleShot(100, self._auto_calib_step)
+
+            elif state == 'MOVING_X':
+                x_step = tab.spinXMoveStep.value()
+                tab._update_calib_step(4, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] X {x_step}mm 이동 중...")
+                success, msg = self.robot.send_base_linear(
+                    'x', x_step,
+                    process_events_callback=QApplication.processEvents)
+                if not success:
+                    self._auto_calib_state = 'ERROR'
+                    tab._update_calib_step(0, f"오류: X 이동 실패 - {msg}")
+                    tab._reset_auto_calib_ui()
+                    return
+                self._calib_wait_for_position_stable('x')
+                time.sleep(0.2)
+                self._auto_calib_state = 'Z_READJUSTING'
+                QTimer.singleShot(100, self._auto_calib_step)
+
+            elif state == 'Z_READJUSTING':
+                tab._update_calib_step(5, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] Z 재조정 중...")
+                tab.set_z_adjust_status(True)
+                success = self._calib_adjust_z_to_target()
+                if success is None:  # 감도 측정됨 → 바로 재시도
+                    success = self._calib_adjust_z_to_target()
+                tab.set_z_adjust_status(False)
+
+                if success is False and not tab._z_adjust_cancel:
+                    self._auto_calib_state = 'ERROR'
+                    tab._update_calib_step(0, "오류: Z 재조정 실패")
+                    tab._reset_auto_calib_ui()
+                    self._log("[Calib] 자동 캘리브레이션 중단: Z 재조정 실패")
+                    return
+                if tab._z_adjust_cancel:
+                    tab._reset_auto_calib_ui()
+                    return
+
+                self._auto_calib_state = 'SAVING_POS2'
+                QTimer.singleShot(100, self._auto_calib_step)
+
+            elif state == 'SAVING_POS2':
+                pose = self.robot.read_current_pose()
+                if pose is None:
+                    self._auto_calib_state = 'ERROR'
+                    tab._update_calib_step(0, "오류: 위치 읽기 실패")
+                    tab._reset_auto_calib_ui()
+                    return
+
+                pos2 = (pose[0], pose[2])
+                tab._add_calib_row(
+                    self._auto_calib_pos1[0], self._auto_calib_pos1[1],
+                    pos2[0], pos2[1])
+
+                dx = pos2[0] - self._auto_calib_pos1[0]
+                dz = pos2[1] - self._auto_calib_pos1[1]
+                self._log(f"[Calib] Auto 반복 {self._auto_calib_iteration+1}: ΔX={dx:.2f}, ΔZ={dz:.2f}")
+
+                self._auto_calib_iteration += 1
+                tab.progressCalib.setValue(self._auto_calib_iteration)
+
+                if self._auto_calib_iteration < self._auto_calib_total:
+                    tab._update_calib_step(0, f"반복 {self._auto_calib_iteration}/{self._auto_calib_total} 완료")
+                    self._auto_calib_state = 'ALIGNING'
+                    QTimer.singleShot(500, self._auto_calib_step)
+                else:
+                    self._auto_calib_state = 'COMPLETE'
+                    tab._auto_calib_running = False
+                    tab._reset_auto_calib_ui()
+                    tab._update_calib_step(0, f"캘리브레이션 완료 ({self._auto_calib_total}회)")
+                    self._log(f"[Calib] 자동 캘리브레이션 완료 ({self._auto_calib_total}회)")
+
+        except Exception as e:
+            self._log(f"[Calib] 자동 캘리브레이션 오류: {e}")
+            tab._update_calib_step(0, f"오류: {e}")
+            tab._reset_auto_calib_ui()
+
+    def _on_calib_cancel(self):
+        """캘리브레이션 취소"""
+        tab = self.tabLaserCalibration
+        tab._z_adjust_cancel = True
+        tab._auto_calib_running = False
+        tab._reset_auto_calib_ui()
+        tab._update_calib_step(0, "취소됨")
+        self._log("[Calib] 캘리브레이션 취소")
+
     def _on_camera_frame(self, frame: np.ndarray):
         """카메라 프레임 수신 시 호출 (CameraManager signal)"""
         # 현재 활성 탭 인덱스
@@ -1431,6 +2525,20 @@ class MainWindow(QMainWindow):
 
         # 레이저 캘리브레이션 탭이 활성화된 경우
         elif current_tab == 6:  # 레이저 캘리브레이션 탭
+            # ArUco 마커 검출 → 레이저 ROI 설정 + 오버레이
+            try:
+                tab_ar = self.tabArucoReliability
+                markers = self.vision_manager.detect_marker_centers(
+                    frame, tab_ar.camera_matrix, tab_ar.dist_coeffs, estimate_pose=True)
+                self.tabLaserCalibration.set_markers(markers)
+                # ArUco 오버레이 표시 (정렬 후 결과 확인용)
+                if self.tabLaserCalibration._show_aruco_overlay:
+                    tag_id1 = tab_ar.spinTagID1.value()
+                    tag_id2 = tab_ar.spinTagID2.value()
+                    alignment = compute_dual_alignment(markers, tag_id1, tag_id2, frame.shape[1], frame.shape[0])
+                    frame = draw_dual_marker_overlay(frame, markers, tag_id1, tag_id2, alignment)
+            except Exception:
+                self.tabLaserCalibration.set_markers([])
             self.tabLaserCalibration.update_frame(frame)
 
     def detect_aruco_tag(self, tag_id: int, timeout: float = 10.0, num_samples: int = 10):
@@ -1712,8 +2820,31 @@ class MainWindow(QMainWindow):
 
     # ==================== 탭 변경 핸들러 ====================
 
+    def _stop_all_cameras(self):
+        """모든 카메라 정지 및 탭 UI 초기화"""
+        stopped = False
+        # 글로벌 카메라 매니저 정지
+        if self.camera_manager.is_running:
+            self.camera_manager.stop()
+            stopped = True
+        # 비활성 카메라 매니저도 정지 (스테레오 캘리브레이션 등에서 독립 실행 가능)
+        if self.camera_manager is not self.ds435_camera_manager and self.ds435_camera_manager.is_running:
+            self.ds435_camera_manager.stop()
+            stopped = True
+        if self.camera_manager is not self.arducam_manager and self.arducam_manager.is_running:
+            self.arducam_manager.stop()
+            stopped = True
+        # 각 탭의 카메라 관련 UI 초기화
+        self.tabStereoCalibration.deactivate()
+        self.tabLaserCalibration.deactivate()
+        if stopped:
+            self._log("탭 전환: 카메라 자동 정지")
+
     def _on_tab_changed(self, index: int):
         """탭 변경 시 호출"""
+        # 탭 전환 시 이전 탭의 카메라 기능 정지 및 버튼 초기화
+        self._stop_all_cameras()
+
         # Vision 탭 (인덱스 1), 캘리브레이션 탭 (인덱스 2) → TF1
         # ArUco 신뢰성 검증 탭 (인덱스 3) → TF4 (TF5는 TCP 오프셋이 커서 보호정지)
         if index in [1, 2, 3]:

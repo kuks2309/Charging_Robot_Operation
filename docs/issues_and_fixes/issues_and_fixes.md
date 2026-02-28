@@ -765,3 +765,217 @@ save_dir = os.path.join(os.path.abspath(project_root), 'images', 'laser')
 4. **라벨 위치**: 가장 긴 세그먼트 중심에 배치 (갭 위에 라벨 표시 방지)
 
 ---
+
+## 2026-02-21 레이저 삼각법 캘리브레이션 프로세스 문서
+
+### 개요
+
+레이저 삼각법 캘리브레이션은 **로봇 TCP의 X축 이동에 따른 Z축 보정량(ΔX/ΔZ 비율)**을 실험적으로 결정하는 과정이다.
+
+**원리**: 레이저 라인이 카메라 이미지의 동일한 Y 위치(target_y)에 표시되도록 Z축을 조정한 뒤, X축을 이동하고 다시 Z축을 재조정한다. 두 위치의 TCP 좌표(X1,Z1)과 (X2,Z2) 차이(ΔX, ΔZ)가 해당 위치에서의 레이저 삼각법 보정 계수가 된다.
+
+### 아키텍처 (Signal/Slot 패턴)
+
+```
+tab_laser_calibration.py (UI + 시그널)     main_window.py (핸들러 + 로봇 제어)
+┌──────────────────────────┐              ┌──────────────────────────┐
+│ btnAlignAruco 클릭        │──시그널──▶   │ _on_calib_align_aruco()  │
+│ btnAdjustZ 클릭           │──시그널──▶   │ _on_calib_adjust_z()     │
+│ btnSavePos 클릭           │──시그널──▶   │ _on_calib_save_pos()     │
+│ btnMoveXAdjustZ 클릭      │──시그널──▶   │ _on_calib_move_x_adjust_z() │
+│ btnSaveCompare 클릭       │──시그널──▶   │ _on_calib_save_compare() │
+│ btnAutoCalib 클릭         │──시그널──▶   │ _on_calib_auto()         │
+│ btnCancelCalib 클릭       │──시그널──▶   │ _on_calib_cancel()       │
+│                          │              │                          │
+│ get_current_laser_y()    │◀──호출──     │ _calib_measure_laser_y() │
+│ _update_calib_step()     │◀──호출──     │ (각 핸들러)               │
+│ _add_calib_row()         │◀──호출──     │ _on_calib_save_compare() │
+└──────────────────────────┘              └──────────────────────────┘
+```
+
+### 수동 캘리브레이션 (5단계)
+
+#### 1단계: ArUco 정렬 (`_on_calib_align_aruco`)
+
+**목적**: 카메라 시야에서 충전포트(ArUco 마커)가 수평·중앙 정렬되도록 로봇 위치 보정
+
+**순서**:
+1. `_calib_detect_aruco_alignment()` 호출 → 듀얼 마커 검출 + `compute_dual_alignment()` → `(angle_ry, offset_y)` 반환
+2. **Ry 보정** (임계값 ≥ 0.5°): `_on_ar_tag_align_base_ry(angle_ry)` → base frame Rz 회전
+3. 재검출 후 **Y 보정** (임계값 ≥ 5px): `_on_ar_tag_align_base_y(offset_y)` → base frame Y 이동
+4. ArUco 오버레이 플래그 ON (`tab._show_aruco_overlay = True`) → 카메라 콜백에서 지속 표시
+5. 최종 검출 결과(Ry, offset_y) 상태 표시
+
+**참고**: Ry, Y 보정은 각각 1회만 수행. 반복 보정이 필요하면 수동으로 다시 실행.
+
+#### 2단계: Z 조정 (`_on_calib_adjust_z`)
+
+**목적**: 레이저 라인이 목표 Y 위치(target_y)에 오도록 Z축 이동
+
+**현재 구현 (측정만)**: 버튼 클릭 시 `_calib_measure_laser_y()` 호출 → laser_y, target_y, error, TCP 포즈 표시. **실제 Z축 이동은 수행하지 않음.**
+
+**실제 Z 조정 알고리즘** (`_calib_adjust_z_to_target`): 자동 캘리브레이션 및 `_on_calib_move_x_adjust_z`에서 내부적으로 호출됨.
+
+```
+┌─ 1) 레이저 검출 확인 (미검출 → 즉시 중단)
+│
+├─ 2) 1mm 테스트 이동으로 방향/비율 자동 판별
+│     Z를 -1mm 이동 → px 변화 측정 → px_per_mm 계산
+│     error 증가 시: 방향 반전 (원위치 + px_per_mm 부호 반전)
+│
+├─ 3) 거친 접근 (error > 10px)
+│     move_z = -error / px_per_mm (비율 기반 1회 이동)
+│     안전 제한: 잔여 이동량(50mm - 누적) 내로 클램프
+│
+└─ 4) 미세 조정 (단계별 수렴)
+      step 1.0mm: 최대 15회 반복, error ≤ 1px → 완료
+      step 0.5mm: 최대 15회 반복, error ≤ 2px → 다음 단계
+      step 0.1mm: 최대 15회 반복, error ≤ 1px → 완료
+      각 반복: move_z = -error/px_per_mm, |move_z| > step이면 step으로 제한
+```
+
+**안전 제한**: 총 Z 이동 ≤ 50mm (`max_total_z`). 초과 시 즉시 중단.
+
+**위치 안정화** (`_calib_wait_for_position_stable`): 매 Z 이동 후 0.2초 PRS 클린업 대기 + 연속 3회 TCP 변화 < 0.05mm 확인 (최대 10초 타임아웃).
+
+#### 3단계: 위치 저장 (`_on_calib_save_pos`)
+
+**목적**: 현재 TCP 위치의 X, Z를 pos1으로 저장
+
+- `robot.read_current_pose()` → `tab._calib_pos1 = (pose[0], pose[2])` (X, Z)
+- `tab.set_current_pose(*pose[:6])` → UI에 TCP 좌표 표시
+
+#### 4단계: X 이동 + Z 재조정 (`_on_calib_move_x_adjust_z`)
+
+**목적**: X축으로 설정값만큼 이동한 후 레이저가 다시 target_y에 오도록 Z 재조정
+
+1. `robot.send_base_linear('x', x_step)` → X축 이동 (설정: `spinXMoveStep`, 기본값 UI 참조)
+2. `_calib_wait_for_position_stable('x')` → X축 위치 안정화
+3. `_calib_adjust_z_to_target()` → Z축 자동 조정 (위 알고리즘)
+
+#### 5단계: 비교 저장 (`_on_calib_save_compare`)
+
+**목적**: 현재 TCP 위치를 pos2로 읽고, pos1과의 차이(ΔX, ΔZ)를 테이블에 추가
+
+- pos1(3단계) vs pos2(현재): `ΔX = X2 - X1`, `ΔZ = Z2 - Z1`
+- `tab._add_calib_row(x1, z1, x2, z2)` → 테이블에 행 추가 + `_calib_data` 리스트에 dict 저장
+- pos1 초기화 (`tab._calib_pos1 = None`) → 다음 반복 준비
+
+### 자동 캘리브레이션 (상태 머신)
+
+`_on_calib_auto()` → `_auto_calib_step()` (QTimer.singleShot 기반 비동기 상태 머신)
+
+```
+                    ┌─────────────────────────┐
+                    │       ALIGNING          │ ArUco Ry+Y 보정
+                    └───────────┬─────────────┘
+                                │ 500ms
+                    ┌───────────▼─────────────┐
+                    │     Z_ADJUSTING         │ 레이저 → target_y 맞춤
+                    └───────────┬─────────────┘
+                                │ 100ms
+                    ┌───────────▼─────────────┐
+                    │     SAVING_POS1         │ TCP (X1, Z1) 저장
+                    └───────────┬─────────────┘
+                                │ 100ms
+                    ┌───────────▼─────────────┐
+                    │      MOVING_X           │ X축 spinXMoveStep 이동
+                    └───────────┬─────────────┘
+                                │ 100ms
+                    ┌───────────▼─────────────┐
+                    │    Z_READJUSTING        │ 레이저 재조정
+                    └───────────┬─────────────┘
+                                │ 100ms
+                    ┌───────────▼─────────────┐
+                    │     SAVING_POS2         │ TCP (X2, Z2) 저장 + ΔX/ΔZ 계산
+                    └───────────┬─────────────┘
+                                │
+                     반복 < total │ 반복 ≥ total
+                    ┌────────┐  │  ┌──────────┐
+                    │ALIGNING│◀─┘  │ COMPLETE │
+                    └────────┘     └──────────┘
+```
+
+**반복 횟수**: `spinRepeatCount` UI 설정값 (프로그레스바로 진행률 표시)
+**취소**: `tab._z_adjust_cancel = True` + `tab._auto_calib_running = False` → 각 상태 전이 시 체크
+
+### 레이저 Y 측정 (`get_current_laser_y`)
+
+```python
+# tab_laser_calibration.py
+extract_laser_center_conv(frame, min_half_width, max_half_width)  # 컨볼루션 기반 중심점 추출
+fit_laser_line(cols, centers_y, mad_scale)                         # MAD 기반 RANSAC 직선 피팅
+laser_y = np.polyval(coeffs, center_x)                             # 이미지 중심 x에서의 y값
+```
+
+- `min_half_width`, `max_half_width`: UI spinbox (`spinMinStripe`, `spinMaxStripe`)에서 설정
+- `mad_scale`: UI spinbox (`spinMadScale`)에서 설정
+- 반환값: 이미지 중심 열(center_x)에서의 레이저 Y 좌표 (px), 또는 None
+
+### 결과 저장 (`_save_calib_result`)
+
+JSON 파일 (`config/laser_calibration.json`)에 저장:
+```json
+{
+  "timestamp": "2026-02-21T...",
+  "target_laser_y_px": 240.0,
+  "x_move_step_mm": 10.0,
+  "data": [
+    {"x1": ..., "z1": ..., "x2": ..., "z2": ..., "dx": ..., "dz": ...}
+  ],
+  "summary": {
+    "count": N,
+    "avg_dx": ...,
+    "avg_dz": ...
+  }
+}
+```
+
+### 관련 파일
+
+| 파일 | 역할 |
+|------|------|
+| `scripts/tabs/tab_laser_calibration.py` | UI, 시그널 발행, 레이저 Y 측정, 테이블/JSON 관리 |
+| `scripts/main_window.py` (line 1375~1960) | 로봇 제어 핸들러, Z 조정 알고리즘, 자동 상태 머신 |
+| `scripts/Sensor/laser/extract_laser_center.py` | 레이저 중심점 추출 (`extract_laser_center_conv`) |
+| `scripts/services/vision_manager.py` | ArUco 검출 래퍼 (`detect_marker_centers`) |
+| `scripts/Sensor/aruco/aruco_detector.py` | `compute_dual_alignment`, `draw_dual_marker_overlay` |
+| `ui/tab_laser_calibration.ui` | Qt Designer UI 파일 |
+
+### 현재 상태 및 제한사항
+
+1. **Z 조정 버튼 (2단계)**: 측정값만 표시하고 실제 이동은 수행하지 않음. 수동 Z 이동은 다른 탭(조그) 사용 필요
+2. **ArUco 정렬**: 1회 보정만 수행. 정밀도가 부족하면 수동 반복 필요
+3. **Z 안전 제한**: 단일 캘리브레이션 사이클에서 총 50mm까지만 Z 이동 허용
+4. **레이저 미검출 시**: 해당 단계에서 즉시 중단. 자동 모드는 전체 중단
+5. **px_per_mm 비율**: 매 Z 조정 시작마다 1mm 테스트로 재측정 (환경 변화에 적응)
+
+---
+
+## 2026-02-28 | 탭 전환 시 카메라 자동 정지 및 버튼 초기화
+
+**증상:** 탭을 전환해도 이전 탭에서 시작한 카메라가 계속 실행되어 리소스 낭비 및 혼란 발생. 레이저 캘리브레이션 탭의 표시 모드 토글 버튼(레이저/중심/직선/RGB)도 전환 후에도 활성 상태 유지.
+
+**원인:** `_on_tab_changed()`에서 ToolFrame 설정만 처리하고 카메라 정지/UI 초기화 로직이 없었음.
+
+**수정 파일:**
+- `scripts/main_window.py` — `_stop_all_cameras()` 헬퍼 추가, `_on_tab_changed()` 수정
+- `scripts/tabs/tab_laser_calibration.py` — `deactivate()` 메서드 추가
+- `scripts/tabs/tab_stereo_calibration.py` — `deactivate()` 메서드 추가
+
+**수정 내용:**
+
+1. `_stop_all_cameras()` 신규 메서드:
+   - 글로벌 `camera_manager` 정지 (DS435 또는 ArduCam)
+   - 비활성 카메라 매니저 독립 실행 확인 후 정지 (스테레오 캘리브레이션에서 양쪽 동시 실행 케이스)
+   - `tabStereoCalibration.deactivate()` → 양쪽 카메라 정지 + 시작/정지 버튼 enabled 리셋
+   - `tabLaserCalibration.deactivate()` → 토글 버튼 4개 해제 + 결과 라벨 초기화
+   - 카메라 실제 정지 시에만 로그 출력
+
+2. `_on_tab_changed()` 첫줄에 `_stop_all_cameras()` 호출 추가 (TF 설정 전에 실행)
+
+3. `tab_laser_calibration.deactivate()`: `display_type=None`, 토글 버튼 `setChecked(False)` + 텍스트 원복, `_clear_result_labels()`
+
+4. `tab_stereo_calibration.deactivate()`: `_on_stop()` 호출로 양쪽 카메라 정지 및 버튼 상태 리셋
+
+---
