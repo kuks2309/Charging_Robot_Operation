@@ -1148,3 +1148,56 @@ JSON 파일 (`config/laser_calibration.json`)에 저장:
 - 4단계 통합 정렬을 최대 3회 반복 호출하여 수렴 확인 (10px 미만)
 
 ---
+
+## 2026-02-28 | ArduCam 미세 정렬 — Running 상태 감지 실패 타임아웃
+
+**증상:** `_fine_align_axis` Y축 미세 정렬 중 "이동 실패: Running 상태 감지 실패 (5초 타임아웃)" 발생. 0.1mm 이동이 간헐적으로 실패하여 미세 정렬이 조기 종료.
+
+**원인:** 0.1mm 미세 이동은 PRS가 ~50ms 내 완료하므로, `wait_for_done()`의 0.02s 폴링으로도 Running 상태를 못 잡는 경우 발생. 5초 타임아웃에 도달하여 실패 반환.
+
+**수정 파일:** `scripts/main_window.py` (`_fine_align_axis` 메서드)
+
+**수정 내용:**
+- `send_base_linear(wait=True)` → `wait=False` + `time.sleep(0.3)` 고정 대기로 변경
+- 0.1mm 미세 이동은 PRS 완료 시간(~50ms)이 짧으므로 0.3s 고정 sleep이 안정적
+- `wait_for_done()` 전역 로직은 미수정 (JOG 안전 보장)
+
+---
+
+## 2026-02-28 | main_window.py 중복 코드 리팩터링 — 함수화 및 통합
+
+**증상:** `main_window.py` 3960줄에 중복 함수, 중복 변수, 반복 패턴 다수 존재. 유지보수 어려움 및 버그 수정 시 동기화 누락 위험.
+
+**분석 결과:**
+- 마커 검출 함수 4개 ~90% 유사도 반복
+- 적응형 정렬 알고리즘 3곳 전체 복제
+- 로봇 연결 가드 27곳 반복
+- tag_id 획득 10곳, 마커 검색+중심점 5곳 반복
+- 함수 내 중복 import 19곳 (time 10회, QApplication 9회)
+- combined 메서드가 개별 축 정렬 로직 인라인 복제 (128줄)
+
+**수정 파일:** `scripts/main_window.py`
+
+**수정 내용 (3단계 리팩터링):**
+
+Phase 1 — 안전한 헬퍼 추출 (-73줄):
+- 중복 import 19곳 제거
+- `_require_robot()` 가드 (21곳 적용)
+- `_get_target_tag_ids()` (8곳 적용)
+- `_find_dual_marker_centers()` (4곳 적용)
+- `_get_effective_ry()` (11곳 적용)
+- `_settle()` (30+곳 적용)
+- `_set_buttons_enabled()` 범용화
+
+Phase 2 — 검출/안정화 통합 (-73줄):
+- `_detect_dual_alignment()` 통합 검출 함수 (4개 함수 → 1개 + 4 thin wrapper)
+- `_wait_for_position_stable()` 위치 안정화 통합 (3곳 → 1개)
+
+Phase 3 — combined 재구성 (-35줄):
+- `_stereo_align_z_core()`, `_stereo_align_y_core()` 코어 로직 분리
+- `_on_stereo_calib_align_aruco_combined()` → 코어 메서드 호출로 재구성
+- 적응형 정렬 통합은 분할 이동 차이로 보류 (상호 참조 주석 추가)
+
+**결과:** 3960줄 → 3779줄 (총 -181줄, 4.6% 감소). 헬퍼 함수 10개 추출.
+
+---

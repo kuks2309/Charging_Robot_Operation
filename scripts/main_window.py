@@ -293,6 +293,15 @@ class MainWindow(QMainWindow):
         self.status_timer.timeout.connect(self._update_robot_status)
         # 연결 후 시작됨
 
+    # ==================== 유틸리티 헬퍼 ====================
+
+    def _require_robot(self) -> bool:
+        """로봇 연결 확인. 미연결 시 경고 표시 후 False 반환"""
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return False
+        return True
+
     # ==================== 탭 시그널 핸들러 ====================
 
     def _on_task_sequence_changed(self, sequence: list):
@@ -305,8 +314,7 @@ class MainWindow(QMainWindow):
 
     def _on_read_current_position_from_tab(self):
         """현재 위치 읽기 요청 (TabTaskEdit 시그널 핸들러)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         current_pose = self.robot.read_current_pose()
@@ -326,8 +334,7 @@ class MainWindow(QMainWindow):
         vision_tasks = ['detect_aruco']
 
         if task_type not in vision_tasks:
-            if not self.robot or not self.robot.is_connected:
-                QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            if not self._require_robot():
                 return
 
         self._log(f"Task 실행: {task_type}")
@@ -525,8 +532,6 @@ class MainWindow(QMainWindow):
 
     def _execute_detect_dual_aruco_plane(self, params: dict):
         """듀얼 ArUco 평면 추출 실행"""
-        import time
-
         tag_id1 = params.get('tag_id1', 0)
         tag_id2 = params.get('tag_id2', 1)
         num_samples = params.get('num_samples', 20)
@@ -613,8 +618,6 @@ class MainWindow(QMainWindow):
 
     def _execute_align_aruco_pose(self, params: dict):
         """듀얼 ArUco 기반 자세 정렬 실행"""
-        import time
-
         tag_id1 = params.get('tag_id1', 0)
         tag_id2 = params.get('tag_id2', 1)
         num_samples = params.get('num_samples', 20)
@@ -877,25 +880,15 @@ class MainWindow(QMainWindow):
         if not success:
             self._log(f"TF{tf} 설정 실패: {msg}")
             return False
-        import time
         time.sleep(0.2)  # PRS 클린업 대기 (레이스 컨디션 방지)
         return True
 
     def _on_jog_move_from_tab(self, axis: str, distance: float):
         """조그 이동 요청 (TabTaskEdit 시그널 핸들러)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
-        # Command 매핑
-        cmd_map = {
-            'x': self.robot.CMD_BASE_LINEAR_X,
-            'y': self.robot.CMD_BASE_LINEAR_Y,
-            'z': self.robot.CMD_BASE_LINEAR_Z,
-        }
-
-        cmd = cmd_map.get(axis)
-        if cmd is None:
+        if axis not in ('x', 'y', 'z'):
             self._log(f"알 수 없는 축: {axis}")
             return
 
@@ -911,8 +904,7 @@ class MainWindow(QMainWindow):
 
     def _on_jog_rotate_from_tab(self, axis: str, angle: float):
         """조그 회전 요청 (TabTaskEdit 시그널 핸들러)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         # 베이스 좌표계 회전 (processEvents 콜백으로 UI 블로킹 방지)
@@ -927,11 +919,9 @@ class MainWindow(QMainWindow):
 
     def _on_ar_tag_align_base_ry(self, angle: float):
         """ArUco 정렬 탭 - Robot base 기준 Ry movel 보정"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
         try:
-            from PyQt5.QtWidgets import QApplication
             self._log(f"[ArUco] Base Ry 보정: {angle:.2f}°")
             success, msg = self.robot.send_base_rotate(
                 'ry', angle, wait=True,
@@ -946,12 +936,10 @@ class MainWindow(QMainWindow):
 
     def _on_ar_tag_align_base_rz(self, angle: float, distance: float):
         """ArUco 정렬 탭 - Robot base 기준 Rz movel + Y 보정"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
         try:
             import math
-            from PyQt5.QtWidgets import QApplication
 
             current_pose = self.robot.read_current_pose()
             if current_pose is None:
@@ -984,9 +972,13 @@ class MainWindow(QMainWindow):
         1단계: +5mm 테스트 이동 → px/mm 비율 산출 (부호 자동 결정)
         2단계: 비율 기반 보정 이동 (fine translate, 0.1mm 해상도)
         3단계: 재측정 검증
+
+        Note:
+            _ds435_adaptive_align()과 알고리즘 구조가 유사하나
+            MAX_CORRECTION 초과 시 처리가 다름 (이쪽: 안전 중단,
+            DS435: 2단계 분할 이동). 측정 함수도 상이하여 통합 보류.
         """
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         DEAD_ZONE_PX = 3
@@ -998,9 +990,6 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            import time
-            from PyQt5.QtWidgets import QApplication
-
             d0 = dy_px
             # 오프셋 반대 방향으로 테스트 (d0>0: 마커 오른쪽 → Y-, d0<0: 마커 왼쪽 → Y+)
             test_cmd = -TEST_MM if d0 > 0 else TEST_MM
@@ -1023,25 +1012,9 @@ class MainWindow(QMainWindow):
                 return
 
             # 위치 안정화 대기: 이동 후 위치가 변하지 않을 때까지 폴링 (최대 10초)
-            actual_mm = 0.0
-            last_y = y_before
-            stable_count = 0
-            deadline = time.time() + 10.0
-            while time.time() < deadline:
-                time.sleep(0.2)
-                QApplication.processEvents()
-                pose_now = self.robot.read_current_pose()
-                if pose_now is None:
-                    continue
-                current_y = pose_now[1]
-                if abs(current_y - last_y) < 0.05:
-                    stable_count += 1
-                    if stable_count >= 3 and abs(current_y - y_before) > 0.1:
-                        break  # 3회 연속 안정 + 실제 이동 있음
-                else:
-                    stable_count = 0
-                last_y = current_y
-            actual_mm = last_y - y_before
+            _, final_y = self._wait_for_position_stable(
+                axis_idx=1, reference_val=y_before)
+            actual_mm = final_y - y_before
             self._log(f"[ArUco] 실제 이동: {actual_mm:.2f}mm (명령: {test_cmd:+.1f}mm)")
 
             if abs(actual_mm) < 0.5:
@@ -1092,8 +1065,7 @@ class MainWindow(QMainWindow):
             total_mm = test_cmd + correction_mm
 
             # --- 3단계: 이동완료 대기 후 검증 ---
-            time.sleep(0.5)
-            QApplication.processEvents()
+            self._settle(0.5)
 
             d_final = self._measure_marker_dy_px()
             if d_final is not None:
@@ -1105,6 +1077,155 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log(f"[ArUco] Base Y 보정 오류: {e}")
 
+    def _get_target_tag_ids(self):
+        """ArUco 탭에서 타겟 마커 ID 쌍 반환"""
+        return (self.tabArucoReliability.spinTagID1.value(),
+                self.tabArucoReliability.spinTagID2.value())
+
+    def _set_buttons_enabled(self, tab, button_names, enabled: bool):
+        """탭의 버튼들 활성화/비활성화"""
+        for btn_name in button_names:
+            btn = getattr(tab, btn_name, None)
+            if btn:
+                btn.setEnabled(enabled)
+
+    def _settle(self, delay=0.3):
+        """이동 후 안정화 대기 + UI 이벤트 처리"""
+        time.sleep(delay)
+        QApplication.processEvents()
+
+    def _get_effective_ry(self, alignment):
+        """alignment에서 유효 Ry 반환 (3D 우선, fallback 2D)"""
+        if alignment.angle_3d is not None:
+            return alignment.angle_3d
+        return alignment.angle_2d if alignment.angle_2d is not None else 0.0
+
+    def _find_dual_marker_centers(self, markers, tag_id1, tag_id2):
+        """마커 리스트에서 두 ID 검색 후 중심점 반환. 미발견 시 None"""
+        m1, m2 = None, None
+        for m in markers:
+            if m['id'] == tag_id1:
+                m1 = m
+            elif m['id'] == tag_id2:
+                m2 = m
+        if m1 is None or m2 is None:
+            return None
+        c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
+        c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+        return c1, c2
+
+    def _detect_dual_alignment(self, frame, display_label=None, max_retries=1,
+                               display_func=None, frame_source=None):
+        """통합 ArUco 듀얼 마커 검출 + 오버레이 표시
+
+        Args:
+            frame: 입력 프레임 (None이면 None 반환)
+            display_label: 오버레이 표시 대상 QLabel (None이면 표시 안함)
+            max_retries: 검출 재시도 횟수
+            display_func: 오버레이 표시 함수 (frame, label). None이면 display_frame_on_label 사용
+            frame_source: 재시도 시 최신 프레임 획득 callable (None이면 최초 frame 재사용)
+
+        Returns:
+            DualMarkerAlignmentResult or None
+        """
+        from utils.common import display_frame_on_label as _default_display
+
+        if display_func is None:
+            display_func = _default_display
+
+        camera_matrix = self.tabArucoReliability.camera_matrix
+        dist_coeffs = self.tabArucoReliability.dist_coeffs
+        tag_id1, tag_id2 = self._get_target_tag_ids()
+
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    QApplication.processEvents()
+                cur_frame = frame_source() if (attempt > 0 and frame_source) else frame
+                if cur_frame is None:
+                    self._log("[Detect] 검출 실패: 프레임 없음")
+                    if attempt < max_retries - 1:
+                        time.sleep(0.2)
+                        continue
+                    return None
+                work = cur_frame.copy()
+
+                markers = self.vision_manager.detect_marker_centers(
+                    work, camera_matrix, dist_coeffs, estimate_pose=True
+                )
+
+                h, w = work.shape[:2]
+                alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
+
+                # 오버레이 표시
+                if display_label is not None:
+                    display = work.copy()
+                    draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
+                    display_func(display, display_label)
+
+                if alignment is not None:
+                    return alignment
+
+                if attempt < max_retries - 1:
+                    self._log(f"[Detect] 마커 미검출 (시도 {attempt+1}/{max_retries}), 재시도...")
+                    time.sleep(0.3)
+                else:
+                    self._log(f"[Detect] 마커 {tag_id1}/{tag_id2} 미검출"
+                              + (f" ({max_retries}회 실패)" if max_retries > 1 else ""))
+
+            except Exception as e:
+                self._log(f"[Detect] 검출 오류: {e}")
+                return None
+
+        return None
+
+    def _wait_for_position_stable(self, axis_idx, reference_val=None,
+                                  threshold=0.05, min_delta=0.1,
+                                  stable_count_needed=3, timeout=10.0,
+                                  cancel_callback=None):
+        """로봇 이동 후 위치 안정화 대기
+
+        Args:
+            axis_idx: pose 배열 인덱스 (0=X, 1=Y, 2=Z)
+            reference_val: 이동 전 좌표값 (None이면 첫 측정값 사용)
+            threshold: 연속 측정 간 변화 임계값 (mm)
+            min_delta: 이동 전 대비 최소 변화량 (mm, 0이면 변화량 체크 안함)
+            stable_count_needed: 안정 판정 연속 횟수
+            timeout: 최대 대기 시간 (초)
+            cancel_callback: 취소 확인 callable (True 반환 시 중단)
+
+        Returns:
+            (stable: bool, final_value: float)
+        """
+        start = time.time()
+        stable_count = 0
+        pose = self.robot.read_current_pose()
+        if pose is None:
+            return False, 0.0
+        last_val = pose[axis_idx]
+        if reference_val is None:
+            reference_val = last_val
+
+        while time.time() - start < timeout:
+            time.sleep(0.2)
+            QApplication.processEvents()
+            if cancel_callback and cancel_callback():
+                return False, last_val
+            pose_now = self.robot.read_current_pose()
+            if pose_now is None:
+                continue
+            current_val = pose_now[axis_idx]
+            if abs(current_val - last_val) < threshold:
+                stable_count += 1
+                if stable_count >= stable_count_needed:
+                    if min_delta == 0 or abs(current_val - reference_val) > min_delta:
+                        return True, current_val
+            else:
+                stable_count = 0
+            last_val = current_val
+
+        return False, last_val
+
     # ==================== ArUco 신뢰성 탭 통합 정렬 핸들러 ====================
 
     def _aruco_tab_detect_alignment(self):
@@ -1113,57 +1234,20 @@ class MainWindow(QMainWindow):
         Returns:
             DualMarkerAlignmentResult or None
         """
-        from utils.common import display_frame_on_label
-        from Sensor.aruco.aruco_detector import compute_dual_alignment, draw_dual_marker_overlay
-
-        try:
-            tab = self.tabArucoReliability
-            frame = tab.current_frame
-            if frame is None:
-                self._log("[ArUco Align] 검출 실패: 프레임 없음")
-                return None
-            frame = frame.copy()
-
-            camera_matrix = tab.camera_matrix
-            dist_coeffs = tab.dist_coeffs
-            tag_id1 = tab.spinTagID1.value()
-            tag_id2 = tab.spinTagID2.value()
-
-            markers = self.vision_manager.detect_marker_centers(
-                frame, camera_matrix, dist_coeffs, estimate_pose=True
-            )
-            self._log(f"[ArUco Align] 검출: {len(markers)}개 마커, IDs={[m['id'] for m in markers]}")
-
-            h, w = frame.shape[:2]
-            alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
-
-            # 오버레이 표시
-            display = frame.copy()
-            draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
-            display_frame_on_label(display, tab.labelCameraView)
-
-            if alignment is None:
-                self._log(f"[ArUco Align] 마커 {tag_id1}/{tag_id2} 미검출")
-                return None
-
-            return alignment
-
-        except Exception as e:
-            self._log(f"[ArUco Align] 검출 오류: {e}")
-            return None
+        frame = getattr(self.tabArucoReliability, 'current_frame', None)
+        label = getattr(self.tabArucoReliability, 'labelCameraView', None)
+        return self._detect_dual_alignment(frame, label)
 
     def _set_aruco_align_buttons_enabled(self, enabled: bool):
         """통합 정렬 버튼 활성화/비활성화"""
-        tab = self.tabArucoReliability
-        for btn_name in ('btnAlignArucoY', 'btnAlignArucoX', 'btnAlignArucoCombined'):
-            btn = getattr(tab, btn_name, None)
-            if btn:
-                btn.setEnabled(enabled)
+        self._set_buttons_enabled(
+            self.tabArucoReliability,
+            ('btnAlignArucoY', 'btnAlignArucoX', 'btnAlignArucoCombined'),
+            enabled)
 
     def _on_aruco_align_y(self):
         """ArUco 정렬 Y: Ry 보정 + Base Y 보정 (detect-correct-redetect 패턴)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         self._set_aruco_align_buttons_enabled(False)
@@ -1177,12 +1261,11 @@ class MainWindow(QMainWindow):
                 return
 
             # 2) Ry 보정 (>=0.5deg)
-            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
+            active_ry = self._get_effective_ry(alignment)
             if active_ry is not None and abs(active_ry) >= 0.5:
                 self._log(f"[ArUco Y] Ry 보정: {active_ry:.2f}°")
                 self._on_ar_tag_align_base_ry(active_ry)
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
             else:
                 self._log(f"[ArUco Y] Ry 보정 불필요: {active_ry}°")
 
@@ -1192,15 +1275,14 @@ class MainWindow(QMainWindow):
                 if abs(alignment2.offset_y) >= 5.0:
                     self._log(f"[ArUco Y] Y 보정: {alignment2.offset_y:.1f}px")
                     self._on_ar_tag_align_base_y(alignment2.offset_y)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+                    self._settle()
                 else:
                     self._log(f"[ArUco Y] Y 보정 불필요: {alignment2.offset_y:.1f}px")
 
             # 4) 최종 검출 + 결과
             alignment3 = self._aruco_tab_detect_alignment()
             if alignment3 is not None:
-                ry_f = alignment3.angle_3d if alignment3.angle_3d is not None else alignment3.angle_2d
+                ry_f = self._get_effective_ry(alignment3)
                 self._log(f"[ArUco Y] 정렬 완료: Ry={ry_f:.2f}°, offset_y={alignment3.offset_y:.1f}px")
             else:
                 self._log("[ArUco Y] 최종 검출 실패")
@@ -1212,8 +1294,7 @@ class MainWindow(QMainWindow):
 
     def _on_aruco_align_x(self):
         """ArUco 정렬 X: Rz 보정 (세로축 깊이 차이 기반)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         self._set_aruco_align_buttons_enabled(False)
@@ -1236,8 +1317,7 @@ class MainWindow(QMainWindow):
 
                 self._log(f"[ArUco X] Rz 보정: {alignment.angle_rx:.2f}°, D={distance:.0f}mm")
                 self._on_ar_tag_align_base_rz(alignment.angle_rx, distance)
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
             else:
                 rx_disp = alignment.angle_rx if alignment.angle_rx is not None else 0
                 self._log(f"[ArUco X] Rz 보정 불필요: {rx_disp:.2f}°")
@@ -1257,8 +1337,7 @@ class MainWindow(QMainWindow):
 
     def _on_aruco_align_combined(self):
         """통합 ArUco 정렬: Y축 먼저 → X축 (수평 정렬이 Rz 정확도에 영향)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         self._set_aruco_align_buttons_enabled(False)
@@ -1269,19 +1348,17 @@ class MainWindow(QMainWindow):
             # 1) Y 정렬 (Ry + Base Y)
             alignment = self._aruco_tab_detect_alignment()
             if alignment is not None:
-                active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
+                active_ry = self._get_effective_ry(alignment)
                 if active_ry is not None and abs(active_ry) >= 0.5:
                     self._log(f"[통합] Ry 보정: {active_ry:.2f}°")
                     self._on_ar_tag_align_base_ry(active_ry)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+                    self._settle()
 
                 alignment2 = self._aruco_tab_detect_alignment()
                 if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 5.0:
                     self._log(f"[통합] Y 보정: {alignment2.offset_y:.1f}px")
                     self._on_ar_tag_align_base_y(alignment2.offset_y)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+                    self._settle()
 
             # 2) X 정렬 (Rz)
             alignment3 = self._aruco_tab_detect_alignment()
@@ -1290,13 +1367,12 @@ class MainWindow(QMainWindow):
                 distance = getattr(tab, '_last_marker_distance', None) or 360.0
                 self._log(f"[통합] Rz 보정: {alignment3.angle_rx:.2f}°, D={distance:.0f}mm")
                 self._on_ar_tag_align_base_rz(alignment3.angle_rx, distance)
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
 
             # 3) 최종 결과
             final = self._aruco_tab_detect_alignment()
             if final is not None:
-                ry_f = final.angle_3d if final.angle_3d is not None else (final.angle_2d or 0)
+                ry_f = self._get_effective_ry(final)
                 rx_f = final.angle_rx if final.angle_rx is not None else 0
                 oy_f = final.offset_y if final.offset_y is not None else 0
                 self._log(f"[통합] 정렬 완료: Ry={ry_f:.2f}°, Rz={rx_f:.2f}°, offset_y={oy_f:.1f}px")
@@ -1315,8 +1391,7 @@ class MainWindow(QMainWindow):
             if frame is None:
                 return None
 
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+            tag_id1, tag_id2 = self._get_target_tag_ids()
 
             markers = self.vision_manager.detect_marker_centers(frame)
             m1, m2 = None, None
@@ -1354,9 +1429,6 @@ class MainWindow(QMainWindow):
         Note:
             px/mm < 8 인 경우 (DS435 등) 미세 정렬 효과 없으므로 건너뜀.
         """
-        import time
-        from PyQt5.QtWidgets import QApplication
-
         STEP_MM = 0.1
         CONVERGE_PX = 1.5
         ENTRY_PX = 10.0
@@ -1411,18 +1483,16 @@ class MainWindow(QMainWindow):
                 self._log(f"{log_prefix} 수렴 완료: {offset:.1f}px (반복 {i})")
                 return offset
 
-            # 0.1mm 이동
+            # 0.1mm 이동 (미세 이동은 PRS가 ~50ms 내 완료 → Running 감지 불가)
+            # wait=False + 고정 sleep으로 대체
             move_mm = direction * STEP_MM
             success, msg = self.robot.send_base_linear(
-                axis, move_mm, wait=True,
-                process_events_callback=QApplication.processEvents)
+                axis, move_mm, wait=False)
             if not success:
                 self._log(f"{log_prefix} 이동 실패: {msg}")
                 break
-
-            # 포스트-무브 측정
-            time.sleep(0.15)
-            QApplication.processEvents()
+            # 포스트-무브 측정 (0.1mm 이동은 PRS ~50ms 완료 → 0.3s 여유)
+            self._settle(0.3)
             new_offset = averaged_measure()
             if new_offset is None:
                 self._log(f"{log_prefix} 측정 실패 (반복 {i+1})")
@@ -1452,13 +1522,10 @@ class MainWindow(QMainWindow):
 
     def _on_ar_tag_align_single_axis(self, axis: str, angle: float):
         """AR Tag TCP Align - 개별 축 tool.rot 테스트"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
         try:
             dbg = self.tabArucoReliability.txtAlignDebug
-            import time
-            from PyQt5.QtWidgets import QApplication
 
             # Vision→Robot 축 매핑 (카메라 마운트 기준)
             axis_map = {'rx': 'ry', 'ry': 'rz', 'rz': 'rx'}
@@ -1502,14 +1569,11 @@ class MainWindow(QMainWindow):
 
     def _on_ar_tag_align_parallel(self, drx: float, dry: float, drz: float):
         """AR Tag TCP Align - TF4 기준 tool.rot 회전으로 마커 평행 정렬"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         try:
             dbg = self.tabArucoReliability.txtAlignDebug
-            import time
-            from PyQt5.QtWidgets import QApplication
 
             # TF4로 변경
             success, msg = self.robot.send_set_toolframe(4, wait=True)
@@ -1539,11 +1603,11 @@ class MainWindow(QMainWindow):
                     robot_axis, angle, wait=True,
                     process_events_callback=QApplication.processEvents)
                 if not success:
-                    dbg.append(f"  {axis.upper()} 실패: {msg}")
-                    self._log(f"[AR Tag] {axis.upper()} 회전 실패: {msg}")
-                    QMessageBox.warning(self, "오류", f"{axis.upper()} 회전 실패:\n{msg}")
+                    dbg.append(f"  {vision_axis.upper()} 실패: {msg}")
+                    self._log(f"[AR Tag] {vision_axis.upper()} 회전 실패: {msg}")
+                    QMessageBox.warning(self, "오류", f"{vision_axis.upper()} 회전 실패:\n{msg}")
                     return
-                dbg.append(f"  {axis.upper()} → {round(angle, 1)}° 완료")
+                dbg.append(f"  {vision_axis.upper()} → {round(angle, 1)}° 완료")
                 time.sleep(0.2)  # PRS 클린업 대기
 
             # 정렬 후 자세
@@ -1722,8 +1786,7 @@ class MainWindow(QMainWindow):
     def _on_calib_align_aruco(self):
         """ArUco 정렬 버튼: 검출 → Ry 보정 → Y 중심 정렬"""
         self._cached_error_per_mm = None  # 정렬 변경 → 감도 캐시 무효화
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabLaserCalibration
@@ -1741,8 +1804,7 @@ class MainWindow(QMainWindow):
             if abs(angle_ry) >= 0.5:
                 tab._update_calib_step(1, f"Ry 보정 중: {angle_ry:.2f}°")
                 self._on_ar_tag_align_base_ry(angle_ry)
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
                 self._log(f"[Calib] Ry 보정 완료: {angle_ry:.2f}°")
             else:
                 self._log(f"[Calib] Ry 보정 불필요: {angle_ry:.2f}°")
@@ -1754,8 +1816,7 @@ class MainWindow(QMainWindow):
                 if abs(offset_y2) >= 5.0:
                     tab._update_calib_step(1, f"Y 보정 중: {offset_y2:.1f}px")
                     self._on_ar_tag_align_base_y(offset_y2)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+                    self._settle()
                     self._log(f"[Calib] Y 보정 완료: {offset_y2:.1f}px")
                 else:
                     self._log(f"[Calib] Y 보정 불필요: {offset_y2:.1f}px")
@@ -1782,146 +1843,119 @@ class MainWindow(QMainWindow):
             (angle_ry, offset_y) tuple, or None if detection fails.
             angle_ry: Ry 보정 각도 (°), offset_y: 이미지 중심 대비 마커 중점 X 오프셋 (px)
         """
-        from utils.common import display_frame_on_label
-
-        try:
-            frame = self.tabLaserCalibration.current_frame
-            if frame is None:
-                self._log("[Calib] ArUco 검출 실패: 프레임 없음 (카메라 시작 필요)")
-                return None
-            frame = frame.copy()
-
-            camera_matrix = self.tabArucoReliability.camera_matrix
-            dist_coeffs = self.tabArucoReliability.dist_coeffs
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
-
-            markers = self.vision_manager.detect_marker_centers(
-                frame, camera_matrix, dist_coeffs, estimate_pose=True
-            )
-            self._log(f"[Calib] ArUco 검출 결과: {len(markers)}개 마커, IDs={[m['id'] for m in markers]}, 찾는 ID={tag_id1},{tag_id2}")
-
-            h, w = frame.shape[:2]
-            alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
-
-            # Draw overlay on display copy
-            display = frame.copy()
-            draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
-            display_frame_on_label(display, self.tabLaserCalibration.labelCameraView)
-
-            if alignment is None:
-                self._log(f"[Calib] ArUco 검출 실패: 마커 {tag_id1}/{tag_id2} 미검출")
-                return None
-
-            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
-            self._log(f"[Calib] ArUco 검출: Ry={active_ry:.2f}°, offset_y={alignment.offset_y:.1f}px")
-            return (active_ry, alignment.offset_y)
-
-        except Exception as e:
-            self._log(f"[Calib] ArUco 검출 오류: {e}")
+        frame = getattr(self.tabLaserCalibration, 'current_frame', None)
+        label = getattr(self.tabLaserCalibration, 'labelCameraView', None)
+        result = self._detect_dual_alignment(frame, label)
+        if result is None:
             return None
+        active_ry = self._get_effective_ry(result)
+        return (active_ry, result.offset_y)
 
     # ==================== 스테레오 캘리브레이션 핸들러 ====================
 
+    def _stereo_align_z_core(self, tab):
+        """스테레오 Z축 세로 정렬 코어 로직 (버튼/예외 관리 없음)
+
+        테스트 이동 → px/mm 산출 → 보정 이동 → 검증.
+
+        Returns:
+            (success: bool, msg: str)
+        """
+        DEAD_ZONE_PX = 5
+        TEST_MM = 3.0
+        MAX_CORRECTION_MM = 30.0
+
+        tab._update_calib_step(1, "ArUco 정렬 Y: 마커 검출 중...")
+
+        alignment = self._stereo_detect_full_alignment()
+        if alignment is None:
+            return (False, "ArUco 검출 실패")
+
+        # offset_z = mid_y - img_cy (이미지 세로 오프셋, 양수=아래)
+        pz0 = alignment.offset_z
+        if pz0 is None or abs(pz0) < DEAD_ZONE_PX:
+            pz_disp = pz0 if pz0 is not None else 0
+            self._log(f"[StereoCalib Y] Z 보정 불필요: offset_z={pz_disp:.1f}px")
+            return (True, f"Y 정렬 완료 (offset_z {pz_disp:.1f}px < {DEAD_ZONE_PX}px)")
+
+        self._log(f"[StereoCalib Y] 세로 오프셋: offset_z={pz0:.1f}px, "
+                  f"offset_y={alignment.offset_y:.1f}px, "
+                  f"mid=({alignment.mid_x:.0f},{alignment.mid_y:.0f})")
+
+        # 1) 테스트 이동: Z +TEST_MM
+        tab._update_calib_step(1, f"테스트 이동: Z +{TEST_MM:.1f}mm")
+        success, msg = self.robot.send_base_linear(
+            'z', TEST_MM, wait=True,
+            process_events_callback=QApplication.processEvents)
+        if not success:
+            self._log(f"[StereoCalib Y] 테스트 이동 실패: {msg}")
+            return (False, f"이동 실패: {msg}")
+        # 프레임 갱신 대기 (ArduCam 새 프레임 보장)
+        for _ in range(10):
+            time.sleep(0.1)
+            QApplication.processEvents()
+
+        # 2) 재검출 → px/mm 비율 산출
+        alignment2 = self._stereo_detect_full_alignment()
+        if alignment2 is None or alignment2.offset_z is None:
+            self._log("[StereoCalib Y] 재검출 실패, 원위치 복귀")
+            self.robot.send_base_linear('z', -TEST_MM, wait=True,
+                process_events_callback=QApplication.processEvents)
+            return (False, "재검출 실패")
+
+        pz1 = alignment2.offset_z
+        delta_pz = pz1 - pz0
+        delta_py = alignment2.offset_y - alignment.offset_y
+        self._log(f"[StereoCalib Y] 테스트 후: offset_z={pz1:.1f}px (delta={delta_pz:.1f}), "
+                  f"offset_y={alignment2.offset_y:.1f}px (delta={delta_py:.1f}), "
+                  f"mid=({alignment2.mid_x:.0f},{alignment2.mid_y:.0f})")
+
+        if abs(delta_pz) < 1.0:
+            self._log(f"[StereoCalib Y] offset_z 변화 미미 ({delta_pz:.1f}px), 원위치 복귀")
+            self.robot.send_base_linear('z', -TEST_MM, wait=True,
+                process_events_callback=QApplication.processEvents)
+            return (False, f"Z 감도 부족 (delta_z={delta_pz:.1f}, delta_y={delta_py:.1f})")
+
+        px_per_mm = delta_pz / TEST_MM
+        correction_mm = -pz1 / px_per_mm
+
+        if abs(correction_mm) > MAX_CORRECTION_MM:
+            correction_mm = MAX_CORRECTION_MM if correction_mm > 0 else -MAX_CORRECTION_MM
+
+        self._log(f"[StereoCalib Y] px/mm={px_per_mm:.2f}, 보정: {correction_mm:.2f}mm")
+
+        # 3) 보정 이동
+        tab._update_calib_step(1, f"Z 보정: {correction_mm:.1f}mm")
+        success2, msg2 = self.robot.send_base_linear(
+            'z', correction_mm, wait=True,
+            process_events_callback=QApplication.processEvents)
+        if not success2:
+            self._log(f"[StereoCalib Y] 보정 이동 실패: {msg2}")
+        for _ in range(5):
+            time.sleep(0.1)
+            QApplication.processEvents()
+
+        # 4) 최종 결과
+        final = self._stereo_detect_full_alignment()
+        if final is not None:
+            oz_f = final.offset_z if final.offset_z is not None else 0
+            result_msg = f"Y 정렬 완료: offset_z={oz_f:.1f}px"
+            self._log(f"[StereoCalib Y] {result_msg}")
+            return (True, result_msg)
+        else:
+            return (False, "최종 검출 실패")
+
     def _on_stereo_calib_align_aruco(self):
         """스테레오 탭 ArUco 정렬 Y: Z축 이동으로 이미지 세로(mid_y) 중심 정렬."""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabStereoCalibration
         self._set_stereo_align_buttons_enabled(False)
         try:
             QApplication.processEvents()
-            tab._update_calib_step(1, "ArUco 정렬 Y: 마커 검출 중...")
-
-            DEAD_ZONE_PX = 5
-            TEST_MM = 3.0
-            MAX_CORRECTION_MM = 30.0
-
-            alignment = self._stereo_detect_full_alignment()
-            if alignment is None:
-                tab._update_calib_step(0, "ArUco 검출 실패")
-                return
-
-            # offset_z = mid_y - img_cy (이미지 세로 오프셋, 양수=아래)
-            pz0 = alignment.offset_z
-            if pz0 is None or abs(pz0) < DEAD_ZONE_PX:
-                pz_disp = pz0 if pz0 is not None else 0
-                self._log(f"[StereoCalib Y] Z 보정 불필요: offset_z={pz_disp:.1f}px")
-                tab._update_calib_step(0, f"Y 정렬 완료 (offset_z {pz_disp:.1f}px < {DEAD_ZONE_PX}px)")
-                return
-
-            self._log(f"[StereoCalib Y] 세로 오프셋: offset_z={pz0:.1f}px, "
-                      f"offset_y={alignment.offset_y:.1f}px, "
-                      f"mid=({alignment.mid_x:.0f},{alignment.mid_y:.0f})")
-
-            # 1) 테스트 이동: Z +TEST_MM
-            tab._update_calib_step(1, f"테스트 이동: Z +{TEST_MM:.1f}mm")
-            success, msg = self.robot.send_base_linear(
-                'z', TEST_MM, wait=True,
-                process_events_callback=QApplication.processEvents)
-            if not success:
-                self._log(f"[StereoCalib Y] 테스트 이동 실패: {msg}")
-                tab._update_calib_step(0, f"이동 실패: {msg}")
-                return
-            # 프레임 갱신 대기 (ArduCam 새 프레임 보장)
-            for _ in range(10):
-                time.sleep(0.1)
-                QApplication.processEvents()
-
-            # 2) 재검출 → px/mm 비율 산출
-            alignment2 = self._stereo_detect_full_alignment()
-            if alignment2 is None or alignment2.offset_z is None:
-                self._log("[StereoCalib Y] 재검출 실패, 원위치 복귀")
-                self.robot.send_base_linear('z', -TEST_MM, wait=True,
-                    process_events_callback=QApplication.processEvents)
-                tab._update_calib_step(0, "재검출 실패")
-                return
-
-            pz1 = alignment2.offset_z
-            delta_pz = pz1 - pz0
-            delta_py = alignment2.offset_y - alignment.offset_y
-            self._log(f"[StereoCalib Y] 테스트 후: offset_z={pz1:.1f}px (delta={delta_pz:.1f}), "
-                      f"offset_y={alignment2.offset_y:.1f}px (delta={delta_py:.1f}), "
-                      f"mid=({alignment2.mid_x:.0f},{alignment2.mid_y:.0f})")
-
-            if abs(delta_pz) < 1.0:
-                self._log(f"[StereoCalib Y] offset_z 변화 미미 ({delta_pz:.1f}px), 원위치 복귀")
-                self.robot.send_base_linear('z', -TEST_MM, wait=True,
-                    process_events_callback=QApplication.processEvents)
-                tab._update_calib_step(0, f"Z 감도 부족 (delta_z={delta_pz:.1f}, delta_y={delta_py:.1f})")
-                return
-
-            px_per_mm = delta_pz / TEST_MM
-            correction_mm = -pz1 / px_per_mm
-
-            if abs(correction_mm) > MAX_CORRECTION_MM:
-                correction_mm = MAX_CORRECTION_MM if correction_mm > 0 else -MAX_CORRECTION_MM
-
-            self._log(f"[StereoCalib Y] px/mm={px_per_mm:.2f}, 보정: {correction_mm:.2f}mm")
-
-            # 3) 보정 이동
-            tab._update_calib_step(1, f"Z 보정: {correction_mm:.1f}mm")
-            success2, msg2 = self.robot.send_base_linear(
-                'z', correction_mm, wait=True,
-                process_events_callback=QApplication.processEvents)
-            if not success2:
-                self._log(f"[StereoCalib Y] 보정 이동 실패: {msg2}")
-            for _ in range(5):
-                time.sleep(0.1)
-                QApplication.processEvents()
-
-            # 4) 최종 결과
-            final = self._stereo_detect_full_alignment()
-            if final is not None:
-                oz_f = final.offset_z if final.offset_z is not None else 0
-                msg = f"Y 정렬 완료: offset_z={oz_f:.1f}px"
-                self._log(f"[StereoCalib Y] {msg}")
-                tab._update_calib_step(0, msg)
-            else:
-                tab._update_calib_step(0, "최종 검출 실패")
-
+            success, msg = self._stereo_align_z_core(tab)
+            tab._update_calib_step(0, msg)
         except Exception as e:
             self._log(f"[StereoCalib Y] 오류: {e}")
             tab._update_calib_step(0, f"오류: {e}")
@@ -1934,43 +1968,15 @@ class MainWindow(QMainWindow):
         Returns:
             (angle_ry, offset_y) tuple, or None if detection fails.
         """
-        from utils.common import display_frame_on_label
-
-        try:
-            frame = self.tabStereoCalibration.current_frame
-            if frame is None:
-                self._log("[StereoCalib] ArUco 검출 실패: 프레임 없음")
-                return None
-            frame = frame.copy()
-
-            camera_matrix = self.tabArucoReliability.camera_matrix
-            dist_coeffs = self.tabArucoReliability.dist_coeffs
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
-
-            markers = self.vision_manager.detect_marker_centers(
-                frame, camera_matrix, dist_coeffs, estimate_pose=True
-            )
-            self._log(f"[StereoCalib] ArUco 검출: {len(markers)}개, IDs={[m['id'] for m in markers]}")
-
-            h, w = frame.shape[:2]
-            alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
-
-            display = frame.copy()
-            draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
-            self.tabStereoCalibration._display_fixed(display, self.tabStereoCalibration.labelArduCamView)
-
-            if alignment is None:
-                self._log(f"[StereoCalib] 마커 {tag_id1}/{tag_id2} 미검출")
-                return None
-
-            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
-            self._log(f"[StereoCalib] Ry={active_ry:.2f}°, offset_y={alignment.offset_y:.1f}px")
-            return (active_ry, alignment.offset_y)
-
-        except Exception as e:
-            self._log(f"[StereoCalib] ArUco 검출 오류: {e}")
+        frame = getattr(self.tabStereoCalibration, 'current_frame', None)
+        label = getattr(self.tabStereoCalibration, 'labelArduCamView', None)
+        result = self._detect_dual_alignment(
+            frame, label,
+            display_func=self.tabStereoCalibration._display_fixed)
+        if result is None:
             return None
+        active_ry = self._get_effective_ry(result)
+        return (active_ry, result.offset_y)
 
     def _stereo_detect_full_alignment(self, max_retries=3):
         """스테레오 탭 ArduCam 프레임에서 전체 정렬 결과 반환.
@@ -1981,108 +1987,79 @@ class MainWindow(QMainWindow):
         Returns:
             DualMarkerAlignmentResult or None
         """
-        camera_matrix = self.tabArucoReliability.camera_matrix
-        dist_coeffs = self.tabArucoReliability.dist_coeffs
-        tag_id1 = self.tabArucoReliability.spinTagID1.value()
-        tag_id2 = self.tabArucoReliability.spinTagID2.value()
-
-        for attempt in range(max_retries):
-            try:
-                QApplication.processEvents()
-                frame = self.tabStereoCalibration.current_frame
-                if frame is None:
-                    self._log("[StereoCalib] 검출 실패: 프레임 없음")
-                    time.sleep(0.2)
-                    continue
-                frame = frame.copy()
-
-                markers = self.vision_manager.detect_marker_centers(
-                    frame, camera_matrix, dist_coeffs, estimate_pose=True
-                )
-
-                h, w = frame.shape[:2]
-                alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
-
-                display = frame.copy()
-                draw_dual_marker_overlay(display, markers, tag_id1, tag_id2, alignment)
-                self.tabStereoCalibration._display_fixed(display, self.tabStereoCalibration.labelArduCamView)
-
-                if alignment is not None:
-                    return alignment
-
-                if attempt < max_retries - 1:
-                    self._log(f"[StereoCalib] 마커 미검출 (시도 {attempt+1}/{max_retries}), 재시도...")
-                    time.sleep(0.3)
-                else:
-                    self._log(f"[StereoCalib] 마커 {tag_id1}/{tag_id2} 미검출 ({max_retries}회 실패)")
-
-            except Exception as e:
-                self._log(f"[StereoCalib] 검출 오류: {e}")
-                return None
-
-        return None
+        frame = getattr(self.tabStereoCalibration, 'current_frame', None)
+        label = getattr(self.tabStereoCalibration, 'labelArduCamView', None)
+        return self._detect_dual_alignment(
+            frame, label, max_retries=max_retries,
+            display_func=self.tabStereoCalibration._display_fixed,
+            frame_source=lambda: getattr(self.tabStereoCalibration, 'current_frame', None))
 
     def _set_stereo_align_buttons_enabled(self, enabled: bool):
         """스테레오 탭 정렬 버튼 활성화/비활성화"""
-        tab = self.tabStereoCalibration
-        for btn_name in ('btnAlignArucoY', 'btnAlignArucoX', 'btnAlignArucoCombined',
-                         'btnAlignDS435', 'btnHandoffDS435ToArduCam'):
-            btn = getattr(tab, btn_name, None)
-            if btn:
-                btn.setEnabled(enabled)
+        self._set_buttons_enabled(
+            self.tabStereoCalibration,
+            ('btnAlignArucoY', 'btnAlignArucoX', 'btnAlignArucoCombined',
+             'btnAlignDS435', 'btnHandoffDS435ToArduCam'),
+            enabled)
+
+    def _stereo_align_y_core(self, tab):
+        """스테레오 Y축 가로 정렬 코어 로직 (Ry 보정 포함, 버튼/예외 관리 없음)
+
+        Ry 회전 보정 → Base Y 이동 보정 → 검증.
+
+        Returns:
+            (success: bool, msg: str)
+        """
+        tab._update_calib_step(1, "ArUco 정렬 X: 마커 검출 중...")
+
+        alignment = self._stereo_detect_full_alignment()
+        if alignment is None:
+            return (False, "ArUco 검출 실패")
+
+        # 1) Ry 보정 (마커 기울기 → 수평 회전)
+        active_ry = self._get_effective_ry(alignment)
+        if active_ry is not None and abs(active_ry) >= 0.5:
+            tab._update_calib_step(1, f"Ry 보정 중: {active_ry:.2f}°")
+            self._log(f"[StereoCalib X] Ry 보정: {active_ry:.2f}°")
+            self._on_ar_tag_align_base_ry(active_ry)
+            self._settle()
+        else:
+            ry_disp = active_ry if active_ry is not None else 0
+            self._log(f"[StereoCalib X] Ry 보정 불필요: {ry_disp:.2f}°")
+
+        # 2) 재검출 → Base Y 보정 (이미지 가로 중심 오프셋)
+        alignment2 = self._stereo_detect_full_alignment()
+        if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 5.0:
+            tab._update_calib_step(1, f"Base Y 보정 중: {alignment2.offset_y:.1f}px")
+            self._log(f"[StereoCalib X] Base Y 보정: {alignment2.offset_y:.1f}px")
+            self._on_ar_tag_align_base_y(alignment2.offset_y)
+            self._settle()
+        elif alignment2 is not None:
+            oy_disp = alignment2.offset_y if alignment2.offset_y is not None else 0
+            self._log(f"[StereoCalib X] Y 보정 불필요: {oy_disp:.1f}px")
+
+        # 3) 최종 결과
+        final = self._stereo_detect_full_alignment()
+        if final is not None:
+            ry_f = self._get_effective_ry(final)
+            oy_f = final.offset_y if final.offset_y is not None else 0
+            result_msg = f"X 정렬 완료: Ry={ry_f:.2f}°, dY={oy_f:.1f}px"
+            self._log(f"[StereoCalib X] {result_msg}")
+            return (True, result_msg)
+        else:
+            return (False, "정렬 후 재검출 실패")
 
     def _on_stereo_calib_align_aruco_x(self):
         """스테레오 탭 ArUco 정렬 X: Ry 회전 + Base Y 이동으로 이미지 가로 중심 정렬"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabStereoCalibration
         self._set_stereo_align_buttons_enabled(False)
         try:
             QApplication.processEvents()
-            tab._update_calib_step(1, "ArUco 정렬 X: 마커 검출 중...")
-
-            alignment = self._stereo_detect_full_alignment()
-            if alignment is None:
-                tab._update_calib_step(0, "ArUco 검출 실패")
-                return
-
-            # 1) Ry 보정 (마커 기울기 → 수평 회전)
-            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
-            if active_ry is not None and abs(active_ry) >= 0.5:
-                tab._update_calib_step(1, f"Ry 보정 중: {active_ry:.2f}°")
-                self._log(f"[StereoCalib X] Ry 보정: {active_ry:.2f}°")
-                self._on_ar_tag_align_base_ry(active_ry)
-                time.sleep(0.3)
-                QApplication.processEvents()
-            else:
-                ry_disp = active_ry if active_ry is not None else 0
-                self._log(f"[StereoCalib X] Ry 보정 불필요: {ry_disp:.2f}°")
-
-            # 2) 재검출 → Base Y 보정 (이미지 가로 중심 오프셋)
-            alignment2 = self._stereo_detect_full_alignment()
-            if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 5.0:
-                tab._update_calib_step(1, f"Base Y 보정 중: {alignment2.offset_y:.1f}px")
-                self._log(f"[StereoCalib X] Base Y 보정: {alignment2.offset_y:.1f}px")
-                self._on_ar_tag_align_base_y(alignment2.offset_y)
-                time.sleep(0.3)
-                QApplication.processEvents()
-            elif alignment2 is not None:
-                oy_disp = alignment2.offset_y if alignment2.offset_y is not None else 0
-                self._log(f"[StereoCalib X] Y 보정 불필요: {oy_disp:.1f}px")
-
-            # 3) 최종 결과
-            final = self._stereo_detect_full_alignment()
-            if final is not None:
-                ry_f = final.angle_3d if final.angle_3d is not None else (final.angle_2d or 0)
-                oy_f = final.offset_y if final.offset_y is not None else 0
-                msg = f"X 정렬 완료: Ry={ry_f:.2f}°, dY={oy_f:.1f}px"
-                self._log(f"[StereoCalib X] {msg}")
-                tab._update_calib_step(0, msg)
-            else:
-                tab._update_calib_step(0, "정렬 후 재검출 실패")
-
+            success, msg = self._stereo_align_y_core(tab)
+            tab._update_calib_step(0, msg)
         except Exception as e:
             self._log(f"[StereoCalib X] 오류: {e}")
             tab._update_calib_step(0, f"오류: {e}")
@@ -2091,8 +2068,7 @@ class MainWindow(QMainWindow):
 
     def _on_stereo_calib_align_aruco_combined(self):
         """스테레오 탭 통합 정렬: Y축(Z이동 세로중심) → X축(Ry+BaseY 가로중심) 순차 실행"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabStereoCalibration
@@ -2101,76 +2077,15 @@ class MainWindow(QMainWindow):
             self._log("[StereoCalib 통합] 통합 정렬 시작 (Y:Z축 → X:Ry+BaseY)")
             QApplication.processEvents()
 
-            DEAD_ZONE_PX = 5
-            TEST_MM = 3.0
-            MAX_CORRECTION_MM = 30.0
-
             # ── 1) Y 정렬: Z축 이동으로 이미지 세로(offset_z) 중심 정렬 ──
             tab._update_calib_step(1, "통합 정렬: Y축(세로) 보정 중...")
-            alignment = self._stereo_detect_full_alignment()
-            if alignment is not None:
-                pz0 = alignment.offset_z
-                if pz0 is not None and abs(pz0) >= DEAD_ZONE_PX:
-                    self._log(f"[StereoCalib 통합] 세로 오프셋: offset_z={pz0:.1f}px, 테스트 이동")
-
-                    success, msg = self.robot.send_base_linear(
-                        'z', TEST_MM, wait=True,
-                        process_events_callback=QApplication.processEvents)
-                    if success:
-                        for _ in range(10):
-                            time.sleep(0.1)
-                            QApplication.processEvents()
-
-                        alignment_t = self._stereo_detect_full_alignment()
-                        if alignment_t is not None and alignment_t.offset_z is not None:
-                            delta_pz = alignment_t.offset_z - pz0
-                            if abs(delta_pz) >= 1.0:
-                                px_per_mm = delta_pz / TEST_MM
-                                correction_mm = -alignment_t.offset_z / px_per_mm
-                                if abs(correction_mm) > MAX_CORRECTION_MM:
-                                    correction_mm = MAX_CORRECTION_MM if correction_mm > 0 else -MAX_CORRECTION_MM
-                                self._log(f"[StereoCalib 통합] Y: px/mm={px_per_mm:.2f}, 보정={correction_mm:.2f}mm")
-
-                                tab._update_calib_step(1, f"통합: Z 보정 {correction_mm:.1f}mm")
-                                self.robot.send_base_linear(
-                                    'z', correction_mm, wait=True,
-                                    process_events_callback=QApplication.processEvents)
-                                for _ in range(5):
-                                    time.sleep(0.1)
-                                    QApplication.processEvents()
-                            else:
-                                self._log(f"[StereoCalib 통합] Y: offset_z 변화 미미 ({delta_pz:.1f}px), 원위치 복귀")
-                                self.robot.send_base_linear('z', -TEST_MM, wait=True,
-                                    process_events_callback=QApplication.processEvents)
-                        else:
-                            self._log("[StereoCalib 통합] Y: 재검출 실패, 원위치 복귀")
-                            self.robot.send_base_linear('z', -TEST_MM, wait=True,
-                                process_events_callback=QApplication.processEvents)
-                    else:
-                        self._log(f"[StereoCalib 통합] Y: 테스트 이동 실패: {msg}")
-                else:
-                    pz_disp = pz0 if pz0 is not None else 0
-                    self._log(f"[StereoCalib 통합] Y: Z 보정 불필요 (offset_z={pz_disp:.1f}px)")
+            z_ok, z_msg = self._stereo_align_z_core(tab)
+            self._log(f"[StereoCalib 통합] Y: {z_msg}")
 
             # ── 2) X 정렬: Ry 회전 + Base Y 이동으로 이미지 가로 중심 정렬 ──
             tab._update_calib_step(1, "통합 정렬: X축(가로) 보정 중...")
-            alignment3 = self._stereo_detect_full_alignment()
-            if alignment3 is not None:
-                # Ry 보정
-                active_ry = alignment3.angle_3d if alignment3.angle_3d is not None else alignment3.angle_2d
-                if active_ry is not None and abs(active_ry) >= 0.5:
-                    self._log(f"[StereoCalib 통합] X: Ry 보정: {active_ry:.2f}°")
-                    self._on_ar_tag_align_base_ry(active_ry)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
-
-                # 재검출 → Base Y 보정
-                alignment4 = self._stereo_detect_full_alignment()
-                if alignment4 is not None and alignment4.offset_y is not None and abs(alignment4.offset_y) >= 5.0:
-                    self._log(f"[StereoCalib 통합] X: Base Y 보정: {alignment4.offset_y:.1f}px")
-                    self._on_ar_tag_align_base_y(alignment4.offset_y)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+            y_ok, y_msg = self._stereo_align_y_core(tab)
+            self._log(f"[StereoCalib 통합] X: {y_msg}")
 
             # ── 3) 미세 정렬 (ArduCam 전용, 모든 coarse 완료 후) ──
             pre_fine = self._stereo_detect_full_alignment()
@@ -2203,7 +2118,7 @@ class MainWindow(QMainWindow):
             # ── 4) 최종 결과 ──
             final = self._stereo_detect_full_alignment()
             if final is not None:
-                ry_f = final.angle_3d if final.angle_3d is not None else (final.angle_2d or 0)
+                ry_f = self._get_effective_ry(final)
                 oy_f = final.offset_y if final.offset_y is not None else 0
                 oz_f = final.offset_z if final.offset_z is not None else 0
                 msg = f"통합 정렬 완료: Ry={ry_f:.2f}°, dY={oy_f:.1f}px, dZ={oz_f:.1f}px"
@@ -2222,17 +2137,13 @@ class MainWindow(QMainWindow):
 
     def _on_stereo_calib_align_ds435(self):
         """스테레오 탭 DS435 ArUco 정렬: DS435 프레임으로 검출 → Y/Z 센터링"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabStereoCalibration
         tab._update_ds435_calib_step(1, "ArUco 마커 검출 중...")
 
         try:
-            import time
-            from PyQt5.QtWidgets import QApplication
-
             result = self._stereo_detect_ds435_aruco_alignment()
             if result is None:
                 tab._update_ds435_calib_step(0, "ArUco 검출 실패 - 마커를 확인하세요")
@@ -2243,8 +2154,7 @@ class MainWindow(QMainWindow):
             if abs(offset_y) >= 5.0:
                 tab._update_ds435_calib_step(1, f"Y 보정 중: {offset_y:.1f}px")
                 self._ds435_adaptive_align('y', offset_y)
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
             else:
                 self._log(f"[DS435Calib] Y 보정 불필요: {offset_y:.1f}px")
 
@@ -2255,8 +2165,7 @@ class MainWindow(QMainWindow):
                 if abs(offset_z2) >= 5.0:
                     tab._update_ds435_calib_step(1, f"Z 보정 중: {offset_z2:.1f}px")
                     self._ds435_adaptive_align('z', offset_z2)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+                    self._settle()
                 else:
                     self._log(f"[DS435Calib] Z 보정 불필요: {offset_z2:.1f}px")
 
@@ -2301,24 +2210,14 @@ class MainWindow(QMainWindow):
                 self._log("[DS435Calib] 마커 미검출")
                 return None
 
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+            tag_id1, tag_id2 = self._get_target_tag_ids()
 
-            m1, m2 = None, None
-            for m in markers:
-                if m['id'] == tag_id1:
-                    m1 = m
-                elif m['id'] == tag_id2:
-                    m2 = m
-
-            if m1 is None or m2 is None:
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
                 detected_ids = [m['id'] for m in markers]
                 self._log(f"[DS435Calib] 대상 마커 미검출: 필요={tag_id1},{tag_id2}, 검출={detected_ids}")
                 return None
-
-            # 코너에서 중심점 계산
-            c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
-            c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+            c1, c2 = result
 
             h, w = frame.shape[:2]
             mid_x = (c1[0] + c2[0]) / 2.0
@@ -2348,10 +2247,12 @@ class MainWindow(QMainWindow):
         Args:
             axis: 'y' (horizontal) or 'z' (vertical)
             d0_px: 현재 오프셋 (px)
-        """
-        import time
-        from PyQt5.QtWidgets import QApplication
 
+        Note:
+            _on_ar_tag_align_base_y()와 알고리즘 구조가 유사하나
+            MAX_CORRECTION 초과 시 처리가 다름 (이쪽: 2단계 분할 이동,
+            ArUco탭: 안전 중단). 측정 함수도 상이하여 통합 보류.
+        """
         DEAD_ZONE_PX = 3
         TEST_MM = 5.0
         MAX_CORRECTION_MM = 50.0
@@ -2381,24 +2282,9 @@ class MainWindow(QMainWindow):
                 return
 
             # 위치 안정화 대기
-            last_val = val_before
-            stable_count = 0
-            deadline = time.time() + 10.0
-            while time.time() < deadline:
-                time.sleep(0.2)
-                QApplication.processEvents()
-                pose_now = self.robot.read_current_pose()
-                if pose_now is None:
-                    continue
-                current_val = pose_now[axis_idx]
-                if abs(current_val - last_val) < 0.05:
-                    stable_count += 1
-                    if stable_count >= 3 and abs(current_val - val_before) > 0.1:
-                        break
-                else:
-                    stable_count = 0
-                last_val = current_val
-            actual_mm = last_val - val_before
+            _, final_val = self._wait_for_position_stable(
+                axis_idx=axis_idx, reference_val=val_before)
+            actual_mm = final_val - val_before
             self._log(f"[DS435Calib] 실제 이동: {actual_mm:.2f}mm (명령: {test_cmd:+.1f}mm)")
 
             if abs(actual_mm) < 0.5:
@@ -2409,8 +2295,7 @@ class MainWindow(QMainWindow):
                 return
 
             # 재측정
-            time.sleep(0.3)
-            QApplication.processEvents()
+            self._settle()
             d1 = self._measure_ds435_marker_offset(axis)
             if d1 is None:
                 self._log(f"[DS435Calib] 테스트 후 마커 감지 실패, 복귀")
@@ -2449,8 +2334,7 @@ class MainWindow(QMainWindow):
                     self._log(f"[DS435Calib] 분할 1차 이동 실패: {msg}")
                     return
 
-                time.sleep(0.5)
-                QApplication.processEvents()
+                self._settle(0.5)
 
                 # 재측정
                 d_mid = self._measure_ds435_marker_offset(axis)
@@ -2480,8 +2364,7 @@ class MainWindow(QMainWindow):
                 total_mm = test_cmd + correction_mm
 
             # --- 3단계: 검증 ---
-            time.sleep(0.5)
-            QApplication.processEvents()
+            self._settle(0.5)
 
             d_final = self._measure_ds435_marker_offset(axis)
             if d_final is not None:
@@ -2516,21 +2399,12 @@ class MainWindow(QMainWindow):
             if not markers:
                 return None
 
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+            tag_id1, tag_id2 = self._get_target_tag_ids()
 
-            m1, m2 = None, None
-            for m in markers:
-                if m['id'] == tag_id1:
-                    m1 = m
-                elif m['id'] == tag_id2:
-                    m2 = m
-
-            if m1 is None or m2 is None:
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
                 return None
-
-            c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
-            c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+            c1, c2 = result
 
             h, w = frame.shape[:2]
             if axis == 'y':
@@ -2572,21 +2446,12 @@ class MainWindow(QMainWindow):
             if not markers:
                 return None
 
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+            tag_id1, tag_id2 = self._get_target_tag_ids()
 
-            m1, m2 = None, None
-            for m in markers:
-                if m['id'] == tag_id1:
-                    m1 = m
-                elif m['id'] == tag_id2:
-                    m2 = m
-
-            if m1 is None or m2 is None:
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
                 return None
-
-            c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
-            c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+            c1, c2 = result
 
             h, w = frame.shape[:2]
             mid_x = (c1[0] + c2[0]) / 2.0
@@ -2625,21 +2490,12 @@ class MainWindow(QMainWindow):
             if not markers:
                 return None
 
-            tag_id1 = self.tabArucoReliability.spinTagID1.value()
-            tag_id2 = self.tabArucoReliability.spinTagID2.value()
+            tag_id1, tag_id2 = self._get_target_tag_ids()
 
-            m1, m2 = None, None
-            for m in markers:
-                if m['id'] == tag_id1:
-                    m1 = m
-                elif m['id'] == tag_id2:
-                    m2 = m
-
-            if m1 is None or m2 is None:
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
                 return None
-
-            c1 = m1['corners'][0].mean(axis=0) if len(m1['corners'].shape) == 3 else m1['corners'].mean(axis=0)
-            c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
+            c1, c2 = result
             mid = ((c1[0] + c2[0]) / 2.0, (c1[1] + c2[1]) / 2.0)
 
             depth = self.ds435_camera_manager.get_distance_at(
@@ -2657,16 +2513,13 @@ class MainWindow(QMainWindow):
         3단계: camera_offset_mm 적용하여 Y,Z 이동 (ArduCam FOV로)
         4단계: ArduCam 통합 정렬
         """
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabStereoCalibration
         self._set_stereo_align_buttons_enabled(False)
 
         try:
-            import time
-            from PyQt5.QtWidgets import QApplication
             from services.stereo_offset_calculator import StereoOffsetCalculator
 
             TARGET_DEPTH_MM = 370.0
@@ -2709,8 +2562,7 @@ class MainWindow(QMainWindow):
             if abs(offset_y) >= 5.0:
                 tab._update_ds435_calib_step(1, f"① DS435 Y 보정: {offset_y:.1f}px")
                 self._ds435_adaptive_align('y', offset_y)
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
 
             # 재검출 후 Z 센터링
             result2 = self._stereo_detect_ds435_aruco_alignment()
@@ -2719,8 +2571,7 @@ class MainWindow(QMainWindow):
                 if abs(offset_z2) >= 5.0:
                     tab._update_ds435_calib_step(1, f"① DS435 Z 보정: {offset_z2:.1f}px")
                     self._ds435_adaptive_align('z', offset_z2)
-                    time.sleep(0.3)
-                    QApplication.processEvents()
+                    self._settle()
 
             # 1단계 결과 확인
             result3 = self._stereo_detect_ds435_aruco_alignment()
@@ -2740,8 +2591,7 @@ class MainWindow(QMainWindow):
             # depth 측정 (최대 3회 시도)
             depth = None
             for attempt in range(3):
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
                 depth = self._measure_ds435_marker_depth()
                 if depth is not None and depth > 0:
                     break
@@ -2765,8 +2615,7 @@ class MainWindow(QMainWindow):
                             'x', x_move, wait=True,
                             process_events_callback=QApplication.processEvents)
                         if success:
-                            time.sleep(0.5)
-                            QApplication.processEvents()
+                            self._settle(0.5)
                             # depth 재측정 확인
                             depth2 = self._measure_ds435_marker_depth()
                             if depth2 is not None:
@@ -2796,8 +2645,7 @@ class MainWindow(QMainWindow):
                 else:
                     self._log(f"[Handoff] Y 이동 실패: {msg}")
 
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
 
             # Z 이동
             if abs(cam_offset_z) >= 0.5:
@@ -2810,12 +2658,10 @@ class MainWindow(QMainWindow):
                 else:
                     self._log(f"[Handoff] Z 이동 실패: {msg}")
 
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
 
             # ArduCam 검출 확인 (3단계 결과 — 실패해도 4단계 진행)
-            time.sleep(0.5)
-            QApplication.processEvents()
+            self._settle(0.5)
 
             arducam_check = self._check_arducam_marker_visible()
             if arducam_check is not None:
@@ -2843,8 +2689,7 @@ class MainWindow(QMainWindow):
                 self._on_stereo_calib_align_aruco_combined()
 
                 # 수렴 확인
-                time.sleep(0.3)
-                QApplication.processEvents()
+                self._settle()
                 check = self._stereo_detect_full_alignment()
                 if check is not None:
                     oy = abs(check.offset_y) if check.offset_y is not None else 0
@@ -2860,7 +2705,7 @@ class MainWindow(QMainWindow):
             self._set_stereo_align_buttons_enabled(False)
             final = self._stereo_detect_full_alignment()
             if final is not None:
-                ry_f = final.angle_3d if final.angle_3d is not None else (final.angle_2d or 0)
+                ry_f = self._get_effective_ry(final)
                 oy_f = final.offset_y if final.offset_y is not None else 0
                 oz_f = final.offset_z if final.offset_z is not None else 0
                 msg = f"핸드오프 완료! Ry={ry_f:.2f}°, dY={oy_f:.1f}px, dZ={oz_f:.1f}px"
@@ -2913,8 +2758,7 @@ class MainWindow(QMainWindow):
             cameras_started = True
         if cameras_started:
             # 카메라 안정화 대기 + 탭 버튼 상태 동기화
-            time.sleep(1.0)
-            QApplication.processEvents()
+            self._settle(1.0)
             tab = self.tabStereoCalibration
             tab.btnStartCameras.setEnabled(False)
             tab.btnStopCameras.setEnabled(True)
@@ -3168,34 +3012,14 @@ class MainWindow(QMainWindow):
     def _calib_wait_for_position_stable(self, axis='z', timeout=10.0):
         """이동 후 위치 안정화 폴링 (연속 3회 < 0.05mm)"""
         axis_idx = {'x': 0, 'y': 1, 'z': 2}[axis]
-        stable_count = 0
-        deadline = time.time() + timeout
-        pose = self.robot.read_current_pose()
-        if pose is None:
-            return False
-        last_val = pose[axis_idx]
-        while time.time() < deadline:
-            time.sleep(0.2)
-            QApplication.processEvents()
-            if self.tabLaserCalibration._z_adjust_cancel:
-                return False
-            pose_now = self.robot.read_current_pose()
-            if pose_now is None:
-                continue
-            current_val = pose_now[axis_idx]
-            if abs(current_val - last_val) < 0.05:
-                stable_count += 1
-                if stable_count >= 3:
-                    return True
-            else:
-                stable_count = 0
-            last_val = current_val
-        return False
+        stable, _ = self._wait_for_position_stable(
+            axis_idx=axis_idx, min_delta=0, timeout=timeout,
+            cancel_callback=lambda: self.tabLaserCalibration._z_adjust_cancel)
+        return stable
 
     def _on_calib_save_pos(self):
         """TCP 위치 저장 (pos1)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         pose = self.robot.read_current_pose()
@@ -3211,8 +3035,7 @@ class MainWindow(QMainWindow):
 
     def _on_calib_move_x_adjust_z(self):
         """X 이동 + Z 재조정"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabLaserCalibration
@@ -3254,8 +3077,7 @@ class MainWindow(QMainWindow):
 
     def _on_calib_save_compare(self):
         """비교 저장 (pos2 저장 + 테이블에 추가)"""
-        if not self.robot or not self.robot.is_connected:
-            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+        if not self._require_robot():
             return
 
         tab = self.tabLaserCalibration
@@ -3319,8 +3141,7 @@ class MainWindow(QMainWindow):
                     if abs(angle_ry) >= 0.5:
                         self._log(f"[Calib] Ry 보정 실행: {angle_ry:.2f}°")
                         self._on_ar_tag_align_base_ry(angle_ry)
-                        time.sleep(0.3)
-                        QApplication.processEvents()
+                        self._settle()
                     else:
                         self._log(f"[Calib] Ry 보정 불필요: {angle_ry:.2f}°")
                     # 재측정 후 Y 보정 (임계값 5px 이상일 때만)
@@ -3330,8 +3151,7 @@ class MainWindow(QMainWindow):
                         if abs(offset_y2) >= 5.0:
                             self._log(f"[Calib] Y 보정 실행: {offset_y2:.1f}px")
                             self._on_ar_tag_align_base_y(offset_y2)
-                            time.sleep(0.3)
-                            QApplication.processEvents()
+                            self._settle()
                         else:
                             self._log(f"[Calib] Y 보정 불필요: {offset_y2:.1f}px")
                 else:
