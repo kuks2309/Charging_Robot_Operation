@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabStereoCalibration</class>
+ <widget class="QWidget" name="TabStereoCalibration">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1320</width>
+    <height>800</height>
+   </rect>
+  </property>
+
+  <layout class="QVBoxLayout" name="verticalLayoutMain">
+   <property name="spacing"><number>4</number></property>
+   <property name="leftMargin"><number>4</number></property>
+   <property name="topMargin"><number>4</number></property>
+   <property name="rightMargin"><number>4</number></property>
+   <property name="bottomMargin"><number>4</number></property>
+
+   <!-- ========== TOP: Two columns ========== -->
+   <item>
+    <layout class="QHBoxLayout" name="layoutColumns">
+     <property name="spacing"><number>8</number></property>
+
+     <!-- ===== LEFT COLUMN: DS435 ===== -->
+     <item>
+      <layout class="QVBoxLayout" name="layoutLeftColumn">
+
+       <!-- DS435 Camera GroupBox -->
+       <item>
+        <widget class="QGroupBox" name="groupDS435">
+         <property name="title"><string>DS435</string></property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QVBoxLayout" name="layoutDS435Inner">
+          <property name="spacing"><number>2</number></property>
+          <property name="leftMargin"><number>4</number></property>
+          <property name="topMargin"><number>4</number></property>
+          <property name="rightMargin"><number>4</number></property>
+          <property name="bottomMargin"><number>4</number></property>
+          <item>
+           <widget class="QLabel" name="labelDS435View">
+            <property name="minimumSize"><size><width>640</width><height>360</height></size></property>
+            <property name="maximumSize"><size><width>640</width><height>360</height></size></property>
+            <property name="styleSheet"><string>background-color: #1a1a1a;</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- DS435 ArUco 정렬 -->
+       <item>
+        <widget class="QGroupBox" name="groupDS435CalibExec">
+         <property name="title"><string>DS435 ArUco 정렬</string></property>
+         <layout class="QVBoxLayout" name="layoutDS435CalibExec">
+          <property name="spacing"><number>4</number></property>
+          <property name="leftMargin"><number>6</number></property>
+          <property name="topMargin"><number>6</number></property>
+          <property name="rightMargin"><number>6</number></property>
+          <property name="bottomMargin"><number>6</number></property>
+
+          <item>
+           <widget class="QLabel" name="labelDS435CalibStep">
+            <property name="text"><string>대기 중</string></property>
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #555; padding: 2px 4px; background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 3px;</string>
+            </property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QPushButton" name="btnAlignDS435">
+            <property name="text"><string>DS435 ArUco 정렬</string></property>
+            <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+            <property name="styleSheet">
+             <string>QPushButton {
+    padding: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    background-color: #2E7D32;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background-color: #388E3C;
+}
+QPushButton:pressed {
+    background-color: #1B5E20;
+}
+QPushButton:disabled {
+    background-color: #90A4AE;
+    color: #eceff1;
+}</string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QPushButton" name="btnHandoffDS435ToArduCam">
+            <property name="text"><string>DS435 → ArduCam 핸드오프</string></property>
+            <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+            <property name="styleSheet">
+             <string>QPushButton {
+    padding: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    background-color: #1565C0;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background-color: #1976D2;
+}
+QPushButton:pressed {
+    background-color: #0D47A1;
+}
+QPushButton:disabled {
+    background-color: #90A4AE;
+    color: #eceff1;
+}</string>
+            </property>
+           </widget>
+          </item>
+
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Left spacer -->
+       <item>
+        <spacer name="spacerLeft">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+        </spacer>
+       </item>
+
+      </layout>
+     </item>
+
+     <!-- ===== RIGHT COLUMN: ArduCam + Calibration ===== -->
+     <item>
+      <layout class="QVBoxLayout" name="layoutRightColumn">
+       <property name="spacing"><number>4</number></property>
+
+       <!-- ArduCam Camera GroupBox -->
+       <item>
+        <widget class="QGroupBox" name="groupArduCam">
+         <property name="title"><string>ArduCam</string></property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QVBoxLayout" name="layoutArduCamInner">
+          <property name="spacing"><number>2</number></property>
+          <property name="leftMargin"><number>4</number></property>
+          <property name="topMargin"><number>4</number></property>
+          <property name="rightMargin"><number>4</number></property>
+          <property name="bottomMargin"><number>4</number></property>
+          <item>
+           <widget class="QLabel" name="labelArduCamView">
+            <property name="minimumSize"><size><width>640</width><height>360</height></size></property>
+            <property name="maximumSize"><size><width>640</width><height>360</height></size></property>
+            <property name="styleSheet"><string>background-color: #1a1a1a;</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- ArUco 정렬 -->
+       <item>
+        <widget class="QGroupBox" name="groupCalibExec">
+         <property name="title"><string>ArUco 정렬</string></property>
+         <layout class="QVBoxLayout" name="layoutCalibExec">
+          <property name="spacing"><number>4</number></property>
+          <property name="leftMargin"><number>6</number></property>
+          <property name="topMargin"><number>6</number></property>
+          <property name="rightMargin"><number>6</number></property>
+          <property name="bottomMargin"><number>6</number></property>
+
+          <!-- Step indicator -->
+          <item>
+           <widget class="QLabel" name="labelCalibStep">
+            <property name="text"><string>대기 중</string></property>
+            <property name="styleSheet">
+             <string>font-weight: bold; color: #555; padding: 2px 4px; background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 3px;</string>
+            </property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+           </widget>
+          </item>
+
+          <item>
+           <layout class="QHBoxLayout" name="hboxStereoAlignButtons">
+            <item>
+             <widget class="QPushButton" name="btnAlignArucoY">
+              <property name="text"><string>ArUco 정렬 Y</string></property>
+              <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+              <property name="styleSheet">
+               <string>QPushButton {
+    padding: 6px;
+    font-weight: bold;
+    font-size: 12px;
+    background-color: #1565C0;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover { background-color: #1976D2; }
+QPushButton:pressed { background-color: #0D47A1; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnAlignArucoX">
+              <property name="text"><string>ArUco 정렬 X</string></property>
+              <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+              <property name="styleSheet">
+               <string>QPushButton {
+    padding: 6px;
+    font-weight: bold;
+    font-size: 12px;
+    background-color: #1565C0;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover { background-color: #1976D2; }
+QPushButton:pressed { background-color: #0D47A1; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnAlignArucoCombined">
+              <property name="text"><string>통합 정렬</string></property>
+              <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+              <property name="styleSheet">
+               <string>QPushButton {
+    padding: 6px;
+    font-weight: bold;
+    font-size: 12px;
+    background-color: #E65100;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover { background-color: #F57C00; }
+QPushButton:pressed { background-color: #BF360C; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Right spacer -->
+       <item>
+        <spacer name="spacerRight">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+        </spacer>
+       </item>
+
+      </layout>
+     </item>
+
+    </layout>
+   </item>
+
+   <!-- ========== SWEEP CALIBRATION ========== -->
+   <item>
+    <widget class="QGroupBox" name="groupSweep">
+     <property name="title"><string>로봇-픽셀 관계 분석 (Sweep Calibration)</string></property>
+     <layout class="QVBoxLayout" name="layoutSweepOuter">
+      <property name="spacing"><number>4</number></property>
+      <property name="leftMargin"><number>6</number></property>
+      <property name="topMargin"><number>6</number></property>
+      <property name="rightMargin"><number>6</number></property>
+      <property name="bottomMargin"><number>6</number></property>
+
+      <!-- Parameters row -->
+      <item>
+       <layout class="QHBoxLayout" name="layoutSweepParams">
+        <item>
+         <widget class="QLabel" name="labelSweepStepTitle">
+          <property name="text"><string>스텝 크기:</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDoubleSpinBox" name="spinSweepStep">
+          <property name="minimum"><double>1.0</double></property>
+          <property name="maximum"><double>5.0</double></property>
+          <property name="value"><double>1.0</double></property>
+          <property name="suffix"><string> mm</string></property>
+          <property name="singleStep"><double>0.5</double></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelSweepCountTitle">
+          <property name="text"><string>스텝 수:</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinSweepCount">
+          <property name="minimum"><number>2</number></property>
+          <property name="maximum"><number>30</number></property>
+          <property name="value"><number>5</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelSweepRange">
+          <property name="text"><string>= 5.0mm</string></property>
+          <property name="styleSheet"><string>color: #666;</string></property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="spacerSweepParams">
+          <property name="orientation"><enum>Qt::Horizontal</enum></property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Buttons row -->
+      <item>
+       <layout class="QHBoxLayout" name="layoutSweepButtons">
+        <item>
+         <widget class="QPushButton" name="btnSweepStart">
+          <property name="text"><string>스윕 시작</string></property>
+          <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+          <property name="styleSheet">
+           <string>QPushButton {
+    padding: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    background-color: #E65100;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background-color: #F57C00;
+}
+QPushButton:pressed {
+    background-color: #BF360C;
+}
+QPushButton:disabled {
+    background-color: #90A4AE;
+    color: #eceff1;
+}</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSweepSave">
+          <property name="text"><string>CSV 저장</string></property>
+          <property name="enabled"><bool>false</bool></property>
+          <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+          <property name="styleSheet">
+           <string>QPushButton {
+    padding: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    background-color: #1565C0;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background-color: #1976D2;
+}
+QPushButton:pressed {
+    background-color: #0D47A1;
+}
+QPushButton:disabled {
+    background-color: #90A4AE;
+    color: #eceff1;
+}</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSweepCancel">
+          <property name="text"><string>중지</string></property>
+          <property name="enabled"><bool>false</bool></property>
+          <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+          <property name="styleSheet">
+           <string>QPushButton {
+    padding: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    background-color: #C62828;
+    color: white;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background-color: #E53935;
+}
+QPushButton:pressed {
+    background-color: #B71C1C;
+}
+QPushButton:disabled {
+    background-color: #90A4AE;
+    color: #eceff1;
+}</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- Progress bar -->
+      <item>
+       <widget class="QProgressBar" name="progressSweep">
+        <property name="value"><number>0</number></property>
+        <property name="textVisible"><bool>true</bool></property>
+       </widget>
+      </item>
+
+      <!-- Status label -->
+      <item>
+       <widget class="QLabel" name="labelSweepStatus">
+        <property name="text"><string>대기 중</string></property>
+        <property name="styleSheet">
+         <string>font-weight: bold; color: #555; padding: 2px 4px; background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 3px;</string>
+        </property>
+        <property name="alignment"><set>Qt::AlignCenter</set></property>
+       </widget>
+      </item>
+
+      <!-- Data table -->
+      <item>
+       <widget class="QTableWidget" name="tableSweepData">
+        <property name="minimumSize"><size><width>0</width><height>150</height></size></property>
+        <property name="maximumSize"><size><width>16777215</width><height>250</height></size></property>
+        <property name="alternatingRowColors"><bool>true</bool></property>
+        <property name="selectionMode"><enum>QAbstractItemView::NoSelection</enum></property>
+        <property name="columnCount"><number>7</number></property>
+        <property name="rowCount"><number>0</number></property>
+        <property name="styleSheet">
+         <string>QTableWidget { font-size: 11px; } QHeaderView::section { font-size: 11px; font-weight: bold; padding: 2px; }</string>
+        </property>
+        <column><property name="text"><string>축</string></property></column>
+        <column><property name="text"><string>이동(mm)</string></property></column>
+        <column><property name="text"><string>DS435 X(px)</string></property></column>
+        <column><property name="text"><string>DS435 Y(px)</string></property></column>
+        <column><property name="text"><string>DS435 Z(mm)</string></property></column>
+        <column><property name="text"><string>ArduCam X(px)</string></property></column>
+        <column><property name="text"><string>ArduCam Y(px)</string></property></column>
+       </widget>
+      </item>
+
+      <!-- Result label (multi-line) -->
+      <item>
+       <widget class="QLabel" name="labelSweepResult">
+        <property name="text"><string></string></property>
+        <property name="styleSheet">
+         <string>color: #333; padding: 4px; font-family: monospace; font-size: 12px;</string>
+        </property>
+        <property name="wordWrap"><bool>true</bool></property>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ========== CONTROLS ========== -->
+   <item>
+    <layout class="QHBoxLayout" name="layoutButtons">
+     <item>
+      <widget class="QPushButton" name="btnStartCameras">
+       <property name="text"><string>카메라 시작</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnStopCameras">
+       <property name="text"><string>카메라 정지</string></property>
+       <property name="enabled"><bool>false</bool></property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacerButtons">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

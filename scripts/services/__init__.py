@@ -11,6 +11,7 @@ from .chessboard_alignment_service import ChessboardAlignmentService, AlignmentR
 from .data_collector import DataCollector, CollectStatistics
 from .pose_service import PoseService, PoseOperationResult
 from .dual_aruco_detector import DualArucoDetector, ArucoResult, PlaneResult
+from .sweep_calibration_service import SweepCalibrationService
 
 __all__ = [
     'CameraManager',
@@ -28,4 +29,5 @@ __all__ = [
     'DualArucoDetector',
     'ArucoResult',
     'PlaneResult',
+    'SweepCalibrationService',
 ]

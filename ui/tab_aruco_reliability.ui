@@ -995,34 +995,38 @@
         </layout>
        </item>
        <item>
-        <widget class="QPushButton" name="btnAlignRxFromAngle">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>TCP ry 보정</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btnAlignRzFromAngle">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>TCP rz 보정</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btnAlignBaseY">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>Base Y 보정</string>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="hboxAlignArucoButtons">
+         <item>
+          <widget class="QPushButton" name="btnAlignArucoY">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>ArUco 정렬 Y</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnAlignArucoX">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>ArUco 정렬 X</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnAlignArucoCombined">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>통합 정렬</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <spacer name="spacerArucoAlignBottom">

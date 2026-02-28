@@ -681,17 +681,17 @@ QPushButton:checked { background-color: #E91E96; color: white; }</string>
              <property name="bottomMargin"><number>6</number></property>
              <item row="0" column="0">
               <widget class="QLabel" name="labelTargetYLabel">
-               <property name="text"><string>레이저 목표 Y 위치:</string></property>
-               <property name="toolTip"><string>ArUco 중심선 기준 수직 오프셋 (양수=아래)</string></property>
+               <property name="text"><string>마커 중심 Y 오프셋:</string></property>
+               <property name="toolTip"><string>ArUco 마커 중심으로부터 레이저 목표까지의 수직 오프셋 (양수=아래)</string></property>
               </widget>
              </item>
              <item row="0" column="1">
               <widget class="QSpinBox" name="spinTargetLaserY">
                <property name="suffix"><string> px</string></property>
-               <property name="minimum"><number>-200</number></property>
-               <property name="maximum"><number>200</number></property>
-               <property name="value"><number>30</number></property>
-               <property name="toolTip"><string>ArUco 마커 흰색 바탕 아래 위치 (기본 30px)</string></property>
+               <property name="minimum"><number>0</number></property>
+               <property name="maximum"><number>500</number></property>
+               <property name="value"><number>190</number></property>
+               <property name="toolTip"><string>ArUco 마커 중심 Y + 이 값 = 레이저 목표 Y (양수=아래)</string></property>
               </widget>
              </item>
              <item row="1" column="0">

@@ -38,6 +38,7 @@ from utils.ar_to_base_tf import camera_to_vision
 from services.plane_extractor import PlaneExtractor
 from services.dual_aruco_detector import DualArucoDetector, PlanePose
 from services.tcp_corrector import TCPCorrector
+from Sensor.aruco.aruco_detector import compute_dual_alignment, draw_dual_marker_overlay
 
 
 # UI 파일 경로
@@ -64,6 +65,9 @@ class TabArucoReliability(QWidget, JogMixin):
     align_base_ry_requested = pyqtSignal(float)  # angle(deg) - base 기준 Ry movel 보정
     align_base_rz_requested = pyqtSignal(float, float)  # angle(deg), distance(mm) - base 기준 Rz + Y보정
     align_base_y_requested = pyqtSignal(float)  # dY (px) - base Y 위치 보정
+    align_aruco_y_requested = pyqtSignal()        # 통합 Y 정렬 (Ry + BaseY)
+    align_aruco_x_requested = pyqtSignal()        # 통합 X 정렬 (Rz)
+    align_aruco_combined_requested = pyqtSignal()  # 통합 정렬 (Y + X)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -170,10 +174,10 @@ class TabArucoReliability(QWidget, JogMixin):
         # 조그 이동 (JogMixin)
         self._connect_jog_buttons()
 
-        # aruco 정렬 탭 버튼
-        self.btnAlignRxFromAngle.clicked.connect(self._on_align_ry_from_angle)
-        self.btnAlignRzFromAngle.clicked.connect(self._on_align_rz_from_angle)
-        self.btnAlignBaseY.clicked.connect(self._on_align_base_y)
+        # aruco 통합 정렬 버튼
+        self.btnAlignArucoY.clicked.connect(self._on_align_aruco_y)
+        self.btnAlignArucoX.clicked.connect(self._on_align_aruco_x)
+        self.btnAlignArucoCombined.clicked.connect(self._on_align_aruco_combined)
 
         # ar tag tcp align 탭 버튼
         self.btnAlignRx.clicked.connect(lambda: self._on_align_single_axis('rx'))
@@ -254,90 +258,43 @@ class TabArucoReliability(QWidget, JogMixin):
 
         marker1_info = None
         marker2_info = None
+        alignment = None
 
         if self.vision_manager:
+            h, w = frame.shape[:2]
             markers = self.vision_manager.detect_marker_centers(
                 frame, self.camera_matrix, self.dist_coeffs, estimate_pose=True
             )
 
-            for m in markers:
-                mid = m['id']
-                if mid not in (tag_id1, tag_id2):
-                    continue
+            # Compute alignment
+            alignment = compute_dual_alignment(markers, tag_id1, tag_id2, w, h)
 
-                # 프레임에 마커 표시 (UI 시각화)
-                color = colors.get(mid, (0, 255, 0))
-                crn = m['corners']
-                if len(crn.shape) == 3:
-                    crn = crn[0]
-                for j in range(4):
-                    pt1 = tuple(crn[j].astype(int))
-                    pt2 = tuple(crn[(j + 1) % 4].astype(int))
-                    cv2.line(frame, pt1, pt2, color, 2)
-                raw_center = crn.mean(axis=0)
-                cv2.putText(frame, f"ID:{mid}", tuple(raw_center.astype(int)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # Draw overlay (in-place on frame)
+            frame = draw_dual_marker_overlay(frame, markers, tag_id1, tag_id2, alignment, colors, show_info=False)
 
-                cx, cy = m['center']
-                tvec = m.get('tvec')
-                # depth 거리 (DS435만 지원)
-                depth = None
+            # Build marker_info dicts for _update_align_tab_display() (needs depth from DS435)
+            if alignment is not None:
+                depth1 = depth2 = None
                 if self.camera_manager and hasattr(self.camera_manager, 'get_distance_at'):
-                    depth = self.camera_manager.get_distance_at(
-                        int(round(cx)), int(round(cy)), from_color=True)
-                if mid == tag_id1:
-                    marker1_info = {'cx': cx, 'cy': cy, 'tvec': tvec, 'depth': depth}
-                elif mid == tag_id2:
-                    marker2_info = {'cx': cx, 'cy': cy, 'tvec': tvec, 'depth': depth}
+                    depth1 = self.camera_manager.get_distance_at(
+                        int(round(alignment.marker1_cx)), int(round(alignment.marker1_cy)), from_color=True)
+                    depth2 = self.camera_manager.get_distance_at(
+                        int(round(alignment.marker2_cx)), int(round(alignment.marker2_cy)), from_color=True)
+                marker1_info = {
+                    'cx': alignment.marker1_cx, 'cy': alignment.marker1_cy,
+                    'tvec': alignment.marker1_tvec, 'depth': depth1
+                }
+                marker2_info = {
+                    'cx': alignment.marker2_cx, 'cy': alignment.marker2_cy,
+                    'tvec': alignment.marker2_tvec, 'depth': depth2
+                }
 
-        # 이미지 중심 십자선 (정렬 기준)
-        h, w = frame.shape[:2]
-        img_cx, img_cy = w // 2, h // 2
-        cv2.line(frame, (img_cx, 0), (img_cx, h), (128, 128, 128), 1)  # 세로축
-        cv2.line(frame, (0, img_cy), (w, img_cy), (128, 128, 128), 1)  # 가로축
-
-        # 두 마커 중심을 연결하는 수평 라인 + 중심점 표시
-        if marker1_info and marker2_info:
-            p1 = (int(round(marker1_info['cx'])), int(round(marker1_info['cy'])))
-            p2 = (int(round(marker2_info['cx'])), int(round(marker2_info['cy'])))
-            cv2.line(frame, p1, p2, (0, 0, 255), 2)  # 빨간 라인
-            mid_x = (p1[0] + p2[0]) // 2
-            mid_y = (p1[1] + p2[1]) // 2
-            cross = 10
-            cv2.line(frame, (mid_x - cross, mid_y), (mid_x + cross, mid_y), (0, 255, 0), 2)
-            cv2.line(frame, (mid_x, mid_y - cross), (mid_x, mid_y + cross), (0, 255, 0), 2)
-
-        # 각도 계산 (2D 픽셀 + 3D tvec)
-        import math
-        angle_2d = None
-        angle_3d = None
-        angle_rx = None
-        if marker1_info and marker2_info:
-            dx = marker2_info['cx'] - marker1_info['cx']
-            dy = marker2_info['cy'] - marker1_info['cy']
-            angle_2d = -math.degrees(math.atan2(dy, dx))  # CCW+
-
-            t1 = marker1_info.get('tvec')
-            t2 = marker2_info.get('tvec')
-            if t1 is not None and t2 is not None:
-                # Ry: tvec x,y 기반 기울기
-                dx3 = t2[0] - t1[0]
-                dy3 = t2[1] - t1[1]
-                angle_3d = -math.degrees(math.atan2(dy3, dx3))  # CCW+
-                # Rx: tvec x,z 기반 (depth 차이)
-                dz3 = t2[2] - t1[2]
-                angle_rx = math.degrees(math.atan2(dz3, abs(dx3)))
-
-        # 중심 오프셋 (이미지 중심 대비 마커 중점, px)
-        offset_y = None  # 가로 (px)
-        offset_z = None  # 세로 (px)
-        if marker1_info and marker2_info:
-            h, w = frame.shape[:2]
-            img_cx, img_cy = w / 2.0, h / 2.0
-            mid_px_x = (marker1_info['cx'] + marker2_info['cx']) / 2.0
-            mid_px_y = (marker1_info['cy'] + marker2_info['cy']) / 2.0
-            offset_y = mid_px_x - img_cx  # 가로: 양수=오른쪽
-            offset_z = mid_px_y - img_cy  # 세로: 양수=아래
+        # Extract values for display
+        angle_2d = alignment.angle_2d if alignment else None
+        angle_3d = alignment.angle_3d if alignment else None
+        angle_rx = alignment.angle_rx if alignment else None
+        offset_y = alignment.offset_y if alignment else None
+        offset_z = alignment.offset_z if alignment else None
 
         self._update_align_tab_display(marker1_info, marker2_info, angle_2d, angle_3d, angle_rx, offset_y, offset_z)
         display_frame_on_label(frame, self.labelCameraView)
@@ -376,46 +333,41 @@ class TabArucoReliability(QWidget, JogMixin):
         # Rx: 3D only (Z차이 기반)
         self.labelMarkerRx.setText(f"{angle_rx:.2f}" if angle_rx is not None else "-")
 
-        # Ry 보정 버튼 (3D 우선, 없으면 2D)
+        # Ry 캐시 (3D 우선, 없으면 2D)
         active_ry = angle_3d if angle_3d is not None else angle_2d
         if active_ry is not None:
             self._last_marker_angle = active_ry
-            self.btnAlignRxFromAngle.setEnabled(True)
-            self.btnAlignRxFromAngle.setText(f"TCP ry 보정 ({active_ry:.2f}°)")
         else:
             self._last_marker_angle = None
-            self.btnAlignRxFromAngle.setEnabled(False)
-            self.btnAlignRxFromAngle.setText("TCP ry 보정")
 
-        # Rz 보정 버튼 + 평균 마커 거리 저장
+        # Rz 캐시 + 평균 마커 거리 저장
         if angle_rx is not None:
             self._last_marker_rz_angle = angle_rx
-            # 평균 마커 거리 (tvec Z, mm)
             t1 = marker1_info.get('tvec') if marker1_info else None
             t2 = marker2_info.get('tvec') if marker2_info else None
             if t1 is not None and t2 is not None:
                 self._last_marker_distance = (t1[2] + t2[2]) / 2.0 * 1000  # mm
             else:
                 self._last_marker_distance = None
-            self.btnAlignRzFromAngle.setEnabled(True)
-            self.btnAlignRzFromAngle.setText(f"TCP rz 보정 ({angle_rx:.2f}°)")
         else:
             self._last_marker_rz_angle = None
             self._last_marker_distance = None
-            self.btnAlignRzFromAngle.setEnabled(False)
-            self.btnAlignRzFromAngle.setText("TCP rz 보정")
 
-        # 중심 오프셋 표시 + Base Y 보정 버튼
+        # 중심 오프셋 표시
         self.labelOffsetY.setText(f"{offset_y:.1f}" if offset_y is not None else "-")
         self.labelOffsetZ.setText(f"{offset_z:.1f}" if offset_z is not None else "-")
         if offset_y is not None:
             self._last_offset_y_px = offset_y
-            self.btnAlignBaseY.setEnabled(True)
-            self.btnAlignBaseY.setText(f"Base Y 보정 ({offset_y:.0f}px)")
         else:
             self._last_offset_y_px = None
-            self.btnAlignBaseY.setEnabled(False)
-            self.btnAlignBaseY.setText("Base Y 보정")
+
+        # 통합 정렬 버튼 활성화
+        has_ry = active_ry is not None
+        has_y = offset_y is not None
+        has_rz = angle_rx is not None and self._last_marker_distance is not None
+        self.btnAlignArucoY.setEnabled(has_ry or has_y)
+        self.btnAlignArucoX.setEnabled(has_rz)
+        self.btnAlignArucoCombined.setEnabled(has_ry or has_y or has_rz)
 
     def _on_start_camera(self):
         """카메라 시작"""
@@ -636,6 +588,9 @@ class TabArucoReliability(QWidget, JogMixin):
         self.btnAlignRy.setEnabled(False)
         self.btnAlignRz.setEnabled(False)
         self.btnAlignParallel.setEnabled(False)
+        self.btnAlignArucoY.setEnabled(False)
+        self.btnAlignArucoX.setEnabled(False)
+        self.btnAlignArucoCombined.setEnabled(False)
         self.txtAlignDebug.clear()
 
     def _on_load_csv(self):
@@ -1515,6 +1470,21 @@ class TabArucoReliability(QWidget, JogMixin):
             return
         self._log(f"Base Y 보정 요청: dY={dy_px:.1f}px")
         self.align_base_y_requested.emit(dy_px)
+
+    def _on_align_aruco_y(self):
+        """통합 ArUco Y 정렬 요청 (Ry + Base Y)"""
+        self._log("ArUco 정렬 Y 요청")
+        self.align_aruco_y_requested.emit()
+
+    def _on_align_aruco_x(self):
+        """통합 ArUco X 정렬 요청 (Rz)"""
+        self._log("ArUco 정렬 X 요청")
+        self.align_aruco_x_requested.emit()
+
+    def _on_align_aruco_combined(self):
+        """통합 ArUco 정렬 요청 (Y + X)"""
+        self._log("통합 ArUco 정렬 요청")
+        self.align_aruco_combined_requested.emit()
 
     def _on_align_single_axis(self, axis: str):
         """개별 축 정렬 버튼 핸들러"""

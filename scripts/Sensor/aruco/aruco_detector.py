@@ -878,6 +878,180 @@ class ArucoCameraPoseEstimator:
             'reference_marker_id': reference_marker_id
         }
 
+
+# ---------------------------------------------------------------------------
+# Dual-marker alignment: computation + visualization (service layer)
+# ---------------------------------------------------------------------------
+
+import math
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class DualMarkerAlignmentResult:
+    """Dual ArUco marker alignment computation result."""
+    # Marker info (center pixel coords from detect_marker_centers)
+    marker1_cx: float
+    marker1_cy: float
+    marker2_cx: float
+    marker2_cy: float
+    marker1_tvec: Optional[np.ndarray]  # 3D translation vector (None if no pose)
+    marker2_tvec: Optional[np.ndarray]
+    # Midpoint of the two marker centers (pixel coords)
+    mid_x: float
+    mid_y: float
+    # 2D pixel-based angle (degrees, CCW positive)
+    angle_2d: float
+    # 3D tvec-based Ry angle (degrees, CCW positive, None if no tvec)
+    angle_3d: Optional[float]
+    # 3D tvec-based Rx angle (degrees, depth-based tilt, None if no tvec)
+    angle_rx: Optional[float]
+    # Offset from image center (pixels)
+    offset_y: float   # horizontal: positive = marker midpoint right of image center
+    offset_z: float   # vertical: positive = marker midpoint below image center
+
+
+def compute_dual_alignment(markers, tag_id1, tag_id2, img_width, img_height):
+    """Compute alignment metrics from two ArUco markers.
+
+    Args:
+        markers: list of dicts from detect_marker_centers()
+            Each dict has keys: 'id', 'corners', 'center', 'tvec' (optional)
+        tag_id1: first marker ID
+        tag_id2: second marker ID
+        img_width: image width in pixels
+        img_height: image height in pixels
+
+    Returns:
+        DualMarkerAlignmentResult or None if target IDs not found.
+    """
+    marker1 = None
+    marker2 = None
+    for m in markers:
+        if m['id'] == tag_id1:
+            marker1 = m
+        elif m['id'] == tag_id2:
+            marker2 = m
+
+    if marker1 is None or marker2 is None:
+        return None
+
+    cx1, cy1 = marker1['center']
+    cx2, cy2 = marker2['center']
+    t1 = marker1.get('tvec')
+    t2 = marker2.get('tvec')
+
+    # Midpoint
+    mid_x = (cx1 + cx2) / 2.0
+    mid_y = (cy1 + cy2) / 2.0
+
+    # 2D pixel-based angle
+    dx = cx2 - cx1
+    dy = cy2 - cy1
+    angle_2d = -math.degrees(math.atan2(dy, dx))  # CCW+
+
+    # 3D tvec-based angles
+    angle_3d = None
+    angle_rx = None
+    if t1 is not None and t2 is not None:
+        dx3 = t2[0] - t1[0]
+        dy3 = t2[1] - t1[1]
+        dz3 = t2[2] - t1[2]
+        angle_3d = -math.degrees(math.atan2(dy3, dx3))  # Ry: CCW+
+        angle_rx = math.degrees(math.atan2(dz3, abs(dx3)))  # Rx: depth tilt
+
+    # Offset from image center
+    img_cx = img_width / 2.0
+    img_cy = img_height / 2.0
+    offset_y = mid_x - img_cx  # horizontal: positive = right
+    offset_z = mid_y - img_cy  # vertical: positive = below
+
+    return DualMarkerAlignmentResult(
+        marker1_cx=cx1, marker1_cy=cy1,
+        marker2_cx=cx2, marker2_cy=cy2,
+        marker1_tvec=t1, marker2_tvec=t2,
+        mid_x=mid_x, mid_y=mid_y,
+        angle_2d=angle_2d, angle_3d=angle_3d, angle_rx=angle_rx,
+        offset_y=offset_y, offset_z=offset_z,
+    )
+
+
+def draw_dual_marker_overlay(frame, markers, tag_id1, tag_id2, alignment=None, colors=None, show_info=True):
+    """Draw dual-marker alignment overlay on frame (in-place).
+
+    Canonical visual style:
+    - Marker corners: per-ID color lines, center dot (filled circle r=5)
+    - Marker ID text at (cx, cy-10)
+    - Image center: gray V+H crosshair
+    - Connection line: orange (255,200,0)
+    - Midpoint: yellow drawMarker MARKER_CROSS size=20
+    - Info text: cyan "Ry=... dY=..." at (10,30) when show_info=True
+
+    Args:
+        frame: BGR image (modified in-place)
+        markers: list of dicts from detect_marker_centers()
+        tag_id1: first marker ID
+        tag_id2: second marker ID
+        alignment: DualMarkerAlignmentResult or None
+        colors: dict mapping marker ID → BGR tuple. Default: {tag_id1: green, tag_id2: red}
+        show_info: whether to draw info text (default True)
+
+    Returns:
+        frame (same reference, modified in-place)
+    """
+    if colors is None:
+        colors = {tag_id1: (0, 255, 0), tag_id2: (0, 0, 255)}
+
+    # Draw markers (corners, center dot, ID text)
+    for m in markers:
+        mid = m['id']
+        if mid not in (tag_id1, tag_id2):
+            continue
+        color = colors.get(mid, (0, 255, 0))
+
+        # Corner lines
+        crn = m['corners']
+        if len(crn.shape) == 3:
+            crn = crn[0]
+        for j in range(4):
+            pt1 = tuple(crn[j].astype(int))
+            pt2 = tuple(crn[(j + 1) % 4].astype(int))
+            cv2.line(frame, pt1, pt2, color, 2)
+
+        cx, cy = m['center']
+        # Center dot
+        cv2.circle(frame, (int(cx), int(cy)), 5, color, -1)
+        # ID text
+        cv2.putText(frame, f"ID:{mid}", (int(cx), int(cy) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+    # Image center crosshair (gray, V+H)
+    h, w = frame.shape[:2]
+    img_cx, img_cy = w // 2, h // 2
+    cv2.line(frame, (img_cx, 0), (img_cx, h), (128, 128, 128), 1)
+    cv2.line(frame, (0, img_cy), (w, img_cy), (128, 128, 128), 1)
+
+    # Alignment-dependent drawing
+    if alignment is not None:
+        p1 = (int(round(alignment.marker1_cx)), int(round(alignment.marker1_cy)))
+        p2 = (int(round(alignment.marker2_cx)), int(round(alignment.marker2_cy)))
+        mid_pt = (int(round(alignment.mid_x)), int(round(alignment.mid_y)))
+
+        # Connection line (orange)
+        cv2.line(frame, p1, p2, (255, 200, 0), 2)
+        # Midpoint cross (yellow)
+        cv2.drawMarker(frame, mid_pt, (0, 255, 255), cv2.MARKER_CROSS, 20, 2)
+
+        # Info text (cyan)
+        if show_info:
+            active_ry = alignment.angle_3d if alignment.angle_3d is not None else alignment.angle_2d
+            info_text = f"Ry={active_ry:.2f}deg  dY={alignment.offset_y:.1f}px"
+            cv2.putText(frame, info_text, (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+    return frame
+
+
 # Example usage
 def example_usage():
     """

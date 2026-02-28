@@ -979,3 +979,172 @@ JSON 파일 (`config/laser_calibration.json`)에 저장:
 4. `tab_stereo_calibration.deactivate()`: `_on_stop()` 호출로 양쪽 카메라 정지 및 버튼 상태 리셋
 
 ---
+
+## 2026-02-28 | ArUco 듀얼 마커 정렬 로직 서비스 레이어 분리
+
+**증상:** `tab_aruco_reliability.py`의 `_update_aruco_tab()` 메서드에 마커 검출, 각도 계산, 시각화 로직이 ~80줄 인라인으로 혼재
+
+**원인:** UI 탭에서 영상처리(cv2 직접 호출)를 수행하는 구조 (UI와 알고리즘 미분리)
+
+**수정 파일:**
+- `scripts/Sensor/aruco/aruco_detector.py` — `compute_dual_alignment()`, `draw_dual_marker_overlay()`, `DualMarkerAlignmentResult` 추가
+- `scripts/services/vision_manager.py` — `compute_dual_alignment()`, `draw_dual_marker_overlay()` 래퍼 추가
+- `scripts/tabs/tab_aruco_reliability.py` — 인라인 로직 제거, 서비스 레이어 함수 호출로 교체 (~80줄 → ~25줄)
+
+**수정 내용:**
+
+1. **`DualMarkerAlignmentResult` 데이터클래스**: 마커 중심, tvec, 중점, 2D/3D 각도, 이미지 중심 오프셋을 구조화
+2. **`compute_dual_alignment(markers, tag_id1, tag_id2, w, h)`**: 2개 마커 검색 → 중점/각도/오프셋 계산
+3. **`draw_dual_marker_overlay(frame, markers, ...)`**: 코너 라인, 중심점, 연결선, 중점 크로스, 정보 텍스트 오버레이 (표준 시각 스타일)
+4. **vision_manager 래퍼**: detect_marker_centers + compute_dual_alignment을 한 번에 호출하는 편의 메서드
+5. **tab_aruco_reliability 정리**: 인라인 cv2.line/putText/atan2 코드 제거 → `compute_dual_alignment()` + `draw_dual_marker_overlay()` 호출
+
+**효과:** sweep_calibration_service 등 다른 서비스에서도 동일 정렬 로직 재사용 가능
+
+---
+
+## 2026-02-28 | 스테레오 캘리브레이션 탭 — 로봇-픽셀 관계 분석 (Sweep Calibration) 구현
+
+**구현 내용:** 로봇 X/Y/Z를 스윕하면서 두 카메라(ArduCam + DS435)의 ArUco 마커 픽셀 위치를 기록하고 px/mm 비율을 산출
+
+### 동작 흐름
+
+1. 현재 위치 기록 (원점) + 안전 확인 대화상자
+2. Z 스윕: -step_mm × count회 (차트 방향), 원점 복귀
+3. X 스윕: +step_mm × count회, 원점 복귀
+4. Y 스윕: +step_mm × count회, 원점 복귀
+5. 분석: 선형회귀 + Z축 2차회귀
+6. 저장: `config/sweep_calibration.json`
+
+### 각 스텝 기록 데이터
+
+- 로봇 포즈 (X,Y,Z,Rx,Ry,Rz)
+- ArduCam: 마커1 중심, 마커2 중심, 중간점, 마커 픽셀 크기
+- DS435: 마커1 중심, 마커2 중심, 중간점, depth(mm), 마커 픽셀 크기
+
+### 신규/수정 파일
+
+| 파일 | 변경 |
+|------|------|
+| `scripts/services/sweep_calibration_service.py` | NEW — QTimer.singleShot 상태머신 서비스 |
+| `ui/tab_stereo_calibration.ui` | 하단 스윕 UI GroupBox 추가 |
+| `scripts/tabs/tab_stereo_calibration.py` | 시그널, 버튼 연결, 데이터 테이블, CSV 저장 |
+| `scripts/main_window.py` | 핸들러 (안전 대화상자, 서비스 생성, 결과 요약) |
+| `scripts/services/__init__.py` | SweepCalibrationService export |
+
+### 핵심 설계
+
+- **QTimer.singleShot 상태머신**: IDLE → Z_SWEEP → Z_RETURN → X_SWEEP → X_RETURN → Y_SWEEP → Y_RETURN → ANALYZING → DONE
+- **서비스 클래스 분리**: main_window.py 비대화 방지
+- **get_frame() 직접 사용**: isVisible() 문제 회피
+- **위치 안정화 폴링**: 연속 3회 < 0.05mm
+- **Z축 2차 회귀**: 배율 변화 비선형성 포착
+- **중지 시 원점 복귀**: cancel → _return_to_origin → sweep_finished.emit({})
+- **실시간 데이터 테이블**: data_captured 시그널 → QTableWidget 표시
+- **CSV 저장**: QFileDialog → config/ 디렉토리 기본
+
+### 수정된 버그 (5건)
+
+| # | 버그 | 수정 |
+|---|------|------|
+| 1 | 전축 공유 원점 데이터 | Z는 start(), X/Y는 _do_return()에서 fresh origin 캡처 |
+| 2 | 회귀 기준점 누락 | `mm_relative = mm_valid - mm_valid[0]` |
+| 3 | 마커 크기 회귀 인덱스 불일치 | (mm, size) 페어 동시 수집 |
+| 4 | 서비스 재생성 시그널 누수 | disconnect + deleteLater 후 재생성 |
+| 5 | 취소 후 재시작 불가 | cancel 경로에서 sweep_finished.emit({}) 추가 |
+
+---
+
+## 2026-02-28 | 스윕 캘리브레이션 — 카메라 미실행 시 데이터 캡처 실패
+
+**증상:** 카메라를 수동으로 시작하지 않은 상태에서 "스윕 시작" 클릭 시, 모든 데이터 포인트에서 마커 미검출 → 분석 실패 (insufficient_data)
+
+**원인:** `_on_sweep_start` 핸들러에서 로봇 연결만 확인하고, 카메라 실행 상태를 확인하지 않았음. `get_frame()`은 카메라 미실행 시 `None` 반환 → `_capture_camera()` → `None` → 데이터 없음
+
+**수정 파일:** `scripts/main_window.py`
+
+**수정 내용:**
+1. 안전 대화상자 후 양쪽 카메라 자동 시작 (`ds435_camera_manager.start()`, `arducam_manager.start()`)
+2. 카메라 시작 시 1초 안정화 대기 + 탭 버튼 상태 동기화
+3. intrinsics 유효성 확인 (DS435 런타임 intrinsics, ArduCam 캘리브레이션 파일 intrinsics)
+4. intrinsics 없으면 오류 메시지 출력 후 UI 리셋
+
+---
+
+## 2026-02-28 | 레이저 캘리브레이션 — 목표 Y 위치 기준 변경
+
+**변경:** 레이저 목표 Y 위치 설정을 절대 좌표 기반에서 ArUco 마커 중심 기준 오프셋으로 변경
+
+**수정 파일:** `ui/tab_laser_calibration.ui`
+
+**수정 내용:**
+- 라벨: "레이저 목표 Y 위치" → "마커 중심 Y 오프셋"
+- 툴팁: ArUco 마커 중심으로부터의 수직 오프셋 (양수=아래) 설명
+- spinTargetLaserY: 범위 `-200~200` → `0~500`, 기본값 `30` → `190`
+- 의미: `target_y = ArUco_center_y + offset_px`
+
+---
+
+## 2026-02-28 | DS435→ArduCam 핸드오프 — 1단계 Z 보정 과대 안전중단
+
+**증상:** 핸드오프 1단계에서 DS435 Z축 센터링 시 "보정 과대 (-50.9mm > 50.0mm), 안전 중단" 오류. Z 오프셋 157.8px → ~56mm 보정 필요하나 MAX_CORRECTION=50mm 제한에 걸림.
+
+**원인:** `_ds435_adaptive_align()` 메서드에서 보정량이 MAX_CORRECTION_MM(50mm) 초과 시 즉시 중단하여 아무 이동도 하지 않음.
+
+**수정 파일:** `scripts/main_window.py` (`_ds435_adaptive_align` 메서드)
+
+**수정 내용:**
+- 보정 과대 시 **안전 중단 → 2단계 분할 이동**으로 변경
+- 1차: correction / 2 이동
+- 재측정: 마커 재검출하여 잔여 오프셋 파악
+- 2차: 잔여 오프셋 기반 보정 (MAX_CORRECTION 클램프)
+- 예시: -56mm 필요 → 1차 -28mm → 재측정 → 2차 ~-28mm
+
+---
+
+## 2026-02-28 | DS435→ArduCam 핸드오프 — 3단계 카메라 오프셋 부호 반전
+
+**증상:** 3단계에서 camera_offset_mm 적용 시 로봇이 반대 방향으로 이동. ArduCam FOV에 마커가 들어오지 않음.
+
+**원인:** `StereoOffsetCalculator.camera_offset_mm`의 부호가 이미지 좌표계 기준이었으나, 로봇 이동 방향과 반대.
+
+**수정 파일:** `scripts/main_window.py` (`_on_stereo_calib_handoff_ds435_to_arducam` 메서드)
+
+**수정 내용:**
+- `cam_offset_y = -raw_y`, `cam_offset_z = -raw_z` 부호 반전 적용
+- raw: dY=-37.31mm, dZ=-57.16mm → 적용: dY=+37.31mm, dZ=+57.16mm
+
+---
+
+## 2026-02-28 | DS435→ArduCam 핸드오프 — 4단계 통합 정렬 인라인 코드 오작동
+
+**증상:** 핸드오프 4단계(ArduCam 통합 정렬)가 정상 동작하지 않음. 기존 통합 정렬 버튼은 정상 작동.
+
+**원인:** 핸드오프 4단계에 `_on_stereo_calib_align_aruco_combined()` 로직을 인라인 복사하면서 미묘한 차이 발생 (타이밍, 에러 핸들링, 로깅 차이).
+
+**수정 파일:** `scripts/main_window.py` (`_on_stereo_calib_handoff_ds435_to_arducam` 메서드)
+
+**수정 내용:**
+- 4단계 인라인 정렬 코드 전체 삭제
+- 기존 검증된 `_on_stereo_calib_align_aruco_combined()` 메서드 직접 호출로 교체
+- 버튼 상태 관리: 호출 전 `_set_stereo_align_buttons_enabled(True)` → combined 자체 버튼 관리
+
+**추가:** TARGET_DEPTH_MM 380mm → 370mm 변경
+
+---
+
+## 2026-02-28 | DS435→ArduCam 핸드오프 — 3단계 후 ArduCam 미검출 게이트가 4단계 차단
+
+**증상:** 핸드오프 3단계(카메라 오프셋 적용) 후 "ArduCam 미검출, 4단계 정밀 정렬 건너뜀"으로 조기 종료. 하지만 직접 통합 정렬 버튼을 누르면 ArduCam에서 마커가 정상 검출됨.
+
+**원인:** `_check_arducam_marker_visible()`이 3단계 직후 단 1회만 검출 시도. ArduCam 프레임 갱신 타이밍 지연으로 미검출 반환 → `return`으로 4단계 전체가 건너뛰어짐. 실제로는 통합 정렬의 `_stereo_detect_full_alignment(max_retries=3)`이 재시도하면 검출 성공.
+
+**수정 파일:** `scripts/main_window.py` (`_on_stereo_calib_handoff_ds435_to_arducam` 메서드)
+
+**수정 내용:**
+
+- 3단계 후 ArduCam 미검출 시 `return` (조기 종료) 삭제
+- 미검출이어도 경고 로그만 출력하고 4단계 통합 정렬 무조건 진행
+- 4단계 통합 정렬을 최대 3회 반복 호출하여 수렴 확인 (10px 미만)
+
+---

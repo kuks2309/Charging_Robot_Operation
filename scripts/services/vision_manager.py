@@ -283,6 +283,43 @@ class VisionManager(QObject):
         """
         return self.aruco_detector.detect_marker_centers(frame, camera_matrix, dist_coeffs, estimate_pose)
 
+    def compute_dual_alignment(self, frame, tag_id1, tag_id2, camera_matrix=None, dist_coeffs=None):
+        """Dual ArUco marker 정렬값 계산.
+
+        Args:
+            frame: BGR 이미지
+            tag_id1: 첫 번째 마커 ID
+            tag_id2: 두 번째 마커 ID
+            camera_matrix: 카메라 행렬 (optional)
+            dist_coeffs: 왜곡 계수 (optional)
+
+        Returns:
+            (markers, DualMarkerAlignmentResult) tuple, or (markers, None) if target IDs not found.
+        """
+        from Sensor.aruco.aruco_detector import compute_dual_alignment as _compute
+        markers = self.detect_marker_centers(frame, camera_matrix, dist_coeffs, estimate_pose=True)
+        h, w = frame.shape[:2]
+        alignment = _compute(markers, tag_id1, tag_id2, w, h)
+        return markers, alignment
+
+    def draw_dual_marker_overlay(self, frame, markers, tag_id1, tag_id2, alignment=None, colors=None, show_info=True):
+        """Dual ArUco marker 오버레이 그리기 (in-place).
+
+        Args:
+            frame: BGR 이미지 (in-place 수정)
+            markers: detect_marker_centers() 결과 리스트
+            tag_id1: 첫 번째 마커 ID
+            tag_id2: 두 번째 마커 ID
+            alignment: DualMarkerAlignmentResult or None
+            colors: dict mapping marker ID → BGR tuple
+            show_info: 정보 텍스트 표시 여부
+
+        Returns:
+            frame (same reference, modified in-place)
+        """
+        from Sensor.aruco.aruco_detector import draw_dual_marker_overlay as _draw
+        return _draw(frame, markers, tag_id1, tag_id2, alignment, colors, show_info)
+
     def update_marker_size(self, size_meters: float):
         """마커 크기 업데이트"""
         self.marker_size = size_meters

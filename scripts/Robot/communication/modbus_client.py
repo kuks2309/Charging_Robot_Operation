@@ -304,6 +304,8 @@ class ModbusClient:
         saw_running = False
 
         # 1단계: Running 상태 감지 대기 (최대 5초)
+        # 폴링 간격 0.02s: 작은 이동(1mm)은 PRS가 50ms 내 RUNNING→DONE→IDLE 완료하므로
+        # 0.1s 간격으로는 RUNNING/DONE을 놓칠 수 있음
         while time.time() - start < 5.0:
             if process_events_callback:
                 process_events_callback()
@@ -323,7 +325,7 @@ class ModbusClient:
                 # Running을 거친 후 IDLE이면 완료 (빠른 명령)
                 return True, "명령 완료"
 
-            time.sleep(0.1)
+            time.sleep(0.02)
         else:
             return False, "Running 상태 감지 실패 (5초 타임아웃)"
 

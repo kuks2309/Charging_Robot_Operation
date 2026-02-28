@@ -8,9 +8,9 @@ import os
 import cv2
 import numpy as np
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QTableWidgetItem, QFileDialog
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, Qt
 
 from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
 
@@ -32,8 +32,11 @@ class TabStereoCalibration(QWidget):
     log_message = pyqtSignal(str)
     camera_start_requested = pyqtSignal()
     camera_stop_requested = pyqtSignal()
-    calib_align_aruco_requested = pyqtSignal()
+    calib_align_aruco_requested = pyqtSignal()      # ArUco 정렬 Y (Ry + BaseY)
+    calib_align_aruco_x_requested = pyqtSignal()    # ArUco 정렬 X (Rz)
+    calib_align_aruco_combined_requested = pyqtSignal()  # 통합 정렬 (Y + X)
     calib_align_ds435_requested = pyqtSignal()
+    handoff_ds435_to_arducam_requested = pyqtSignal()
     sweep_start_requested = pyqtSignal(float, int)   # (step_mm, count)
     sweep_cancel_requested = pyqtSignal()
 
@@ -69,10 +72,14 @@ class TabStereoCalibration(QWidget):
         """시그널 연결"""
         self.btnStartCameras.clicked.connect(self._on_start)
         self.btnStopCameras.clicked.connect(self._on_stop)
-        self.btnAlignAruco.clicked.connect(self._on_btn_align_aruco)
+        self.btnAlignArucoY.clicked.connect(self._on_btn_align_aruco)
+        self.btnAlignArucoX.clicked.connect(self._on_btn_align_aruco_x)
+        self.btnAlignArucoCombined.clicked.connect(self._on_btn_align_aruco_combined)
         self.btnAlignDS435.clicked.connect(self._on_btn_align_ds435)
+        self.btnHandoffDS435ToArduCam.clicked.connect(self._on_btn_handoff_ds435_to_arducam)
         self.btnSweepStart.clicked.connect(self._on_btn_sweep_start)
         self.btnSweepCancel.clicked.connect(self._on_btn_sweep_cancel)
+        self.btnSweepSave.clicked.connect(self._on_btn_sweep_save)
         # 스윕 범위 자동 계산 표시
         self.spinSweepStep.valueChanged.connect(self._update_sweep_range_label)
         self.spinSweepCount.valueChanged.connect(self._update_sweep_range_label)
@@ -247,9 +254,19 @@ class TabStereoCalibration(QWidget):
         self.labelCalibStep.setText(message)
 
     def _on_btn_align_aruco(self):
-        """ArUco 정렬 버튼 → 시그널 발행"""
-        self._update_calib_step(1, "ArUco 정렬 요청...")
+        """ArUco 정렬 Y 버튼 → 시그널 발행 (Ry + BaseY)"""
+        self._update_calib_step(1, "ArUco 정렬 Y 요청...")
         self.calib_align_aruco_requested.emit()
+
+    def _on_btn_align_aruco_x(self):
+        """ArUco 정렬 X 버튼 → 시그널 발행 (Rz)"""
+        self._update_calib_step(1, "ArUco 정렬 X 요청...")
+        self.calib_align_aruco_x_requested.emit()
+
+    def _on_btn_align_aruco_combined(self):
+        """통합 정렬 버튼 → 시그널 발행 (Y + X)"""
+        self._update_calib_step(1, "통합 정렬 요청...")
+        self.calib_align_aruco_combined_requested.emit()
 
     def _update_ds435_calib_step(self, step_num, message):
         """DS435 캘리브레이션 단계 라벨 업데이트"""
@@ -259,6 +276,11 @@ class TabStereoCalibration(QWidget):
         """DS435 ArUco 정렬 버튼 → 시그널 발행"""
         self._update_ds435_calib_step(1, "DS435 정렬 요청...")
         self.calib_align_ds435_requested.emit()
+
+    def _on_btn_handoff_ds435_to_arducam(self):
+        """DS435 → ArduCam 핸드오프 버튼 → 시그널 발행"""
+        self._update_ds435_calib_step(1, "DS435→ArduCam 핸드오프 요청...")
+        self.handoff_ds435_to_arducam_requested.emit()
 
     # ==================== Sweep Calibration ====================
 
@@ -272,6 +294,7 @@ class TabStereoCalibration(QWidget):
         self.progressSweep.setMaximum(count * 3)
         self.labelSweepStatus.setText("스윕 시작 요청...")
         self.labelSweepResult.setText("")
+        self.tableSweepData.setRowCount(0)
         self.sweep_start_requested.emit(step_mm, count)
 
     def _on_btn_sweep_cancel(self):
@@ -291,10 +314,73 @@ class TabStereoCalibration(QWidget):
         """스윕 UI 초기화"""
         self.btnSweepStart.setEnabled(True)
         self.btnSweepCancel.setEnabled(False)
+        has_data = self.tableSweepData.rowCount() > 0
+        self.btnSweepSave.setEnabled(has_data)
 
     def set_sweep_result(self, text: str):
         """스윕 결과 표시"""
         self.labelSweepResult.setText(text)
+
+    def _on_btn_sweep_save(self):
+        """테이블 데이터를 CSV로 저장"""
+        table = self.tableSweepData
+        if table.rowCount() == 0:
+            return
+
+        default_dir = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'data', 'stereo')
+        os.makedirs(default_dir, exist_ok=True)
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "스윕 데이터 저장",
+            os.path.join(default_dir, "sweep_data.csv"),
+            "CSV Files (*.csv);;All Files (*)")
+        if not filepath:
+            return
+
+        # Header
+        headers = []
+        for col in range(table.columnCount()):
+            headers.append(table.horizontalHeaderItem(col).text())
+
+        # Rows
+        rows = []
+        for row in range(table.rowCount()):
+            row_data = []
+            for col in range(table.columnCount()):
+                item = table.item(row, col)
+                row_data.append(item.text() if item else "")
+            rows.append(row_data)
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(",".join(headers) + "\n")
+            for row_data in rows:
+                f.write(",".join(row_data) + "\n")
+
+        self._log(f"[Sweep] CSV 저장: {filepath}")
+        self.labelSweepStatus.setText(f"저장 완료: {os.path.basename(filepath)}")
+
+    def add_sweep_data_row(self, axis, step_mm, ds_x, ds_y, ds_z, ar_x, ar_y):
+        """스윕 데이터 테이블에 한 행 추가"""
+        row = self.tableSweepData.rowCount()
+        self.tableSweepData.insertRow(row)
+
+        def _item(val, fmt=".1f"):
+            if val is None:
+                text = "-"
+            else:
+                text = f"{val:{fmt}}"
+            item = QTableWidgetItem(text)
+            item.setTextAlignment(Qt.AlignCenter)
+            return item
+
+        self.tableSweepData.setItem(row, 0, _item(axis.upper(), "s"))
+        self.tableSweepData.setItem(row, 1, _item(step_mm, "+.1f"))
+        self.tableSweepData.setItem(row, 2, _item(ds_x, ".1f"))
+        self.tableSweepData.setItem(row, 3, _item(ds_y, ".1f"))
+        self.tableSweepData.setItem(row, 4, _item(ds_z, ".1f"))
+        self.tableSweepData.setItem(row, 5, _item(ar_x, ".1f"))
+        self.tableSweepData.setItem(row, 6, _item(ar_y, ".1f"))
+        self.tableSweepData.scrollToBottom()
 
     def _update_sweep_range_label(self):
         """스텝 × 횟수 = 총 거리 자동 표시"""
