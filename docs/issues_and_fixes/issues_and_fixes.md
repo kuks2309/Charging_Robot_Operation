@@ -1295,3 +1295,71 @@ UI spinbox(0.1mm) → signal(str, float) → send_base_linear(axis, 0.1)
 | LOW | ModbusClient 레지스터+커맨드 쓰기 Lock 보호 |
 
 ---
+
+## 2026-02-28 | Laser Scan 탭 신규 생성 + ROI 시각화
+
+**목적:** 로봇 Z축 스캔으로 대상물 각도 측정을 위한 전용 탭 추가. 레이저 검출 영역(ROI)을 이미지 중심 기준 좌우 대칭으로 표시.
+
+### 1. Laser Scan 탭 생성
+
+**신규 파일:**
+- `ui/tab_laser_scan.ui` — 좌측 패널 (Camera Stream + 이미지 모드 + 조그 이동) + 빈 우측 패널
+- `scripts/tabs/tab_laser_scan.py` — `QWidget + JogMixin` 구성, ArduCam 전용
+
+**수정 파일:**
+- `scripts/tabs/__init__.py` — `TabLaserScan` import/export 추가
+- `scripts/main_window.py` — 3곳 수정:
+  - import 추가 (line 25)
+  - `_load_separated_tabs()`: 인덱스 8에 "Laser Scan" 탭 삽입 (line 185-187)
+  - `_connect_tab_signals()`: log, camera, jog, arducam_required 시그널 연결 (line 259-266)
+  - `_process_camera_frame()`: 탭 인덱스 8에서 `update_frame()` 호출 (line 3390-3391)
+  - `_stop_all_cameras()`: `deactivate()` 호출 추가 (line 3687)
+
+**기능:** 카메라 시작/정지, undistort 지원, 이미지 저장(`images/laser_scan/`), 6축 조그 이동
+
+### 2. ROI 시각화 (이미지 중심 기준 좌우 대칭)
+
+**신규 파일:**
+- `config/laser_scan_roi.json` — ROI 설정 파일
+
+```json
+{
+  "roi": {
+    "offset_x": 500,
+    "roi_width": 80,
+    "roi_height": 600,
+    "y_offset": 60,
+    "color": [0, 0, 255],
+    "thickness": 2
+  }
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| offset_x | 500 | 이미지 중심에서 ROI 중심까지 X 거리 (px) |
+| roi_width | 80 | ROI 폭 (px) |
+| roi_height | 600 | ROI 높이 (px) |
+| y_offset | 60 | ROI 상단 Y 오프셋 (px) |
+| color | [0,0,255] | BGR 색상 (빨강) |
+| thickness | 2 | 선 두께 (px) |
+
+**수정 파일:** `scripts/tabs/tab_laser_scan.py`
+
+**추가 메서드:**
+- `_load_roi_config()` — JSON config 로드, 실패 시 None fallback
+- `_compute_roi_rects(frame_w, frame_h, roi_cfg)` — `@staticmethod` 순수 함수. cx=width//2 기준 좌우 대칭 좌표 계산, 프레임 경계 클리핑
+- `_draw_roi_boxes(frame)` — cv2.rectangle로 빨간 사각형 2개 시각화
+
+**ROI 좌표 계산 (1280x720 기준):**
+```
+cx = 640
+Left ROI:  x=100~180, y=60~660
+Right ROI: x=1100~1180, y=60~660
+```
+
+**3-copy 패턴 적용:** `display_frame`(저장용)과 `display`(표시용) 분리 → 저장 이미지에 ROI 미포함
+
+**교훈:** 정적 ROI는 탭 내 구현이 적절 (4-5줄 산술). `_compute_roi_rects`를 순수 함수로 구현하면 향후 서비스 레이어 추출이 용이.
+
+---

@@ -265,6 +265,8 @@ class MainWindow(QMainWindow):
         self.tabLaserScan.arducam_required.connect(
             lambda: self._on_camera_type_changed(CAMERA_ARDUCAM)
         )
+        self.tabLaserScan.scan_start_requested.connect(self._on_laser_scan_start)
+        self.tabLaserScan.scan_cancel_requested.connect(self._on_laser_scan_cancel)
 
         # 스테레오 캘리브레이션 탭 시그널
         self.tabStereoCalibration.log_message.connect(self._log)
@@ -285,6 +287,9 @@ class MainWindow(QMainWindow):
 
         # 스윕 캘리브레이션 서비스
         self._sweep_service = None
+
+        # 레이저 스캔 서비스
+        self._laser_scan_service = None
 
         # 자동 캘리브레이션 상태 변수 초기화
         self._auto_calib_state = None
@@ -2846,6 +2851,105 @@ class MainWindow(QMainWindow):
         tab = self.tabStereoCalibration
         tab.reset_sweep_ui()
         self._log("[Sweep] 스윕 완료")
+
+    # ==================== Z축 레이저 스캔 ====================
+
+    def _on_laser_scan_start(self, step_mm: float, total_distance: float):
+        """Z축 레이저 스캔 시작 핸들러"""
+        from PyQt5.QtWidgets import QMessageBox
+
+        # 로봇 연결 확인
+        if self.robot is None or not self.robot.is_connected:
+            self._log("[LaserScan] 로봇 미연결")
+            return
+
+        # ArduCam 카메라 확인/시작
+        if self.arducam_manager is None or not self.arducam_manager.is_running:
+            self._log("[LaserScan] ArduCam 시작 중...")
+            self._on_camera_type_changed(CAMERA_ARDUCAM)
+            self._on_start_camera()
+            import time
+            time.sleep(1.0)
+
+        # 확인 다이얼로그
+        n_steps = int(round(total_distance / step_mm))
+        reply = QMessageBox.question(
+            self, "Z축 레이저 스캔",
+            f"Z축 레이저 스캔을 시작합니다.\n\n"
+            f"스텝: {step_mm}mm, 총 거리: {total_distance}mm ({n_steps}스텝)\n"
+            f"로봇이 Z축 아래로 {total_distance}mm 이동합니다.\n"
+            f"주변 장애물을 확인하세요.",
+            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if reply != QMessageBox.Ok:
+            return
+
+        # 기존 서비스 정리
+        self._cleanup_laser_scan_service()
+
+        # 서비스 생성
+        from services.laser_scan_service import LaserScanService
+        tab = self.tabLaserScan
+
+        self._laser_scan_service = LaserScanService(
+            robot=self.robot,
+            arducam_manager=self.arducam_manager,
+            roi_config=tab._roi_config,
+            camera_matrix=tab.camera_matrix,
+            dist_coeffs=tab.dist_coeffs,
+            parent=self,
+        )
+
+        # 시그널 연결
+        self._laser_scan_service.status_updated.connect(tab.update_scan_status)
+        self._laser_scan_service.progress_updated.connect(tab.update_scan_progress)
+        self._laser_scan_service.step_data_captured.connect(tab.add_scan_data_row)
+        self._laser_scan_service.scan_finished.connect(self._on_laser_scan_finished)
+        self._laser_scan_service.scan_error.connect(self._on_laser_scan_error)
+        self._laser_scan_service.log_message.connect(self._log)
+
+        tab.set_scanning(True)
+        self._laser_scan_service.start(step_mm, total_distance)
+
+    def _on_laser_scan_cancel(self):
+        """Z축 레이저 스캔 취소 핸들러"""
+        if self._laser_scan_service and self._laser_scan_service.is_running:
+            self._laser_scan_service.cancel()
+
+    def _on_laser_scan_finished(self, results: dict):
+        """Z축 레이저 스캔 완료 핸들러"""
+        tab = self.tabLaserScan
+        tab.show_scan_results(results)
+        tab.set_scanning(False)
+        tab.reset_scan_ui()
+        self._log("[LaserScan] 스캔 완료")
+        self._cleanup_laser_scan_service()
+
+    def _on_laser_scan_error(self, error_msg: str):
+        """Z축 레이저 스캔 오류 핸들러"""
+        self._log(f"[LaserScan] 오류: {error_msg}")
+        tab = self.tabLaserScan
+        tab.update_scan_status(f"오류: {error_msg}")
+        tab.set_scanning(False)
+        tab.reset_scan_ui()
+        self._cleanup_laser_scan_service()
+
+    def _cleanup_laser_scan_service(self):
+        """레이저 스캔 서비스 정리"""
+        if self._laser_scan_service is not None:
+            try:
+                self._laser_scan_service.status_updated.disconnect()
+                self._laser_scan_service.progress_updated.disconnect()
+                self._laser_scan_service.step_data_captured.disconnect()
+                self._laser_scan_service.scan_finished.disconnect()
+                self._laser_scan_service.scan_error.disconnect()
+                self._laser_scan_service.log_message.disconnect()
+            except RuntimeError:
+                pass
+            self._laser_scan_service.setParent(None)
+            self._laser_scan_service.deleteLater()
+            self._laser_scan_service = None
 
     # ==================== 레이저 캘리브레이션 Z 조정 ====================
 

@@ -1,0 +1,623 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TabLaserScan</class>
+ <widget class="QWidget" name="TabLaserScan">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayoutMain">
+   <property name="spacing"><number>4</number></property>
+   <property name="leftMargin"><number>4</number></property>
+   <property name="topMargin"><number>4</number></property>
+   <property name="rightMargin"><number>4</number></property>
+   <property name="bottomMargin"><number>4</number></property>
+
+   <!-- ========== LEFT PANEL: Camera + Jog ========== -->
+   <item>
+    <widget class="QWidget" name="widgetLeft">
+     <layout class="QVBoxLayout" name="verticalLayoutLeft">
+      <property name="spacing"><number>2</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+
+      <!-- Camera Stream -->
+      <item>
+       <widget class="QGroupBox" name="groupCameraStream">
+        <property name="title"><string>Camera Stream</string></property>
+        <property name="maximumSize">
+         <size><width>710</width><height>16777215</height></size>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayoutCamera">
+         <property name="spacing"><number>2</number></property>
+         <property name="leftMargin"><number>30</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>30</number></property>
+         <property name="bottomMargin"><number>4</number></property>
+         <item>
+          <widget class="QLabel" name="labelCameraView">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize"><size><width>640</width><height>360</height></size></property>
+           <property name="maximumSize"><size><width>640</width><height>360</height></size></property>
+           <property name="styleSheet"><string>background-color: #333333; border: 1px solid #555555;</string></property>
+           <property name="text"><string>카메라 미연결</string></property>
+           <property name="alignment"><set>Qt::AlignCenter</set></property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayoutCameraButtons">
+           <item>
+            <widget class="QLabel" name="labelCameraType">
+             <property name="text"><string>ArduCam 전용</string></property>
+             <property name="styleSheet"><string>font-weight: bold; color: #666; padding: 4px;</string></property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacerCameraLabel">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStartCamera">
+             <property name="text"><string>카메라 시작</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnStopCamera">
+             <property name="text"><string>카메라 정지</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnSaveImage">
+             <property name="text"><string>이미지 저장</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 이미지 모드 -->
+      <item>
+       <widget class="QGroupBox" name="groupImageMode">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="title"><string>이미지 모드</string></property>
+        <layout class="QHBoxLayout" name="horizontalLayoutImageMode">
+         <property name="leftMargin"><number>8</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>8</number></property>
+         <property name="bottomMargin"><number>4</number></property>
+         <item>
+          <widget class="QRadioButton" name="radioOriginal">
+           <property name="text"><string>Original</string></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="radioUndistorted">
+           <property name="text"><string>Undistorted</string></property>
+           <property name="checked"><bool>true</bool></property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacerImageMode">
+           <property name="orientation"><enum>Qt::Horizontal</enum></property>
+           <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 조그 이동(Robot Base) -->
+      <item>
+       <widget class="QGroupBox" name="groupJogMove">
+        <property name="title"><string>조그 이동(Robot Base)</string></property>
+        <layout class="QVBoxLayout" name="verticalLayoutJog">
+         <item>
+          <layout class="QGridLayout" name="gridLayoutJog">
+           <!-- X축 -->
+           <item row="0" column="0">
+            <widget class="QLabel" name="labelJogX">
+             <property name="text"><string>X:</string></property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QPushButton" name="btnJogXMinus">
+             <property name="text"><string>-</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QDoubleSpinBox" name="spinJogStepX">
+             <property name="suffix"><string> mm</string></property>
+             <property name="decimals"><number>1</number></property>
+             <property name="minimum"><double>0.100000000000000</double></property>
+             <property name="maximum"><double>100.000000000000000</double></property>
+             <property name="value"><double>10.000000000000000</double></property>
+            </widget>
+           </item>
+           <item row="0" column="3">
+            <widget class="QPushButton" name="btnJogXPlus">
+             <property name="text"><string>+</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <!-- Y축 -->
+           <item row="1" column="0">
+            <widget class="QLabel" name="labelJogY">
+             <property name="text"><string>Y:</string></property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QPushButton" name="btnJogYMinus">
+             <property name="text"><string>-</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QDoubleSpinBox" name="spinJogStepY">
+             <property name="suffix"><string> mm</string></property>
+             <property name="decimals"><number>1</number></property>
+             <property name="minimum"><double>0.100000000000000</double></property>
+             <property name="maximum"><double>100.000000000000000</double></property>
+             <property name="value"><double>10.000000000000000</double></property>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <widget class="QPushButton" name="btnJogYPlus">
+             <property name="text"><string>+</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <!-- Z축 -->
+           <item row="2" column="0">
+            <widget class="QLabel" name="labelJogZ">
+             <property name="text"><string>Z:</string></property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QPushButton" name="btnJogZMinus">
+             <property name="text"><string>-</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <item row="2" column="2">
+            <widget class="QDoubleSpinBox" name="spinJogStepZ">
+             <property name="suffix"><string> mm</string></property>
+             <property name="decimals"><number>1</number></property>
+             <property name="minimum"><double>0.100000000000000</double></property>
+             <property name="maximum"><double>100.000000000000000</double></property>
+             <property name="value"><double>10.000000000000000</double></property>
+            </widget>
+           </item>
+           <item row="2" column="3">
+            <widget class="QPushButton" name="btnJogZPlus">
+             <property name="text"><string>+</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <!-- Rx축 -->
+           <item row="3" column="0">
+            <widget class="QLabel" name="labelJogRx">
+             <property name="text"><string>Rx:</string></property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QPushButton" name="btnJogRxMinus">
+             <property name="text"><string>-</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QDoubleSpinBox" name="spinJogStepRx">
+             <property name="suffix"><string> deg</string></property>
+             <property name="decimals"><number>1</number></property>
+             <property name="minimum"><double>0.100000000000000</double></property>
+             <property name="maximum"><double>90.000000000000000</double></property>
+             <property name="value"><double>5.000000000000000</double></property>
+            </widget>
+           </item>
+           <item row="3" column="3">
+            <widget class="QPushButton" name="btnJogRxPlus">
+             <property name="text"><string>+</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <!-- Ry축 -->
+           <item row="4" column="0">
+            <widget class="QLabel" name="labelJogRy">
+             <property name="text"><string>Ry:</string></property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QPushButton" name="btnJogRyMinus">
+             <property name="text"><string>-</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <item row="4" column="2">
+            <widget class="QDoubleSpinBox" name="spinJogStepRy">
+             <property name="suffix"><string> deg</string></property>
+             <property name="decimals"><number>1</number></property>
+             <property name="minimum"><double>0.100000000000000</double></property>
+             <property name="maximum"><double>90.000000000000000</double></property>
+             <property name="value"><double>5.000000000000000</double></property>
+            </widget>
+           </item>
+           <item row="4" column="3">
+            <widget class="QPushButton" name="btnJogRyPlus">
+             <property name="text"><string>+</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <!-- Rz축 -->
+           <item row="5" column="0">
+            <widget class="QLabel" name="labelJogRz">
+             <property name="text"><string>Rz:</string></property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QPushButton" name="btnJogRzMinus">
+             <property name="text"><string>-</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+           <item row="5" column="2">
+            <widget class="QDoubleSpinBox" name="spinJogStepRz">
+             <property name="suffix"><string> deg</string></property>
+             <property name="decimals"><number>1</number></property>
+             <property name="minimum"><double>0.100000000000000</double></property>
+             <property name="maximum"><double>90.000000000000000</double></property>
+             <property name="value"><double>5.000000000000000</double></property>
+            </widget>
+           </item>
+           <item row="5" column="3">
+            <widget class="QPushButton" name="btnJogRzPlus">
+             <property name="text"><string>+</string></property>
+             <property name="minimumSize"><size><width>40</width><height>30</height></size></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- Spacer -->
+      <item>
+       <spacer name="verticalSpacerLeft">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+       </spacer>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- ========== RIGHT PANEL: 레이저 검출 결과 ========== -->
+   <item>
+    <widget class="QWidget" name="widgetRight">
+     <property name="minimumSize"><size><width>300</width><height>0</height></size></property>
+     <layout class="QVBoxLayout" name="verticalLayoutRight">
+      <property name="spacing"><number>4</number></property>
+      <property name="leftMargin"><number>4</number></property>
+      <property name="topMargin"><number>4</number></property>
+      <property name="rightMargin"><number>4</number></property>
+      <property name="bottomMargin"><number>4</number></property>
+
+      <!-- 레이저 검출 토글 -->
+      <item>
+       <widget class="QPushButton" name="btnToggleLaser">
+        <property name="text"><string>레이저 검출 OFF</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+        <property name="styleSheet">
+         <string>QPushButton { padding: 8px; font-weight: bold; font-size: 14px; }
+QPushButton:checked { background-color: #E91E96; color: white; }</string>
+        </property>
+       </widget>
+      </item>
+
+      <!-- 좌 ROI 결과 -->
+      <item>
+       <widget class="QGroupBox" name="groupLeftROI">
+        <property name="title"><string>좌 ROI</string></property>
+        <layout class="QGridLayout" name="gridLayoutLeft">
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>2</number></property>
+         <property name="leftMargin"><number>6</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>6</number></property>
+         <property name="bottomMargin"><number>4</number></property>
+         <item row="0" column="0">
+          <widget class="QLabel"><property name="text"><string>기울기:</string></property></widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="labelLeftAngle">
+           <property name="text"><string>-</string></property>
+           <property name="styleSheet"><string>font-weight: bold; font-size: 13px;</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel"><property name="text"><string>포인트:</string></property></widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="labelLeftPoints">
+           <property name="text"><string>-</string></property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel"><property name="text"><string>Y 범위:</string></property></widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="labelLeftYRange">
+           <property name="text"><string>-</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 우 ROI 결과 -->
+      <item>
+       <widget class="QGroupBox" name="groupRightROI">
+        <property name="title"><string>우 ROI</string></property>
+        <layout class="QGridLayout" name="gridLayoutRight">
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>2</number></property>
+         <property name="leftMargin"><number>6</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>6</number></property>
+         <property name="bottomMargin"><number>4</number></property>
+         <item row="0" column="0">
+          <widget class="QLabel"><property name="text"><string>기울기:</string></property></widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="labelRightAngle">
+           <property name="text"><string>-</string></property>
+           <property name="styleSheet"><string>font-weight: bold; font-size: 13px;</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel"><property name="text"><string>포인트:</string></property></widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="labelRightPoints">
+           <property name="text"><string>-</string></property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel"><property name="text"><string>Y 범위:</string></property></widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="labelRightYRange">
+           <property name="text"><string>-</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 각도 차이 -->
+      <item>
+       <widget class="QGroupBox" name="groupAngleDiff">
+        <property name="title"><string>좌우 비교</string></property>
+        <layout class="QHBoxLayout" name="hLayoutAngleDiff">
+         <property name="leftMargin"><number>6</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>6</number></property>
+         <property name="bottomMargin"><number>4</number></property>
+         <item>
+          <widget class="QLabel"><property name="text"><string>각도 차이:</string></property></widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelAngleDiff">
+           <property name="text"><string>-</string></property>
+           <property name="styleSheet"><string>font-weight: bold; font-size: 14px; color: #1565C0;</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- ========== Z축 스캔 설정 ========== -->
+      <item>
+       <widget class="QGroupBox" name="groupScanSettings">
+        <property name="title"><string>Z축 스캔</string></property>
+        <layout class="QGridLayout" name="gridScanSettings">
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>4</number></property>
+         <property name="leftMargin"><number>6</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>6</number></property>
+         <property name="bottomMargin"><number>6</number></property>
+         <item row="0" column="0">
+          <widget class="QLabel"><property name="text"><string>스텝:</string></property></widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QDoubleSpinBox" name="spinScanStep">
+           <property name="minimum"><double>0.100000000000000</double></property>
+           <property name="maximum"><double>1.000000000000000</double></property>
+           <property name="singleStep"><double>0.100000000000000</double></property>
+           <property name="value"><double>1.000000000000000</double></property>
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel"><property name="text"><string>총 거리:</string></property></widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="spinScanDistance">
+           <property name="minimum"><double>1.000000000000000</double></property>
+           <property name="maximum"><double>100.000000000000000</double></property>
+           <property name="singleStep"><double>5.000000000000000</double></property>
+           <property name="value"><double>50.000000000000000</double></property>
+           <property name="suffix"><string> mm</string></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel"><property name="text"><string>스텝 수:</string></property></widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="labelScanStepCount">
+           <property name="text"><string>50 스텝</string></property>
+           <property name="styleSheet"><string>font-weight: bold;</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 스캔 시작/중지 버튼 -->
+      <item>
+       <layout class="QHBoxLayout" name="hLayoutScanButtons">
+        <item>
+         <widget class="QPushButton" name="btnScanStart">
+          <property name="text"><string>Z 스캔 시작</string></property>
+          <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+          <property name="styleSheet">
+           <string>QPushButton { padding: 8px; font-weight: bold; font-size: 13px; background-color: #4CAF50; color: white; }
+QPushButton:hover { background-color: #45a049; }
+QPushButton:disabled { background-color: #cccccc; color: #666666; }</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnScanStop">
+          <property name="text"><string>스캔 중지</string></property>
+          <property name="enabled"><bool>false</bool></property>
+          <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
+          <property name="styleSheet">
+           <string>QPushButton { padding: 8px; font-weight: bold; font-size: 13px; background-color: #f44336; color: white; }
+QPushButton:hover { background-color: #da190b; }
+QPushButton:disabled { background-color: #cccccc; color: #666666; }</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <!-- 스캔 진행 상태 -->
+      <item>
+       <widget class="QLabel" name="labelScanStatus">
+        <property name="text"><string>-</string></property>
+        <property name="styleSheet"><string>color: #555; font-size: 12px;</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="progressScan">
+        <property name="value"><number>0</number></property>
+        <property name="maximumSize"><size><width>16777215</width><height>20</height></size></property>
+       </widget>
+      </item>
+
+      <!-- 스캔 데이터 테이블 -->
+      <item>
+       <widget class="QTableWidget" name="tableScanData">
+        <property name="minimumSize"><size><width>0</width><height>150</height></size></property>
+        <property name="maximumSize"><size><width>16777215</width><height>200</height></size></property>
+        <property name="columnCount"><number>6</number></property>
+        <property name="rowCount"><number>0</number></property>
+        <property name="alternatingRowColors"><bool>true</bool></property>
+        <property name="selectionMode"><enum>QAbstractItemView::NoSelection</enum></property>
+        <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+        <property name="styleSheet"><string>QTableWidget { font-size: 11px; }</string></property>
+        <column><property name="text"><string>Step</string></property></column>
+        <column><property name="text"><string>Z(mm)</string></property></column>
+        <column><property name="text"><string>좌 Y</string></property></column>
+        <column><property name="text"><string>우 Y</string></property></column>
+        <column><property name="text"><string>좌 각도</string></property></column>
+        <column><property name="text"><string>우 각도</string></property></column>
+       </widget>
+      </item>
+
+      <!-- 최종 결과 -->
+      <item>
+       <widget class="QGroupBox" name="groupScanResults">
+        <property name="title"><string>스캔 결과</string></property>
+        <layout class="QGridLayout" name="gridScanResults">
+         <property name="horizontalSpacing"><number>8</number></property>
+         <property name="verticalSpacing"><number>2</number></property>
+         <property name="leftMargin"><number>6</number></property>
+         <property name="topMargin"><number>4</number></property>
+         <property name="rightMargin"><number>6</number></property>
+         <property name="bottomMargin"><number>4</number></property>
+         <item row="0" column="0">
+          <widget class="QLabel"><property name="text"><string>좌 기울기:</string></property></widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="labelLeftSlope">
+           <property name="text"><string>- px/mm</string></property>
+           <property name="styleSheet"><string>font-weight: bold;</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel"><property name="text"><string>우 기울기:</string></property></widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="labelRightSlope">
+           <property name="text"><string>- px/mm</string></property>
+           <property name="styleSheet"><string>font-weight: bold;</string></property>
+          </widget>
+         </item>
+         <item row="2" column="0" colspan="2">
+          <widget class="QLabel" name="labelTiltEstimate">
+           <property name="text"><string>기울기 추정: -</string></property>
+           <property name="styleSheet"><string>font-weight: bold; font-size: 14px; color: #D32F2F;</string></property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 데이터 저장 버튼 -->
+      <item>
+       <widget class="QPushButton" name="btnSaveScanData">
+        <property name="text"><string>스캔 데이터 저장</string></property>
+        <property name="enabled"><bool>false</bool></property>
+        <property name="minimumSize"><size><width>0</width><height>32</height></size></property>
+        <property name="styleSheet">
+         <string>QPushButton { padding: 6px; font-weight: bold; }
+QPushButton:disabled { background-color: #cccccc; color: #666666; }</string>
+        </property>
+       </widget>
+      </item>
+
+      <!-- Spacer -->
+      <item>
+       <spacer name="verticalSpacerRight">
+        <property name="orientation"><enum>Qt::Vertical</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+       </spacer>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

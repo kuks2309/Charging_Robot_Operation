@@ -12,6 +12,7 @@ from .data_collector import DataCollector, CollectStatistics
 from .pose_service import PoseService, PoseOperationResult
 from .dual_aruco_detector import DualArucoDetector, ArucoResult, PlaneResult
 from .sweep_calibration_service import SweepCalibrationService
+from .laser_scan_service import LaserScanService
 
 __all__ = [
     'CameraManager',
@@ -30,4 +31,5 @@ __all__ = [
     'ArucoResult',
     'PlaneResult',
     'SweepCalibrationService',
+    'LaserScanService',
 ]
