@@ -2,6 +2,82 @@
 
 ---
 
+## 2026-03-07 | Modbus TCP Heartbeat + Keepalive 메커니즘
+
+**증상:** 로봇과 30분간 명령 전송이 없으면 로봇 컨트롤러 측에서 TCP/IP 연결을 단절함. 또한 네트워크 장애 시 연결 끊김을 감지하지 못하고 UI가 무응답 상태에 빠짐.
+
+**원인:** Modbus TCP 연결에 대한 능동적 연결 감시 및 keepalive 메커니즘 부재
+
+**수정 파일:** `scripts/Robot/communication/modbus_client.py`, `scripts/main_window.py`
+
+**수정 내용:**
+
+1. **Heartbeat (연결 끊김 감지)**
+   - `_update_robot_status()` (100ms 주기) 내 4회 `read_registers()` 중 전부 실패 = 1사이클 실패
+   - 연속 5사이클(~500ms) 실패 시 `_handle_connection_lost()` 호출
+   - ModbusClient: `_connection_lost` 플래그 + `mark_connection_lost()` + `wait_for_done()` 조기 탈출
+   - 비차단 `QMessageBox` 경고 (QTimer.singleShot 사용)
+   - `_on_disconnect(reason)` 분기로 수동 해제/끊김 감지 구분
+
+2. **Keepalive (연결 유지)**
+   - `write_command()` 호출 시 `_last_command_time` 타임스탬프 기록
+   - 60초간 명령 미전송 + 로봇 Idle 상태 시 현재 위치로 movel(CMD 20) 자동 전송
+   - movel 전송 → `write_command()` → 타임스탬프 갱신 → 다음 60초 대기 (자동 반복)
+
+**교훈:** TCP 소켓 레벨 읽기(register read)만으로는 로봇 컨트롤러의 idle 타임아웃을 방지할 수 없음. 로봇 측 명령 레지스터에 주기적으로 쓰기(write_command)가 필요.
+
+---
+
+## 2026-03-07 | ArduCam 카메라 교체 1280x720 → 1920x1080 (렌즈 변경 포함)
+
+**증상:** ArduCam 카메라를 교체하여 해상도가 1280x720에서 1920x1080으로 변경. 렌즈도 변경되어 초점거리가 fy=4003.2 → fy=5347.3으로 변경됨. 기존 코드의 해상도/PIXEL_TO_MM/ROI/sweep 데이터 등이 새 카메라에 맞지 않음.
+
+**핵심 판단:**
+- PIXEL_TO_MM 스케일링: 해상도 비율(1920/1280=1.5x)이 아닌 **초점거리 비율**(fy_old/fy_new = 4003.2/5347.3 = 0.7486) 사용. 렌즈가 다르므로 해상도 비율 적용 시 10.9% 체계적 오차 발생.
+- Sweep 데이터: 기존 1280x720/fy=4003.2 기준 데이터는 완전 무효. 스케일링 불가 → 검증 게이트로 차단.
+- 레이저 ROI: FOV 차이 + ppx=820.3 비대칭으로 산술 스케일링 부정확 → fy 비율 기반 초기값 + 현장 수동 조정.
+
+**수정 파일 (14개):**
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `scripts/Sensor/arducam/arducam_controller.py` | CameraIntrinsics 기본값 1920x1080 |
+| `scripts/services/arducam_manager.py` | Intrinsics/color_resolution 기본값 1920x1080 |
+| `scripts/services/chessboard_alignment_service.py` | PIXEL_TO_MM 0.0625 → 0.0468 (×0.7486) |
+| `scripts/tabs/tab_calibration.py` | PIXEL_TO_MM 0.25 → 0.187 (×0.7486) |
+| `scripts/tabs/calibration_mixin.py` | PIXEL_TO_MM 0.25 → 0.187 (×0.7486) |
+| `scripts/services/stereo_offset_calculator.py` | is_valid 검증 게이트 + 카메라별 IMAGE_CENTER 분리 |
+| `scripts/services/sweep_calibration_service.py` | save_data에 camera_info 메타데이터 추가 |
+| `scripts/main_window.py` | StereoOffsetCalculator에 intrinsics 전달 + is_valid 체크 |
+| `scripts/test_arducam_dual_aruco.py` | cap 해상도 1920x1080 |
+| `scripts/utils/coordinate_visualizer.py` | cap 해상도 1920x1080 |
+| `scripts/test_aruco_detect.py` | cap 해상도 1920x1080 |
+| `scripts/analyze_ippe_ambiguity.py` | cap 해상도 1920x1080 |
+| `config/laser_scan_roi.json` | ROI 값 fy 비율 스케일링 + 두께 3 |
+| `scripts/tabs/tab_laser_calibration.py`, `tab_stereo_calibration.py` | 주석 해상도 업데이트 |
+
+**StereoOffsetCalculator 검증 게이트 (상세):**
+- `sweep_calibration_service.py`: 새 sweep 저장 시 `camera_info` (width, height, fy) 메타데이터 포함
+- `stereo_offset_calculator.py`: 생성 시 `current_arducam_intrinsics` 비교하여 `is_valid=False` 설정 (camera_info 없거나 불일치 시)
+- `main_window.py`: `is_valid=False`이면 핸드오프 차단 + 사용자에게 sweep 재실행 안내
+
+**Architect 발견 버그 (IMAGE_CENTER):**
+- 기존: `IMAGE_CENTER_X/Y = 640/360` 하드코딩 → DS435와 ArduCam 모두 같은 값 사용
+- 문제: 새 카메라로 sweep 재실행 시 ArduCam midpoint가 1920x1080 좌표계 → 640/360 사용하면 수 mm 오프셋 오차
+- 수정: DS435는 `DS435_CENTER_X/Y = 640/360` 고정, ArduCam은 `camera_info`에서 width/height 추출하여 동적 계산
+
+**현장 작업 필요:**
+1. `config/laser_scan_roi.json` — 레이저 ROI 시각적 확인 후 미세 조정 (현재 fy 비율 스케일링 초기값)
+2. PIXEL_TO_MM 값 — 이론값이므로 현장 측정 후 확정 권장
+3. Sweep 캘리브레이션 — 새 카메라로 재실행 필요 (기존 데이터 자동 차단됨)
+
+**교훈:**
+1. 카메라 교체 시 해상도 비율과 초점거리 비율을 구분해야 함. 렌즈가 다르면 해상도 비율은 무의미.
+2. 캘리브레이션 데이터에 카메라 메타데이터를 포함시켜야 카메라 교체 시 자동 무효화 가능.
+3. 하드코딩된 이미지 중심 좌표는 카메라별로 분리해야 다중 카메라 시스템에서 안전.
+
+---
+
 ## 2026-03-07 | Ry 정렬 버튼 미동작 (시그널 미연결 + 신뢰성 검증 필수 의존)
 
 **증상:** ArUco 신뢰성 검증 탭 → ar tag tcp align → "마커 평행 정렬 (TF4)" 섹션의 Ry 정렬 버튼이 카메라 스트리밍 중에도 비활성 상태. 신뢰성 검증 완료 후에만 활성화되며, 클릭 시 TF4 tool.rot(vision ry→robot rz 매핑)으로 동작하여 의도한 base Ry 보정과 불일치.
@@ -1452,5 +1528,60 @@ Right ROI: x=1100~1180, y=60~660
 **디바이스:** `FHD Camera` → `/dev/video6` (usb-0000:00:14.0-8), device_index=6 유지
 
 **교훈:** ArduCam 교체 시 캘리브레이션 파일 교체 + 해상도 설정 변경 필수. `ArduCamManager`의 `color_resolution` 기본값이 (1280, 720)이므로 명시적 지정 필요.
+
+---
+
+## 2026-03-07 | 레이저 삼각측량 캘리브레이션 — 각도 추정 기능 추가
+
+**증상:** Z축 레이저 스캔으로 slope(px/mm)는 산출되지만, 대상물 기울기 각도를 자동 추정하는 기능이 없음. `labelTiltEstimate`에 좌우 기울기 차이만 표시.
+
+**원인:** 삼각측량(structured light triangulation) 기반 각도 역산 로직 미구현. 캘리브레이션 데이터(sensitivity) 없이는 slope → 각도 변환 불가.
+
+**삼각측량 원리:**
+- 레이저: 수평에서 12.75° ±0.5° 아래, 카메라: 수평 (0°)
+- Z축 이동 시 대상물 기울기에 의해 레이저 라인의 y좌표 변화 → slope(px/mm)
+- 수직벽(0°)이면 slope≈0, 기울어질수록 |slope| 증가
+- 핵심 공식: `slope = (fy × B × tan(α)) / d²` (B=baseline, d=거리, α=수직 기준 기울기)
+- B, d를 정확히 모르므로 기지 각도(20°) 시편으로 경험적 캘리브레이션:
+  - `sensitivity = |avg_slope| / tan(20°) = 0.943 / 0.364 ≈ 2.59 px/mm`
+  - 각도 역산: `α = arctan(|slope| / sensitivity)`
+
+**캘리브레이션 데이터 (1920x1080, 50mm 스캔, 1mm 스텝):**
+- Left slope: -0.935 px/mm (R²=0.9998)
+- Right slope: -0.950 px/mm (R²=0.9997)
+- Sensitivity: 2.59 px/mm
+
+**수정 파일 (3개):**
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `config/laser_triangulation_calib.json` | **신규 생성** — sensitivity, 캘리브레이션 각도, 좌/우 slope |
+| `scripts/services/laser_scan_service.py` | 캘리브레이션 로드 + `_estimate_tilt_angle()` 추가 + 결과에 `angle_estimate` 포함 |
+| `scripts/tabs/tab_laser_scan.py` | `show_scan_results()`에 추정 각도 표시 + 수동 저장에 `angle_estimate` 포함 |
+
+**수정 내용:**
+
+1. **`config/laser_triangulation_calib.json` (신규):**
+   - `sensitivity_px_per_mm`: 2.59
+   - `calibration_angle_deg`: 20.0
+   - `left_slope`: -0.935, `right_slope`: -0.950
+
+2. **`laser_scan_service.py`:**
+   - `_CALIB_FILE` 클래스 변수로 캘리브레이션 파일 경로 정의
+   - `__init__`에서 `_load_triangulation_calib()` 호출
+   - `_estimate_tilt_angle(left, right)`: `arctan(|slope| / sensitivity)` 계산, 좌/우 평균
+   - `_do_analyze()`에서 `angle_estimate` 결과에 포함
+   - `_save_results()`에서 JSON에 `angle_estimate` 저장
+
+3. **`tab_laser_scan.py`:**
+   - `show_scan_results()`: `labelTiltEstimate`에 "추정 각도: XX.XX° (L=XX.XX° R=XX.XX°)" 표시
+   - 캘리브레이션 없을 시 "각도 추정: 캘리브레이션 없음" 표시
+   - `_on_save_scan_data()`: 수동 저장 JSON에 `angle_estimate` 포함
+
+**검증:** 20° 시편 스캔 시 추정 각도 ≈ 20° 출력 확인 필요. 다른 각도 시편으로 교차 검증 예정.
+
+**교훈:**
+1. 삼각측량에서 B(baseline)과 d(거리)를 정확히 모를 때는 기지 각도 시편으로 경험적 sensitivity를 산출하는 것이 실용적
+2. 카메라 교체(1280x720→1920x1080) 후 R²가 0.39→0.9998로 대폭 개선 — 고해상도/고초점거리가 삼각측량 정밀도에 직접 영향
 
 ---
