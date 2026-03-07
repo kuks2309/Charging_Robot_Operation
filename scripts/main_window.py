@@ -1724,6 +1724,16 @@ class MainWindow(QMainWindow):
             self._heartbeat_failures += 1
             if self._heartbeat_failures >= self._heartbeat_max_failures:
                 self._handle_connection_lost()
+                return
+
+        # --- keepalive: 60초간 명령 없으면 현재 위치로 movel ---
+        if (any_success and cam_pose and
+                time.time() - self.robot._last_command_time > 60):
+            if resp == 0:  # Idle
+                regs = [self.robot.to_uint16(int(round(v * 10))) for v in cam_pose]
+                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+                self._log("[Keepalive] 현재 위치로 movel 전송 (idle 60초 경과)")
 
     def _handle_connection_lost(self):
         """네트워크 연결 끊김 감지 시 처리 (재진입 방지)"""
@@ -2674,7 +2684,11 @@ class MainWindow(QMainWindow):
                 self._log("[Handoff] data/stereo/에 sweep JSON 파일 없음")
                 return
 
-            calc = StereoOffsetCalculator(sweep_path)
+            calc = StereoOffsetCalculator(sweep_path, self.arducam_manager.intrinsics)
+            if not calc.is_valid:
+                tab._update_ds435_calib_step(0, "sweep 데이터 카메라 불일치 - 스윕 재실행 필요")
+                self._log("[Handoff] sweep 데이터가 현재 카메라와 불일치. 스윕 재실행 필요.")
+                return
             raw_y, raw_z = calc.camera_offset_mm
             # 부호 반전: 이미지 좌표→로봇 이동 방향 변환
             cam_offset_y = -raw_y

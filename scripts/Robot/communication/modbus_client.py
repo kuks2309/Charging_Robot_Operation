@@ -98,6 +98,7 @@ class ModbusClient:
         self._client: Optional[ModbusTcpClient] = None
         self._connected = False
         self._connection_lost: bool = False
+        self._last_command_time: float = time.time()
 
     @property
     def is_connected(self) -> bool:
@@ -137,6 +138,7 @@ class ModbusClient:
                 # 검증 성공 -> 연결 완료
                 self._connected = True
                 self._connection_lost = False
+                self._last_command_time = time.time()
                 # 타임아웃을 원래 값으로 복원 (향후 operation용)
                 self._client.timeout = self.timeout
                 return True, f"연결 성공: {self.ip}:{self.port}"
@@ -287,6 +289,7 @@ class ModbusClient:
 
     def write_command(self, value: int) -> bool:
         """커맨드 레지스터(351) 쓰기"""
+        self._last_command_time = time.time()
         return self.write_register(self.REGISTER_COMMAND, value)
 
     def read_response(self) -> Optional[int]:
