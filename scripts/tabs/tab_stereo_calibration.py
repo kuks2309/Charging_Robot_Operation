@@ -18,7 +18,7 @@ from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'ui')
 TAB_STEREO_CALIBRATION_UI = os.path.join(UI_DIR, 'tab_stereo_calibration.ui')
 
-# 고정 표시 크기 (1280x720의 1/2)
+# 고정 표시 크기 (1920x1080의 1/3)
 DISPLAY_W = 640
 DISPLAY_H = 360
 
@@ -131,7 +131,7 @@ class TabStereoCalibration(QWidget):
         """ArduCam 프레임 수신 → ArUco 검출 → 우측 라벨에 표시"""
         if not self.isVisible():
             return
-        self.current_frame = frame
+        self.current_frame = frame.copy()
         self._arducam_frame_count += 1
         if self._arducam_frame_count % DETECT_EVERY_N == 0:
             self._arducam_last_markers = self._detect_markers(

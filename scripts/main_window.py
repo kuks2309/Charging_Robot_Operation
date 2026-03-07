@@ -1868,7 +1868,9 @@ class MainWindow(QMainWindow):
             (angle_ry, offset_y) tuple, or None if detection fails.
             angle_ry: Ry 보정 각도 (°), offset_y: 이미지 중심 대비 마커 중점 X 오프셋 (px)
         """
-        frame = getattr(self.tabLaserCalibration, 'current_frame', None)
+        frame = getattr(self.tabLaserCalibration, '_raw_frame', None)
+        if frame is None:
+            frame = getattr(self.tabLaserCalibration, 'current_frame', None)
         label = getattr(self.tabLaserCalibration, 'labelCameraView', None)
         result = self._detect_dual_alignment(frame, label)
         if result is None:
@@ -3481,6 +3483,8 @@ class MainWindow(QMainWindow):
                 markers = self.vision_manager.detect_marker_centers(
                     frame, tab_ar.camera_matrix, tab_ar.dist_coeffs, estimate_pose=True)
                 self.tabLaserCalibration.set_markers(markers)
+                # 오버레이 적용 전 순수 원본 저장 (ArUco 검출 전용)
+                self.tabLaserCalibration._raw_frame = frame.copy()
                 # ArUco 오버레이 표시 (정렬 후 결과 확인용)
                 if self.tabLaserCalibration._show_aruco_overlay:
                     tag_id1 = tab_ar.spinTagID1.value()

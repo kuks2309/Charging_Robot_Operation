@@ -59,13 +59,14 @@ class TabLaserCalibration(QWidget, JogMixin):
         uic.loadUi(TAB_LASER_CALIBRATION_UI, self)
 
         # === 레이아웃 고정 (내용 변화에도 UI 안정) ===
-        self.labelCameraView.setFixedSize(640, 360)      # 카메라 1280x720의 1/2
+        self.labelCameraView.setFixedSize(640, 360)      # 카메라 1920x1080의 1/3
         self.widgetLeft.setFixedWidth(710)                # 좌측 패널 폭 고정
         # widgetRight, groupResult 크기는 UI 파일에서 관리
         self.labelAngle.setWordWrap(True)                 # 긴 기울기 텍스트 줄바꿈
 
         self.camera_manager = None
         self.current_frame = None       # 원본 프레임
+        self._raw_frame = None          # 오버레이 없는 순수 원본 프레임 (ArUco 검출 전용)
         self.display_frame = None       # 표시용 프레임 (original 또는 undistorted)
         # 표시 모드: None, 'laser', 'conv', 'lines', 'hsv'
         self.display_type = None
