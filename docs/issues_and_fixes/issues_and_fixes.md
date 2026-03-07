@@ -2,6 +2,67 @@
 
 ---
 
+## 2026-03-07 | Ry 정렬 버튼 미동작 (시그널 미연결 + 신뢰성 검증 필수 의존)
+
+**증상:** ArUco 신뢰성 검증 탭 → ar tag tcp align → "마커 평행 정렬 (TF4)" 섹션의 Ry 정렬 버튼이 카메라 스트리밍 중에도 비활성 상태. 신뢰성 검증 완료 후에만 활성화되며, 클릭 시 TF4 tool.rot(vision ry→robot rz 매핑)으로 동작하여 의도한 base Ry 보정과 불일치.
+
+**원인:**
+1. `btnAlignRy`가 `_on_align_single_axis('ry')`에 연결 → `_last_tcp_correction` 필요 (신뢰성 검증 완료 후에만 설정)
+2. 라이브 마커 각도 기반 `_on_align_ry_from_angle()` 메서드와 `align_base_ry_requested` 시그널은 존재하나 버튼에 미연결
+3. `align_base_ry_requested` 시그널이 `main_window.py`에서 핸들러(`_on_ar_tag_align_base_ry`)에 미연결
+
+**수정 파일:** `scripts/tabs/tab_aruco_reliability.py`, `scripts/main_window.py`
+
+**수정 내용:**
+- `tab_aruco_reliability.py:184`: `btnAlignRy` 연결을 `_on_align_single_axis('ry')` → `_on_align_ry_from_angle`으로 변경
+- `tab_aruco_reliability.py:365-370`: 프레임 업데이트 시 `active_ry` 유무에 따라 버튼 활성화 + 각도값 표시
+- `tab_aruco_reliability.py:1403-1406`: 신뢰성 검증 완료 시 Ry 버튼 중복 활성화 제거 (라이브 경로로 일원화)
+- `main_window.py:230`: `align_base_ry_requested` 시그널을 `_on_ar_tag_align_base_ry` 핸들러에 연결
+
+**동작 흐름:** 카메라 스트리밍 → 듀얼 마커 검출 → `_last_marker_angle` 캐시 + 버튼 활성화 → Ry 정렬 클릭 → `send_base_rotate('ry', angle)` 실행
+
+**교훈:** 시그널 정의 + 핸들러 구현만으로는 부족. 시그널 연결(connect)과 버튼 활성화 조건까지 확인 필요.
+
+---
+
+## 2026-03-07 | 레이저 캘리브레이션 ArUco 재검출 실패 (오버레이 프레임 혼용)
+
+**증상:** 레이저 캘리브레이션 탭에서 첫 ArUco 정렬은 성공하나, Z 조정 후 재검출 시 `[Detect] 마커 0/1 미검출` 반복 실패. 카메라 해상도 1280x720→1920x1080 변경 후 발생.
+
+**원인:** `_on_camera_frame`의 레이저 캘리브레이션 프레임 핸들러에서 `draw_dual_marker_overlay()`로 마커 코너 위에 색상 선을 그린 후, 오버레이된 프레임을 `update_frame()`에 전달. `current_frame`에 오버레이가 포함된 상태로 저장됨. 이후 `_calib_detect_aruco_alignment()`가 이 오버레이된 `current_frame`으로 ArUco 검출을 시도하여 마커 흑백 패턴이 훼손되어 검출 실패.
+
+- 첫 정렬 시에는 `_show_aruco_overlay=False`라 오버레이 미적용 → 성공
+- 정렬 완료 후 `_show_aruco_overlay=True` → 이후 `current_frame`에 오버레이 포함 → 재검출 실패
+
+**수정 파일:** `scripts/main_window.py`, `scripts/tabs/tab_laser_calibration.py`, `scripts/tabs/tab_stereo_calibration.py`
+
+**수정 내용:**
+
+- `tab_laser_calibration.py`: `self._raw_frame = None` 초기화 추가 (오버레이 없는 순수 원본 프레임 전용)
+- `main_window.py` 프레임 핸들러: 오버레이 적용 전 `_raw_frame = frame.copy()` 저장
+- `main_window.py` `_calib_detect_aruco_alignment()`: `_raw_frame` 우선 사용, fallback으로 `current_frame`
+- `tab_stereo_calibration.py`: `current_frame = frame` → `frame.copy()` (참조→복사, 예방적 수정)
+
+**교훈:** 표시용 프레임과 검출용 프레임은 반드시 분리. 오버레이는 별도 사본(display)에만 적용하고, 원본(raw)은 검출 전용으로 보존할 것.
+
+---
+
+## 2026-03-07 | DS435 정렬 시 TCP 자세 미고정으로 정렬 정확도 저하
+
+**증상:** Stereo Camera 탭에서 DS435 정렬(btnAlignDS435) 실행 시, 로봇 TCP 자세(Rx/Ry/Rz)가 임의 상태에서 정렬이 시작되어 ArUco 검출 및 Y/Z 센터링 정확도가 일관되지 않음
+
+**원인:** 정렬 로직이 현재 TCP 자세를 확인하지 않고 바로 ArUco 검출 및 보정을 시작. Detection Pose(Rx=90°, Ry=0°, Rz=90°)로의 사전 이동 단계가 없었음
+
+**수정 파일:** `scripts/main_window.py` (`_on_stereo_calib_align_ds435`)
+
+**수정 내용:**
+- 정렬 로직 시작 전 현재 TCP pose를 읽어 Rx/Ry/Rz 확인
+- 목표 자세(Rx=90, Ry=0, Rz=90)와 0.5° 이상 차이 시 현재 TF 유지한 채 movel(CMD 20)로 자동 이동 (TF 변경 없음)
+- X/Y/Z 위치는 현재값 유지, 회전값만 고정
+- 이미 목표 자세이면 이동 생략 (불필요한 동작 방지)
+
+---
+
 ## 2026-02-07 | ArUco 마커 크기(marker_size) 오설정으로 위치 추정 부정확
 
 **증상:** ArUco 마커가 검출은 되지만 위치(특히 Z축 깊이)가 부정확함
@@ -1361,5 +1422,35 @@ Right ROI: x=1100~1180, y=60~660
 **3-copy 패턴 적용:** `display_frame`(저장용)과 `display`(표시용) 분리 → 저장 이미지에 ROI 미포함
 
 **교훈:** 정적 ROI는 탭 내 구현이 적절 (4-5줄 산술). `_compute_roi_rects`를 순수 함수로 구현하면 향후 서비스 레이어 추출이 용이.
+
+---
+
+## 2026-03-07 | ArduCam 카메라 교체 — 캘리브레이션 및 해상도 설정 변경
+
+**증상:** ArduCam 카메라가 교체되어 새 카메라에 맞는 설정 필요
+
+**원인:** 새 ArduCam(FHD Camera)은 해상도 1920×1080으로 변경됨. 기존 캘리브레이션 파라미터(1280×720, fx=3988.9)가 새 카메라와 불일치.
+
+**수정 파일:**
+- `config/arducam_calibration.yaml` — 새 카메라 캘리브레이션으로 교체
+- `scripts/main_window.py` (line 67) — `color_resolution` 변경
+
+**수정 내용:**
+- 기존 캘리브레이션 → `arducam_calibration_backup_20260307.yaml`로 백업
+- `charging_robot_camera_calibration_20260307.yaml` → `arducam_calibration.yaml`로 복사
+- ArduCamManager 생성 시 `color_resolution=(1920, 1080)` 파라미터 추가
+
+**변경 전후 비교:**
+
+| 항목 | 이전 (1280×720) | 이후 (1920×1080) |
+|------|-----------------|------------------|
+| fx | 3988.9 | 5335.9 |
+| fy | 4003.2 | 5347.3 |
+| cx | 669.7 | 820.3 |
+| cy | 241.6 | 478.2 |
+
+**디바이스:** `FHD Camera` → `/dev/video6` (usb-0000:00:14.0-8), device_index=6 유지
+
+**교훈:** ArduCam 교체 시 캘리브레이션 파일 교체 + 해상도 설정 변경 필수. `ArduCamManager`의 `color_resolution` 기본값이 (1280, 720)이므로 명시적 지정 필요.
 
 ---
