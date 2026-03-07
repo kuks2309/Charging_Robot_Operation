@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         self.ds435_camera_manager.frame_ready.connect(self._on_camera_frame)
 
         # ArduCam 카메라 매니저 초기화
-        self.arducam_manager = ArduCamManager(device_index=6)
+        self.arducam_manager = ArduCamManager(device_index=6, color_resolution=(1920, 1080))
         self.arducam_manager.set_log_callback(self._log)
         self.arducam_manager.frame_ready.connect(self._on_camera_frame)
 
