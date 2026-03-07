@@ -2168,6 +2168,51 @@ class MainWindow(QMainWindow):
             return
 
         tab = self.tabStereoCalibration
+
+        # DS435 정렬용 고정 TCP 자세 (Rx=90, Ry=0, Rz=90)
+        TARGET_RX, TARGET_RY, TARGET_RZ = 90.0, 0.0, 90.0
+
+        tab._update_ds435_calib_step(1, "Detection Pose로 이동 중...")
+        try:
+            # 현재 TF 그대로 pose 읽기 → Rx/Ry/Rz만 변경 후 movel
+            current_pose = self.robot.read_current_pose()
+            if not current_pose:
+                tab._update_ds435_calib_step(0, "현재 자세 읽기 실패")
+                return
+
+            rx, ry, rz = current_pose[3], current_pose[4], current_pose[5]
+            need_move = (abs(rx - TARGET_RX) > 0.5 or
+                         abs(ry - TARGET_RY) > 0.5 or
+                         abs(rz - TARGET_RZ) > 0.5)
+
+            if need_move:
+                self._log(f"[DS435Calib] Detection Pose 이동: "
+                          f"Rx={rx:.1f}→{TARGET_RX}, Ry={ry:.1f}→{TARGET_RY}, Rz={rz:.1f}→{TARGET_RZ}")
+
+                target = list(current_pose)
+                target[3] = TARGET_RX
+                target[4] = TARGET_RY
+                target[5] = TARGET_RZ
+
+                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
+                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+                result = self.robot.wait_for_done(
+                    process_events_callback=QApplication.processEvents)
+                if not result[0]:
+                    tab._update_ds435_calib_step(0, f"Detection Pose 이동 실패: {result[1]}")
+                    return
+                self._settle(0.5)
+                self._log("[DS435Calib] Detection Pose 이동 완료")
+            else:
+                self._log("[DS435Calib] Detection Pose 이동 불필요 (이미 목표 자세)")
+
+        except Exception as e:
+            self._log(f"[DS435Calib] Detection Pose 이동 오류: {e}")
+            tab._update_ds435_calib_step(0, f"Detection Pose 이동 오류: {e}")
+            return
+
         tab._update_ds435_calib_step(1, "ArUco 마커 검출 중...")
 
         try:
