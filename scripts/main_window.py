@@ -3,6 +3,7 @@
 Charging Robot Task Manager - Main Window
 """
 
+import json
 import os
 from datetime import datetime
 import time
@@ -87,6 +88,9 @@ class MainWindow(QMainWindow):
         self.tabStereoCalibration.set_camera_managers(
             self.ds435_camera_manager, self.arducam_manager)
 
+        # 테스트 탭 카메라 프레임 시그널
+        self.ds435_camera_manager.frame_ready.connect(self._on_test_ds435_frame)
+        self.arducam_manager.frame_ready.connect(self._on_test_arducam_frame)
 
         # 정렬 서비스 초기화
         self.alignment_service = AlignmentService(self.vision_manager)
@@ -118,11 +122,6 @@ class MainWindow(QMainWindow):
         self.btnEmergencyStop.clicked.connect(self._on_emergency_stop)
         self.btnClearLog.clicked.connect(self._on_clear_log)
         self.btnSaveLog.clicked.connect(self._on_save_log)
-
-        # 테스트 탭
-        self.btnStartTest.clicked.connect(self._on_start_test)
-        self.btnStopTest.clicked.connect(self._on_stop_test)
-        self.btnExportCSV.clicked.connect(self._on_export_csv)
 
         # 설정 탭
         self.btnTestConnection.clicked.connect(self._on_test_connection)
@@ -186,6 +185,9 @@ class MainWindow(QMainWindow):
         self.tabLaserScan = TabLaserScan(self)
         self.tabWidget.insertTab(8, self.tabLaserScan, "Laser Scan")
 
+        # 테스트 탭 내용 교체 (충전건 결합)
+        self._rebuild_test_tab()
+
         # 탭 시그널 연결
         self._connect_tab_signals()
 
@@ -194,6 +196,98 @@ class MainWindow(QMainWindow):
 
         # 초기 카메라 타입으로 모든 탭의 라디오 버튼 동기화
         self._sync_camera_radio_buttons(CAMERA_DS435)
+
+    def _rebuild_test_tab(self):
+        """테스트 탭 내용을 충전건 결합 UI로 교체"""
+        from PyQt5.QtWidgets import QWidget, QGroupBox, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+        from PyQt5.QtCore import Qt
+
+        # 기존 레이아웃/위젯 제거
+        old_layout = self.tabTest.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+
+            # 기존 레이아웃을 tabTest에서 분리
+            QWidget().setLayout(old_layout)
+
+        # 새 레이아웃: 상단 카메라 뷰 + 하단 컨트롤
+        outer_layout = QVBoxLayout(self.tabTest)
+
+        # ── 상단: 카메라 뷰 2개 (좌: DS435, 우: ArduCam) ──
+        camera_row = QHBoxLayout()
+
+        ds435_layout = QVBoxLayout()
+        ds435_title = QLabel("DS435")
+        ds435_title.setAlignment(Qt.AlignCenter)
+        ds435_layout.addWidget(ds435_title)
+        self.labelTestDS435View = QLabel()
+        self.labelTestDS435View.setFixedSize(640, 360)
+        self.labelTestDS435View.setAlignment(Qt.AlignCenter)
+        self.labelTestDS435View.setStyleSheet("background-color: #222;")
+        ds435_layout.addWidget(self.labelTestDS435View)
+        camera_row.addLayout(ds435_layout)
+
+        arducam_layout = QVBoxLayout()
+        arducam_title = QLabel("ArduCam")
+        arducam_title.setAlignment(Qt.AlignCenter)
+        arducam_layout.addWidget(arducam_title)
+        self.labelTestArduCamView = QLabel()
+        self.labelTestArduCamView.setFixedSize(640, 360)
+        self.labelTestArduCamView.setAlignment(Qt.AlignCenter)
+        self.labelTestArduCamView.setStyleSheet("background-color: #222;")
+        arducam_layout.addWidget(self.labelTestArduCamView)
+        camera_row.addLayout(arducam_layout)
+
+        camera_row.addStretch()
+        outer_layout.addLayout(camera_row)
+
+        # ── 하단: 충전건 결합 컨트롤 ──
+        control_row = QHBoxLayout()
+
+        self.groupCharging = QGroupBox("충전건 결합")
+        self.groupCharging.setFixedHeight(100)
+        charging_layout = QHBoxLayout(self.groupCharging)
+
+        self.btnTestToggleCameras = QPushButton("카메라 정지")
+        self.btnTestToggleCameras.setCheckable(True)
+        self.btnTestToggleCameras.clicked.connect(self._on_test_toggle_cameras)
+        charging_layout.addWidget(self.btnTestToggleCameras)
+
+        self.btnTestAlignDS435 = QPushButton("DS435 Aruco 정렬")
+        self.btnTestAlignDS435.clicked.connect(self._on_test_align_ds435)
+        charging_layout.addWidget(self.btnTestAlignDS435)
+
+        self.btnTestHandoffDS435 = QPushButton("DS435 → ArduCam 핸드오프")
+        self.btnTestHandoffDS435.clicked.connect(self._on_test_handoff_ds435_to_arducam)
+        charging_layout.addWidget(self.btnTestHandoffDS435)
+
+        self.btnTestLaserScan = QPushButton("레이저 스캔")
+        self.btnTestLaserScan.clicked.connect(self._on_test_laser_scan)
+        charging_layout.addWidget(self.btnTestLaserScan)
+
+        self.btnTestApplyRy = QPushButton("Ry 보정 적용")
+        self.btnTestApplyRy.setEnabled(False)
+        self.btnTestApplyRy.clicked.connect(self._on_test_apply_ry)
+        charging_layout.addWidget(self.btnTestApplyRy)
+
+        self.btnTestMoveEntrance = QPushButton("입구 이동")
+        self.btnTestMoveEntrance.clicked.connect(self._on_test_move_to_entrance)
+        charging_layout.addWidget(self.btnTestMoveEntrance)
+
+        self._test_laser_angle_deg = None  # 레이저 스캔 각도 저장
+
+        self.labelTestAlignStatus = QLabel("")
+        self.labelTestAlignStatus.setWordWrap(True)
+        charging_layout.addWidget(self.labelTestAlignStatus, 1)
+
+        control_row.addWidget(self.groupCharging)
+        outer_layout.addLayout(control_row)
+
+        outer_layout.addStretch()
 
     def _connect_tab_signals(self):
         """탭 클래스들의 시그널을 메인윈도우 슬롯에 연결"""
@@ -1154,8 +1248,22 @@ class MainWindow(QMainWindow):
         c2 = m2['corners'][0].mean(axis=0) if len(m2['corners'].shape) == 3 else m2['corners'].mean(axis=0)
         return c1, c2
 
+    def _get_arducam_intrinsics(self):
+        """ArduCam intrinsics → (camera_matrix, dist_coeffs) numpy 배열 반환"""
+        if not self.arducam_manager or not self.arducam_manager.intrinsics:
+            return None, None
+        intr = self.arducam_manager.intrinsics
+        camera_matrix = np.array([
+            [intr.fx, 0, intr.ppx],
+            [0, intr.fy, intr.ppy],
+            [0, 0, 1]
+        ], dtype=np.float64)
+        dist_coeffs = np.array(intr.coeffs, dtype=np.float64).reshape(1, -1)
+        return camera_matrix, dist_coeffs
+
     def _detect_dual_alignment(self, frame, display_label=None, max_retries=1,
-                               display_func=None, frame_source=None):
+                               display_func=None, frame_source=None,
+                               camera_matrix=None, dist_coeffs=None):
         """통합 ArUco 듀얼 마커 검출 + 오버레이 표시
 
         Args:
@@ -1164,6 +1272,8 @@ class MainWindow(QMainWindow):
             max_retries: 검출 재시도 횟수
             display_func: 오버레이 표시 함수 (frame, label). None이면 display_frame_on_label 사용
             frame_source: 재시도 시 최신 프레임 획득 callable (None이면 최초 frame 재사용)
+            camera_matrix: 카메라 행렬 (None이면 ArUco 탭 설정 사용)
+            dist_coeffs: 왜곡 계수 (None이면 ArUco 탭 설정 사용)
 
         Returns:
             DualMarkerAlignmentResult or None
@@ -1173,8 +1283,10 @@ class MainWindow(QMainWindow):
         if display_func is None:
             display_func = _default_display
 
-        camera_matrix = self.tabArucoReliability.camera_matrix
-        dist_coeffs = self.tabArucoReliability.dist_coeffs
+        if camera_matrix is None:
+            camera_matrix = self.tabArucoReliability.camera_matrix
+        if dist_coeffs is None:
+            dist_coeffs = self.tabArucoReliability.dist_coeffs
         tag_id1, tag_id2 = self._get_target_tag_ids()
 
         for attempt in range(max_retries):
@@ -1948,7 +2060,9 @@ class MainWindow(QMainWindow):
         if frame is None:
             frame = getattr(self.tabLaserCalibration, 'current_frame', None)
         label = getattr(self.tabLaserCalibration, 'labelCameraView', None)
-        result = self._detect_dual_alignment(frame, label)
+        ac_mat, ac_dist = self._get_arducam_intrinsics()
+        result = self._detect_dual_alignment(frame, label,
+                                             camera_matrix=ac_mat, dist_coeffs=ac_dist)
         if result is None:
             return None
         active_ry = self._get_effective_ry(result)
@@ -1956,21 +2070,31 @@ class MainWindow(QMainWindow):
 
     # ==================== 스테레오 캘리브레이션 핸들러 ====================
 
-    def _stereo_align_z_core(self, tab):
+    def _stereo_align_z_core(self, tab, detect_func=None, status_func=None):
         """스테레오 Z축 세로 정렬 코어 로직 (버튼/예외 관리 없음)
 
         테스트 이동 → px/mm 산출 → 보정 이동 → 검증.
 
+        Args:
+            tab: 탭 객체 (status_func 미지정 시 tab._update_calib_step 사용)
+            detect_func: 정렬 검출 함수 (기본: _stereo_detect_full_alignment)
+            status_func: 상태 표시 함수 (step, msg) (기본: tab._update_calib_step)
+
         Returns:
             (success: bool, msg: str)
         """
+        if detect_func is None:
+            detect_func = self._stereo_detect_full_alignment
+        if status_func is None:
+            status_func = tab._update_calib_step
+
         DEAD_ZONE_PX = 5
         TEST_MM = 3.0
         MAX_CORRECTION_MM = 30.0
 
-        tab._update_calib_step(1, "ArUco 정렬 Y: 마커 검출 중...")
+        status_func(1, "ArUco 정렬 Y: 마커 검출 중...")
 
-        alignment = self._stereo_detect_full_alignment()
+        alignment = detect_func()
         if alignment is None:
             return (False, "ArUco 검출 실패")
 
@@ -1986,7 +2110,7 @@ class MainWindow(QMainWindow):
                   f"mid=({alignment.mid_x:.0f},{alignment.mid_y:.0f})")
 
         # 1) 테스트 이동: Z +TEST_MM
-        tab._update_calib_step(1, f"테스트 이동: Z +{TEST_MM:.1f}mm")
+        status_func(1, f"테스트 이동: Z +{TEST_MM:.1f}mm")
         success, msg = self.robot.send_base_linear(
             'z', TEST_MM, wait=True,
             process_events_callback=QApplication.processEvents)
@@ -1999,7 +2123,7 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
 
         # 2) 재검출 → px/mm 비율 산출
-        alignment2 = self._stereo_detect_full_alignment()
+        alignment2 = detect_func()
         if alignment2 is None or alignment2.offset_z is None:
             self._log("[StereoCalib Y] 재검출 실패, 원위치 복귀")
             self.robot.send_base_linear('z', -TEST_MM, wait=True,
@@ -2028,7 +2152,7 @@ class MainWindow(QMainWindow):
         self._log(f"[StereoCalib Y] px/mm={px_per_mm:.2f}, 보정: {correction_mm:.2f}mm")
 
         # 3) 보정 이동
-        tab._update_calib_step(1, f"Z 보정: {correction_mm:.1f}mm")
+        status_func(1, f"Z 보정: {correction_mm:.1f}mm")
         success2, msg2 = self.robot.send_base_linear(
             'z', correction_mm, wait=True,
             process_events_callback=QApplication.processEvents)
@@ -2039,7 +2163,7 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
 
         # 4) 최종 결과
-        final = self._stereo_detect_full_alignment()
+        final = detect_func()
         if final is not None:
             oz_f = final.offset_z if final.offset_z is not None else 0
             result_msg = f"Y 정렬 완료: offset_z={oz_f:.1f}px"
@@ -2073,9 +2197,11 @@ class MainWindow(QMainWindow):
         """
         frame = getattr(self.tabStereoCalibration, 'current_frame', None)
         label = getattr(self.tabStereoCalibration, 'labelArduCamView', None)
+        ac_mat, ac_dist = self._get_arducam_intrinsics()
         result = self._detect_dual_alignment(
             frame, label,
-            display_func=self.tabStereoCalibration._display_fixed)
+            display_func=self.tabStereoCalibration._display_fixed,
+            camera_matrix=ac_mat, dist_coeffs=ac_dist)
         if result is None:
             return None
         active_ry = self._get_effective_ry(result)
@@ -2092,10 +2218,12 @@ class MainWindow(QMainWindow):
         """
         frame = getattr(self.tabStereoCalibration, 'current_frame', None)
         label = getattr(self.tabStereoCalibration, 'labelArduCamView', None)
+        ac_mat, ac_dist = self._get_arducam_intrinsics()
         return self._detect_dual_alignment(
             frame, label, max_retries=max_retries,
             display_func=self.tabStereoCalibration._display_fixed,
-            frame_source=lambda: getattr(self.tabStereoCalibration, 'current_frame', None))
+            frame_source=lambda: getattr(self.tabStereoCalibration, 'current_frame', None),
+            camera_matrix=ac_mat, dist_coeffs=ac_dist)
 
     def _set_stereo_align_buttons_enabled(self, enabled: bool):
         """스테레오 탭 정렬 버튼 활성화/비활성화"""
@@ -2105,24 +2233,34 @@ class MainWindow(QMainWindow):
              'btnAlignDS435', 'btnHandoffDS435ToArduCam'),
             enabled)
 
-    def _stereo_align_y_core(self, tab):
+    def _stereo_align_y_core(self, tab, detect_func=None, status_func=None):
         """스테레오 Y축 가로 정렬 코어 로직 (Ry 보정 포함, 버튼/예외 관리 없음)
 
         Ry 회전 보정 → Base Y 이동 보정 → 검증.
 
+        Args:
+            tab: 탭 객체 (status_func 미지정 시 tab._update_calib_step 사용)
+            detect_func: 정렬 검출 함수 (기본: _stereo_detect_full_alignment)
+            status_func: 상태 표시 함수 (step, msg) (기본: tab._update_calib_step)
+
         Returns:
             (success: bool, msg: str)
         """
-        tab._update_calib_step(1, "ArUco 정렬 X: 마커 검출 중...")
+        if detect_func is None:
+            detect_func = self._stereo_detect_full_alignment
+        if status_func is None:
+            status_func = tab._update_calib_step
 
-        alignment = self._stereo_detect_full_alignment()
+        status_func(1, "ArUco 정렬 X: 마커 검출 중...")
+
+        alignment = detect_func()
         if alignment is None:
             return (False, "ArUco 검출 실패")
 
         # 1) Ry 보정 (마커 기울기 → 수평 회전)
         active_ry = self._get_effective_ry(alignment)
         if active_ry is not None and abs(active_ry) >= 0.5:
-            tab._update_calib_step(1, f"Ry 보정 중: {active_ry:.2f}°")
+            status_func(1, f"Ry 보정 중: {active_ry:.2f}°")
             self._log(f"[StereoCalib X] Ry 보정: {active_ry:.2f}°")
             self._on_ar_tag_align_base_ry(active_ry)
             self._settle()
@@ -2131,9 +2269,9 @@ class MainWindow(QMainWindow):
             self._log(f"[StereoCalib X] Ry 보정 불필요: {ry_disp:.2f}°")
 
         # 2) 재검출 → Base Y 보정 (이미지 가로 중심 오프셋)
-        alignment2 = self._stereo_detect_full_alignment()
+        alignment2 = detect_func()
         if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 5.0:
-            tab._update_calib_step(1, f"Base Y 보정 중: {alignment2.offset_y:.1f}px")
+            status_func(1, f"Base Y 보정 중: {alignment2.offset_y:.1f}px")
             self._log(f"[StereoCalib X] Base Y 보정: {alignment2.offset_y:.1f}px")
             self._on_ar_tag_align_base_y(alignment2.offset_y)
             self._settle()
@@ -2142,7 +2280,7 @@ class MainWindow(QMainWindow):
             self._log(f"[StereoCalib X] Y 보정 불필요: {oy_disp:.1f}px")
 
         # 3) 최종 결과
-        final = self._stereo_detect_full_alignment()
+        final = detect_func()
         if final is not None:
             ry_f = self._get_effective_ry(final)
             oy_f = final.offset_y if final.offset_y is not None else 0
@@ -2385,7 +2523,7 @@ class MainWindow(QMainWindow):
             self._log(f"[DS435Calib] 검출 오류: {e}")
             return None
 
-    def _ds435_adaptive_align(self, axis: str, d0_px: float):
+    def _ds435_adaptive_align(self, axis: str, d0_px: float, measure_func=None):
         """DS435 기반 적응형 센터링 (Y 또는 Z 축)
 
         1단계: 테스트 이동 → px/mm 비율 산출
@@ -2395,12 +2533,15 @@ class MainWindow(QMainWindow):
         Args:
             axis: 'y' (horizontal) or 'z' (vertical)
             d0_px: 현재 오프셋 (px)
+            measure_func: 마커 오프셋 측정 함수 (기본: _measure_ds435_marker_offset)
 
         Note:
             _on_ar_tag_align_base_y()와 알고리즘 구조가 유사하나
             MAX_CORRECTION 초과 시 처리가 다름 (이쪽: 2단계 분할 이동,
             ArUco탭: 안전 중단). 측정 함수도 상이하여 통합 보류.
         """
+        if measure_func is None:
+            measure_func = self._measure_ds435_marker_offset
         DEAD_ZONE_PX = 3
         TEST_MM = 5.0
         MAX_CORRECTION_MM = 50.0
@@ -2444,7 +2585,7 @@ class MainWindow(QMainWindow):
 
             # 재측정
             self._settle()
-            d1 = self._measure_ds435_marker_offset(axis)
+            d1 = measure_func(axis)
             if d1 is None:
                 self._log(f"[DS435Calib] 테스트 후 마커 감지 실패, 복귀")
                 self.robot.send_base_linear(
@@ -2485,7 +2626,7 @@ class MainWindow(QMainWindow):
                 self._settle(0.5)
 
                 # 재측정
-                d_mid = self._measure_ds435_marker_offset(axis)
+                d_mid = measure_func(axis)
                 if d_mid is not None and abs(d_mid) >= DEAD_ZONE_PX:
                     correction2 = -d_mid / px_per_mm
                     correction2 = max(-MAX_CORRECTION_MM, min(MAX_CORRECTION_MM, correction2))
@@ -2514,7 +2655,7 @@ class MainWindow(QMainWindow):
             # --- 3단계: 검증 ---
             self._settle(0.5)
 
-            d_final = self._measure_ds435_marker_offset(axis)
+            d_final = measure_func(axis)
             if d_final is not None:
                 self._log(f"[DS435Calib] Base {axis.upper()} 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
             else:
@@ -2755,7 +2896,7 @@ class MainWindow(QMainWindow):
                 depth_error = depth - TARGET_DEPTH_MM
                 self._log(f"[Handoff] 현재 depth: {depth:.1f}mm, 목표: {TARGET_DEPTH_MM:.0f}mm, 차이: {depth_error:.1f}mm")
 
-                if abs(depth_error) > DEPTH_TOLERANCE_MM:
+                if abs(depth_error) >= DEPTH_TOLERANCE_MM:
                     # depth가 크면 마커에 가까워져야 → X+ 이동 (로봇이 전진)
                     # depth가 작으면 마커에서 멀어져야 → X- 이동 (로봇이 후진)
                     x_move = depth_error  # depth 큰만큼 전진
@@ -3073,7 +3214,7 @@ class MainWindow(QMainWindow):
                 self._laser_scan_service.scan_finished.disconnect()
                 self._laser_scan_service.scan_error.disconnect()
                 self._laser_scan_service.log_message.disconnect()
-            except RuntimeError:
+            except (RuntimeError, TypeError):
                 pass
             self._laser_scan_service.setParent(None)
             self._laser_scan_service.deleteLater()
@@ -3678,26 +3819,834 @@ class MainWindow(QMainWindow):
                 f.write(self.textExecutionLog.toPlainText())
             self._log(f"로그 저장: {filename}")
 
-    # ==================== 테스트 ====================
+    # ==================== 테스트 탭 (충전건 결합) ====================
 
-    def _on_start_test(self):
-        """테스트 시작"""
-        repeat_count = self.spinRepeatCount.value()
-        interval = self.spinInterval.value()
-        self._log(f"테스트 시작: {repeat_count}회, {interval}ms 간격")
-        # TODO: 테스트 실행
+    def _on_test_toggle_cameras(self, checked):
+        """테스트 탭 - 양쪽 카메라 토글"""
+        if checked:
+            if not self.ds435_camera_manager.is_running:
+                self.ds435_camera_manager.start()
+            if not self.arducam_manager.is_running:
+                self.arducam_manager.start()
+            self.btnTestToggleCameras.setText("카메라 정지")
+            self._log("[Test] DS435 + ArduCam 카메라 시작")
+        else:
+            if self.ds435_camera_manager.is_running:
+                self.ds435_camera_manager.stop()
+            if self.arducam_manager.is_running:
+                self.arducam_manager.stop()
+            self.btnTestToggleCameras.setText("카메라 구동")
+            self._log("[Test] DS435 + ArduCam 카메라 정지")
 
-    def _on_stop_test(self):
-        """테스트 중지"""
-        self._log("테스트 중지")
+    _test_ds435_frame_count = 0
+    _test_arducam_frame_count = 0
+    _test_ds435_last_markers = []
+    _test_arducam_last_markers = []
 
-    def _on_export_csv(self):
-        """CSV 내보내기"""
-        filename, _ = QFileDialog.getSaveFileName(
-            self, "CSV 내보내기", "", "CSV 파일 (*.csv)")
-        if filename:
-            self._log(f"CSV 내보내기: {filename}")
-            # TODO: 통계 데이터 CSV 저장
+    def _test_display_fixed(self, frame, label):
+        """테스트 탭 프레임을 640x360 고정 크기로 라벨에 표시"""
+        if frame is None:
+            return
+        resized = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_AREA)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        from PyQt5.QtGui import QImage, QPixmap
+        q_image = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
+        label.setPixmap(QPixmap.fromImage(q_image))
+
+    def _on_test_ds435_frame(self, frame):
+        """테스트 탭 DS435 프레임: ArUco 검출 + depth + 오버레이"""
+        if not self.tabTest.isVisible():
+            return
+        self._test_ds435_frame_count += 1
+        if self._test_ds435_frame_count % 3 == 0:
+            intrinsics = self.ds435_camera_manager.intrinsics
+            if intrinsics is not None:
+                if not hasattr(self, '_test_aruco_estimator'):
+                    from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
+                    self._test_aruco_estimator = ArucoCameraPoseEstimator()
+                results = self._test_aruco_estimator.detect_and_estimate_pose(
+                    frame, intrinsics)
+                self._test_ds435_last_markers = results if results else []
+        distances = None
+        if self._test_ds435_last_markers:
+            distances = []
+            for m in self._test_ds435_last_markers:
+                corners = m['corners']
+                crn = corners[0] if len(corners.shape) == 3 else corners
+                center = np.mean(crn, axis=0).astype(int)
+                dist = self.ds435_camera_manager.get_distance_at(
+                    int(center[0]), int(center[1]), from_color=True)
+                distances.append(dist)
+        overlay = self.tabStereoCalibration._draw_markers(
+            frame, self._test_ds435_last_markers, distances)
+        self._test_display_fixed(overlay, self.labelTestDS435View)
+
+    def _on_test_arducam_frame(self, frame):
+        """테스트 탭 ArduCam 프레임: ArUco 검출 + 오버레이"""
+        if not self.tabTest.isVisible():
+            return
+        self._test_arducam_frame_count += 1
+        if self._test_arducam_frame_count % 3 == 0:
+            intrinsics = self.arducam_manager.intrinsics if self.arducam_manager else None
+            if intrinsics is not None:
+                if not hasattr(self, '_test_aruco_estimator'):
+                    from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
+                    self._test_aruco_estimator = ArucoCameraPoseEstimator()
+                results = self._test_aruco_estimator.detect_and_estimate_pose(
+                    frame, intrinsics)
+                self._test_arducam_last_markers = results if results else []
+        overlay = self.tabStereoCalibration._draw_markers(
+            frame, self._test_arducam_last_markers)
+        self._test_display_fixed(overlay, self.labelTestArduCamView)
+
+    def _test_detect_ds435_aruco_alignment(self):
+        """테스트 탭 전용: DS435 프레임에서 ArUco 정렬값 검출.
+
+        스테레오 탭의 isVisible() 제약 없이 ds435_camera_manager.last_frame을 직접 사용.
+
+        Returns:
+            (offset_y, offset_z) tuple, or None if detection fails.
+        """
+        try:
+            frame = self.ds435_camera_manager.last_frame
+            if frame is None:
+                self._log("[Test] DS435 프레임 없음")
+                return None
+
+            intrinsics = self.ds435_camera_manager.intrinsics
+            if intrinsics is None:
+                self._log("[Test] DS435 intrinsics 없음")
+                return None
+
+            if not hasattr(self, '_test_aruco_estimator'):
+                from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
+                self._test_aruco_estimator = ArucoCameraPoseEstimator()
+
+            work = frame.copy()
+            markers = self._test_aruco_estimator.detect_and_estimate_pose(
+                work, intrinsics)
+
+            # 오버레이 표시 (마커 검출 여부 무관)
+            if markers and hasattr(self, 'labelTestDS435View'):
+                overlay = work.copy()
+                for m in markers:
+                    corners = m['corners'].reshape(-1, 2).astype(int)
+                    cv2.polylines(overlay, [corners], True, (0, 255, 0), 2)
+                    cx, cy = corners.mean(axis=0).astype(int)
+                    cv2.putText(overlay, str(m['id']), (cx, cy - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                from utils.common import display_frame_on_label
+                display_frame_on_label(overlay, self.labelTestDS435View)
+
+            if not markers:
+                self._log("[Test] 마커 미검출")
+                return None
+
+            tag_id1, tag_id2 = self._get_target_tag_ids()
+
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
+                detected_ids = [m['id'] for m in markers]
+                self._log(f"[Test] 대상 마커 미검출: 필요={tag_id1},{tag_id2}, 검출={detected_ids}")
+                return None
+            c1, c2 = result
+
+            h, w = frame.shape[:2]
+            mid_x = (c1[0] + c2[0]) / 2.0
+            mid_y = (c1[1] + c2[1]) / 2.0
+            offset_y = mid_x - w / 2.0
+            offset_z = mid_y - h / 2.0
+
+            self._log(f"[Test] offset_y={offset_y:.1f}px, offset_z={offset_z:.1f}px")
+            return (offset_y, offset_z)
+
+        except Exception as e:
+            self._log(f"[Test] 검출 오류: {e}")
+            return None
+
+    def _test_measure_ds435_marker_offset(self, axis: str):
+        """테스트 탭 전용: DS435 마커 오프셋 측정 (stereo tab 비의존)"""
+        try:
+            frame = self.ds435_camera_manager.last_frame
+            if frame is None:
+                return None
+            intrinsics = self.ds435_camera_manager.intrinsics
+            if intrinsics is None:
+                return None
+            if not hasattr(self, '_test_aruco_estimator'):
+                from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
+                self._test_aruco_estimator = ArucoCameraPoseEstimator()
+            markers = self._test_aruco_estimator.detect_and_estimate_pose(
+                frame.copy(), intrinsics)
+            if not markers:
+                return None
+            tag_id1, tag_id2 = self._get_target_tag_ids()
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
+                return None
+            c1, c2 = result
+            h, w = frame.shape[:2]
+            if axis == 'y':
+                mid_px = (c1[0] + c2[0]) / 2.0
+                return mid_px - w / 2.0
+            else:
+                mid_px = (c1[1] + c2[1]) / 2.0
+                return mid_px - h / 2.0
+        except Exception as e:
+            self._log(f"[Test] 마커 측정 오류: {e}")
+            return None
+
+    def _test_measure_ds435_marker_depth(self):
+        """테스트 탭 전용: DS435 마커 depth 측정 (stereo tab 비의존)
+
+        DS435 depth 센서는 마커 중심에서 유효 depth가 없는 경우가 많으므로
+        중심 → 마커1 → 마커2 → 주변 오프셋 순으로 다중 샘플링.
+        """
+        try:
+            frame = self.ds435_camera_manager.last_frame
+            if frame is None:
+                self._log("[Test] depth 측정: DS435 프레임 없음")
+                return None
+            intrinsics = self.ds435_camera_manager.intrinsics
+            if intrinsics is None:
+                self._log("[Test] depth 측정: DS435 intrinsics 없음")
+                return None
+            if not hasattr(self, '_test_aruco_estimator'):
+                from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
+                self._test_aruco_estimator = ArucoCameraPoseEstimator()
+            markers = self._test_aruco_estimator.detect_and_estimate_pose(
+                frame.copy(), intrinsics)
+            if not markers:
+                self._log("[Test] depth 측정: 마커 검출 실패")
+                return None
+            tag_id1, tag_id2 = self._get_target_tag_ids()
+            result = self._find_dual_marker_centers(markers, tag_id1, tag_id2)
+            if result is None:
+                detected_ids = [m['id'] for m in markers]
+                self._log(f"[Test] depth 측정: 타겟 마커({tag_id1},{tag_id2}) 미발견, 검출된 ID: {detected_ids}")
+                return None
+            c1, c2 = result
+            mid_x = (c1[0] + c2[0]) / 2.0
+            mid_y = (c1[1] + c2[1]) / 2.0
+
+            # 다중 샘플 포인트: 중심 → 마커1 → 마커2 → 주변 오프셋
+            sample_points = [
+                (int(mid_x), int(mid_y)),
+                (int(c1[0]), int(c1[1])),
+                (int(c2[0]), int(c2[1])),
+            ]
+            for dx, dy in [(0, -20), (0, 20), (-20, 0), (20, 0)]:
+                sample_points.append((int(mid_x + dx), int(mid_y + dy)))
+
+            for sx, sy in sample_points:
+                depth = self.ds435_camera_manager.get_distance_at(sx, sy, from_color=True)
+                if depth is not None and depth > 0:
+                    self._log(f"[Test] depth 측정: {depth:.1f}mm (sample=({sx},{sy}))")
+                    return depth
+
+            self._log(f"[Test] depth 측정: 모든 샘플 포인트 depth=None (mid=({int(mid_x)},{int(mid_y)}))")
+            return None
+        except Exception as e:
+            self._log(f"[Test] depth 측정 오류: {e}")
+            return None
+
+    def _test_detect_full_alignment(self, max_retries=3):
+        """테스트 탭 전용: ArduCam 전체 정렬 검출 (stereo tab 비의존)"""
+        frame = self.arducam_manager.last_frame if self.arducam_manager else None
+        ac_mat, ac_dist = self._get_arducam_intrinsics()
+        return self._detect_dual_alignment(
+            frame, None, max_retries=max_retries,
+            frame_source=lambda: self.arducam_manager.last_frame if self.arducam_manager else None,
+            camera_matrix=ac_mat, dist_coeffs=ac_dist)
+
+    def _test_align_aruco_combined(self):
+        """테스트 탭 전용: ArduCam 통합 정렬 (stereo tab 비의존)"""
+        if not self._require_robot():
+            return
+
+        detect = self._test_detect_full_alignment
+        status = lambda step, msg: self.labelTestAlignStatus.setText(msg)
+
+        try:
+            self._log("[Test 통합] 통합 정렬 시작 (Y:Z축 → X:Ry+BaseY)")
+            QApplication.processEvents()
+
+            # 1) Y 정렬: Z축 이동으로 이미지 세로 중심 정렬
+            status(1, "통합 정렬: Y축(세로) 보정 중...")
+            z_ok, z_msg = self._stereo_align_z_core(
+                None, detect_func=detect, status_func=status)
+            self._log(f"[Test 통합] Y: {z_msg}")
+
+            # 2) X 정렬: Ry 회전 + Base Y 이동으로 가로 중심 정렬
+            status(1, "통합 정렬: X축(가로) 보정 중...")
+            y_ok, y_msg = self._stereo_align_y_core(
+                None, detect_func=detect, status_func=status)
+            self._log(f"[Test 통합] X: {y_msg}")
+
+            # 3) 미세 정렬
+            pre_fine = detect()
+            if pre_fine is not None:
+                ARDUCAM_PX_PER_MM = 13.0
+
+                def _fine_z_measure():
+                    a = detect(max_retries=1)
+                    return a.offset_z if a is not None and a.offset_z is not None else None
+
+                def _fine_y_measure():
+                    a = detect(max_retries=1)
+                    return a.offset_y if a is not None and a.offset_y is not None else None
+
+                FINE_THRESHOLD_PX = 0.5
+
+                oz_pre = pre_fine.offset_z if pre_fine.offset_z is not None else 0
+                if abs(oz_pre) > FINE_THRESHOLD_PX:
+                    status(1, f"미세 정렬 Z: {oz_pre:.1f}px")
+                    self._fine_align_axis('z', ARDUCAM_PX_PER_MM, _fine_z_measure,
+                                          log_prefix="[Test Fine Z]")
+                else:
+                    self._log(f"[Test Fine Z] 이미 수렴: {oz_pre:.1f}px")
+
+                pre_fine2 = detect(max_retries=1)
+                oy_pre = pre_fine2.offset_y if pre_fine2 is not None and pre_fine2.offset_y is not None else 0
+                if abs(oy_pre) > FINE_THRESHOLD_PX:
+                    status(1, f"미세 정렬 Y: {oy_pre:.1f}px")
+                    self._fine_align_axis('y', ARDUCAM_PX_PER_MM, _fine_y_measure,
+                                          log_prefix="[Test Fine Y]")
+                else:
+                    self._log(f"[Test Fine Y] 이미 수렴: {oy_pre:.1f}px")
+
+            # 4) 최종 결과
+            final = detect()
+            if final is not None:
+                ry_f = self._get_effective_ry(final)
+                oy_f = final.offset_y if final.offset_y is not None else 0
+                oz_f = final.offset_z if final.offset_z is not None else 0
+                msg = f"통합 정렬 완료: Ry={ry_f:.2f}°, dY={oy_f:.1f}px, dZ={oz_f:.1f}px"
+                self._log(f"[Test 통합] {msg}")
+                status(0, msg)
+            else:
+                status(0, "최종 검출 실패")
+
+        except Exception as e:
+            self._log(f"[Test 통합] 오류: {e}")
+            status(0, f"오류: {e}")
+
+    def _on_test_align_ds435(self):
+        """테스트 탭 DS435 ArUco 정렬"""
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        TARGET_RX, TARGET_RY, TARGET_RZ = 90.0, 0.0, 90.0
+
+        self.labelTestAlignStatus.setText("Detection Pose로 이동 중...")
+        try:
+            current_pose = self.robot.read_current_pose()
+            if not current_pose:
+                self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
+                return
+
+            rx, ry, rz = current_pose[3], current_pose[4], current_pose[5]
+            need_move = (abs(rx - TARGET_RX) > 0.5 or
+                         abs(ry - TARGET_RY) > 0.5 or
+                         abs(rz - TARGET_RZ) > 0.5)
+
+            if need_move:
+                self._log(f"[Test] Detection Pose 이동: "
+                          f"Rx={rx:.1f}→{TARGET_RX}, Ry={ry:.1f}→{TARGET_RY}, Rz={rz:.1f}→{TARGET_RZ}")
+                target = list(current_pose)
+                target[3] = TARGET_RX
+                target[4] = TARGET_RY
+                target[5] = TARGET_RZ
+
+                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
+                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+                result = self.robot.wait_for_done(
+                    process_events_callback=QApplication.processEvents)
+                if not result[0]:
+                    self.labelTestAlignStatus.setText(f"Detection Pose 이동 실패: {result[1]}")
+                    return
+                self._settle(0.5)
+                self._log("[Test] Detection Pose 이동 완료")
+            else:
+                self._log("[Test] Detection Pose 이동 불필요 (이미 목표 자세)")
+
+        except Exception as e:
+            self._log(f"[Test] Detection Pose 이동 오류: {e}")
+            self.labelTestAlignStatus.setText(f"Detection Pose 이동 오류: {e}")
+            return
+
+        self.labelTestAlignStatus.setText("ArUco 마커 검출 중...")
+        try:
+            result = self._test_detect_ds435_aruco_alignment()
+            if result is None:
+                self.labelTestAlignStatus.setText("ArUco 검출 실패 - 마커를 확인하세요")
+                return
+            offset_y, offset_z = result
+
+            if abs(offset_y) >= 5.0:
+                self.labelTestAlignStatus.setText(f"Y 보정 중: {offset_y:.1f}px")
+                self._ds435_adaptive_align('y', offset_y,
+                    measure_func=self._test_measure_ds435_marker_offset)
+                self._settle()
+            else:
+                self._log(f"[Test] Y 보정 불필요: {offset_y:.1f}px")
+
+            result2 = self._test_detect_ds435_aruco_alignment()
+            if result2 is not None:
+                _, offset_z2 = result2
+                if abs(offset_z2) >= 5.0:
+                    self.labelTestAlignStatus.setText(f"Z 보정 중: {offset_z2:.1f}px")
+                    self._ds435_adaptive_align('z', offset_z2,
+                        measure_func=self._test_measure_ds435_marker_offset)
+                    self._settle()
+                else:
+                    self._log(f"[Test] Z 보정 불필요: {offset_z2:.1f}px")
+
+            result3 = self._test_detect_ds435_aruco_alignment()
+            if result3 is not None:
+                oy_f, oz_f = result3
+                msg = f"정렬 완료: dY={oy_f:.1f}px, dZ={oz_f:.1f}px"
+                self._log(f"[Test] {msg}")
+                self.labelTestAlignStatus.setText(msg)
+            else:
+                self.labelTestAlignStatus.setText("정렬 후 재검출 실패")
+
+        except Exception as e:
+            self._log(f"[Test] ArUco 정렬 오류: {e}")
+            self.labelTestAlignStatus.setText(f"오류: {e}")
+
+    def _on_test_handoff_ds435_to_arducam(self):
+        """테스트 탭 DS435 → ArduCam 핸드오프"""
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        try:
+            from services.stereo_offset_calculator import StereoOffsetCalculator
+
+            cfg = self._load_charging_config()
+            TARGET_DEPTH_MM = cfg.get('handoff', {}).get('target_depth_mm', 370.0)
+            DEPTH_TOLERANCE_MM = cfg.get('handoff', {}).get('depth_tolerance_mm', 5.0)
+
+            # --- sweep 데이터 로드 ---
+            self.labelTestAlignStatus.setText("① sweep 데이터 로드 중...")
+            QApplication.processEvents()
+
+            data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+            sweep_path = StereoOffsetCalculator.find_latest_sweep(data_dir)
+            if sweep_path is None:
+                self.labelTestAlignStatus.setText("sweep 데이터 없음 - 스윕 먼저 실행하세요")
+                self._log("[Test Handoff] data/stereo/에 sweep JSON 파일 없음")
+                return
+
+            calc = StereoOffsetCalculator(sweep_path, self.arducam_manager.intrinsics)
+            if not calc.is_valid:
+                self.labelTestAlignStatus.setText("sweep 데이터 카메라 불일치 - 스윕 재실행 필요")
+                self._log("[Test Handoff] sweep 데이터가 현재 카메라와 불일치")
+                return
+            raw_y, raw_z = calc.camera_offset_mm
+            cam_offset_y = -raw_y
+            cam_offset_z = -raw_z
+            self._log(f"[Test Handoff] camera_offset(raw): dY={raw_y:.2f}mm, dZ={raw_z:.2f}mm → 적용: dY={cam_offset_y:.2f}mm, dZ={cam_offset_z:.2f}mm")
+
+            # 1단계: DS435 마커 중심 정렬
+            self.labelTestAlignStatus.setText("① DS435 마커 중심 정렬 중...")
+            QApplication.processEvents()
+            self._log("[Test Handoff] === 1단계: DS435 마커 중심 정렬 ===")
+
+            result = self._test_detect_ds435_aruco_alignment()
+            if result is None:
+                self.labelTestAlignStatus.setText("DS435 마커 검출 실패")
+                return
+
+            offset_y, offset_z = result
+            if abs(offset_y) >= 5.0:
+                self.labelTestAlignStatus.setText(f"① DS435 Y 보정: {offset_y:.1f}px")
+                self._ds435_adaptive_align('y', offset_y,
+                    measure_func=self._test_measure_ds435_marker_offset)
+                self._settle()
+
+            result2 = self._test_detect_ds435_aruco_alignment()
+            if result2 is not None:
+                _, offset_z2 = result2
+                if abs(offset_z2) >= 5.0:
+                    self.labelTestAlignStatus.setText(f"① DS435 Z 보정: {offset_z2:.1f}px")
+                    self._ds435_adaptive_align('z', offset_z2,
+                        measure_func=self._test_measure_ds435_marker_offset)
+                    self._settle()
+
+            result3 = self._test_detect_ds435_aruco_alignment()
+            if result3 is not None:
+                fy, fz = result3
+                self._log(f"[Test Handoff] 1단계 완료: dY={fy:.1f}px, dZ={fz:.1f}px")
+
+            # 2단계: X축 거리 유지
+            self.labelTestAlignStatus.setText(f"② X축 거리 {TARGET_DEPTH_MM:.0f}mm 조정 중...")
+            QApplication.processEvents()
+            self._log(f"[Test Handoff] === 2단계: X축 거리 {TARGET_DEPTH_MM:.0f}mm 조정 ===")
+
+            depth = None
+            for attempt in range(3):
+                self._settle()
+                depth = self._test_measure_ds435_marker_depth()
+                self._log(f"[Test Handoff] depth 시도 {attempt+1}/3: {depth}")
+                if depth is not None and depth > 0:
+                    break
+
+            if depth is not None and depth > 0:
+                FINE_TOLERANCE_MM = 1.0
+                MAX_DEPTH_ITER = 5
+
+                for d_iter in range(MAX_DEPTH_ITER):
+                    depth_error = depth - TARGET_DEPTH_MM
+                    abs_err = abs(depth_error)
+                    self._log(f"[Test Handoff] depth iter {d_iter+1}/{MAX_DEPTH_ITER}: "
+                              f"{depth:.1f}mm, 목표: {TARGET_DEPTH_MM:.0f}mm, 오차: {depth_error:+.1f}mm")
+
+                    if abs_err < FINE_TOLERANCE_MM:
+                        self._log(f"[Test Handoff] 수렴 완료 (오차 {abs_err:.1f}mm < {FINE_TOLERANCE_MM}mm)")
+                        self.labelTestAlignStatus.setText(
+                            f"② 수렴: {depth:.1f}mm (오차 {depth_error:+.1f}mm)")
+                        break
+
+                    x_move = depth_error
+                    if abs(x_move) > 100.0:
+                        self._log(f"[Test Handoff] X 이동 거리 초과: {x_move:.1f}mm (±100mm 제한)")
+                        self.labelTestAlignStatus.setText(f"② X 이동 거리 초과: {x_move:.1f}mm")
+                        break
+
+                    self.labelTestAlignStatus.setText(
+                        f"② X 이동: {x_move:+.1f}mm ({d_iter+1}/{MAX_DEPTH_ITER})")
+                    QApplication.processEvents()
+                    success, msg = self.robot.send_base_linear(
+                        'x', x_move, wait=True,
+                        process_events_callback=QApplication.processEvents)
+                    if not success:
+                        self._log(f"[Test Handoff] X 이동 실패: {msg}")
+                        break
+
+                    self._settle(0.5)
+
+                    # 재측정
+                    depth = self._test_measure_ds435_marker_depth()
+                    if depth is None or depth <= 0:
+                        self._log("[Test Handoff] 재측정 실패, 반복 중단")
+                        break
+                else:
+                    self._log(f"[Test Handoff] {MAX_DEPTH_ITER}회 반복 후 오차: {abs(depth - TARGET_DEPTH_MM):.1f}mm")
+            else:
+                self._log("[Test Handoff] depth 측정 실패 — 2단계 건너뜀")
+                self.labelTestAlignStatus.setText("② depth 측정 실패 — 건너뜀")
+
+            # 3단계: camera_offset_mm 적용
+            self.labelTestAlignStatus.setText(f"③ 카메라 오프셋 적용: Y={cam_offset_y:.1f}mm, Z={cam_offset_z:.1f}mm")
+            QApplication.processEvents()
+            self._log(f"[Test Handoff] === 3단계: 카메라 오프셋 Y={cam_offset_y:.1f}mm, Z={cam_offset_z:.1f}mm ===")
+
+            if abs(cam_offset_y) >= 0.5:
+                self.robot.send_base_linear(
+                    'y', cam_offset_y, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                self._settle()
+
+            if abs(cam_offset_z) >= 0.5:
+                self.robot.send_base_linear(
+                    'z', cam_offset_z, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                self._settle()
+
+            self._settle(0.5)
+
+            # 4단계: ArduCam 통합 정렬
+            self.labelTestAlignStatus.setText("④ ArduCam 통합 정렬 중...")
+            QApplication.processEvents()
+            self._log("[Test Handoff] === 4단계: ArduCam 통합 정렬 ===")
+
+            CONVERGE_PX = 10.0
+            MAX_ITER = 3
+
+            for iteration in range(MAX_ITER):
+                self.labelTestAlignStatus.setText(f"④ 통합 정렬 ({iteration+1}/{MAX_ITER})...")
+                self._test_align_aruco_combined()
+                self._settle()
+                check = self._test_detect_full_alignment()
+                if check is not None:
+                    oy = abs(check.offset_y) if check.offset_y is not None else 0
+                    oz = abs(check.offset_z) if check.offset_z is not None else 0
+                    if oy < CONVERGE_PX and oz < CONVERGE_PX:
+                        self._log(f"[Test Handoff] 수렴 완료 (반복 {iteration+1})")
+                        break
+
+            final = self._test_detect_full_alignment()
+            if final is not None:
+                ry_f = self._get_effective_ry(final)
+                oy_f = final.offset_y if final.offset_y is not None else 0
+                oz_f = final.offset_z if final.offset_z is not None else 0
+                msg = f"핸드오프 완료! Ry={ry_f:.2f}°, dY={oy_f:.1f}px, dZ={oz_f:.1f}px"
+            else:
+                msg = "핸드오프 완료 (최종 검출 실패)"
+
+            self._log(f"[Test Handoff] {msg}")
+            self.labelTestAlignStatus.setText(msg)
+
+        except Exception as e:
+            self._log(f"[Test Handoff] 오류: {e}")
+            import traceback
+            self._log(f"[Test Handoff] {traceback.format_exc()}")
+            self.labelTestAlignStatus.setText(f"오류: {e}")
+
+    # ==================== 테스트 탭 레이저 스캔 ====================
+
+    _CHARGING_CONFIG_FILE = os.path.join(
+        os.path.dirname(__file__), '..', 'config', 'charging_coupling_config.json')
+
+    def _load_charging_config(self) -> dict:
+        """충전건 결합 설정 로드"""
+        try:
+            with open(self._CHARGING_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            self._log(f"[Test] 충전건 설정 로드 실패: {e}")
+            return {"laser_scan": {"step_mm": 2.0, "num_steps": 10}}
+
+    def _on_test_laser_scan(self):
+        """테스트 탭 레이저 스캔 시작"""
+        from PyQt5.QtWidgets import QMessageBox
+
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        # ArduCam 확인/시작
+        if self.arducam_manager is None or not self.arducam_manager.is_running:
+            self._log("[Test LaserScan] ArduCam 시작 중...")
+            self._on_camera_type_changed(CAMERA_ARDUCAM)
+            self._on_start_camera()
+            import time
+            time.sleep(1.0)
+
+        # 설정 로드
+        config = self._load_charging_config()
+        scan_cfg = config.get('laser_scan', {})
+        step_mm = scan_cfg.get('step_mm', 2.0)
+        num_steps = scan_cfg.get('num_steps', 10)
+        total_distance = step_mm * num_steps
+
+        # 확인 다이얼로그
+        reply = QMessageBox.question(
+            self, "레이저 스캔",
+            f"Z축 레이저 스캔을 시작합니다.\n\n"
+            f"스텝: {step_mm}mm × {num_steps}회 = {total_distance}mm\n"
+            f"로봇이 Z축 아래로 이동합니다.\n"
+            f"주변 장애물을 확인하세요.",
+            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if reply != QMessageBox.Ok:
+            return
+
+        # 기존 서비스 정리
+        self._cleanup_laser_scan_service()
+
+        # 서비스 생성 (레이저 스캔 탭의 roi/calib 재사용)
+        from services.laser_scan_service import LaserScanService
+        tab_ls = self.tabLaserScan
+
+        self._laser_scan_service = LaserScanService(
+            robot=self.robot,
+            arducam_manager=self.arducam_manager,
+            roi_config=tab_ls._roi_config,
+            camera_matrix=tab_ls.camera_matrix,
+            dist_coeffs=tab_ls.dist_coeffs,
+            parent=self,
+        )
+
+        # 시그널 연결
+        self._laser_scan_service.status_updated.connect(
+            lambda msg: self.labelTestAlignStatus.setText(f"[스캔] {msg}"))
+        self._laser_scan_service.progress_updated.connect(
+            lambda cur, tot: self.labelTestAlignStatus.setText(
+                f"[스캔] {cur}/{tot} 스텝"))
+        self._laser_scan_service.scan_finished.connect(self._on_test_laser_scan_finished)
+        self._laser_scan_service.scan_error.connect(self._on_test_laser_scan_error)
+        self._laser_scan_service.log_message.connect(self._log)
+
+        self.btnTestLaserScan.setEnabled(False)
+        self.labelTestAlignStatus.setText("[스캔] 시작...")
+        self._laser_scan_service.start(step_mm, total_distance)
+
+    def _on_test_laser_scan_finished(self, results: dict):
+        """테스트 탭 레이저 스캔 완료"""
+        self.btnTestLaserScan.setEnabled(True)
+        left = results.get('left', {})
+        right = results.get('right', {})
+        angle = results.get('angle_estimate', {})
+        slope_l = left.get('slope_px_per_mm', 0) or 0
+        slope_r = right.get('slope_px_per_mm', 0) or 0
+        r2_l = left.get('r_squared', 0) or 0
+        r2_r = right.get('r_squared', 0) or 0
+        avg_angle = angle.get('estimated_deg', None)
+        self._test_laser_angle_deg = avg_angle
+        self.btnTestApplyRy.setEnabled(avg_angle is not None)
+        angle_str = f", 각도={avg_angle:.1f}°" if avg_angle is not None else ""
+        msg = (f"스캔 완료: L={slope_l:.3f}px/mm (R²={r2_l:.4f}), "
+               f"R={slope_r:.3f}px/mm (R²={r2_r:.4f}){angle_str}")
+        self.labelTestAlignStatus.setText(msg)
+        self._log(f"[Test LaserScan] {msg}")
+        self._cleanup_laser_scan_service()
+
+    def _on_test_laser_scan_error(self, error_msg: str):
+        """테스트 탭 레이저 스캔 오류"""
+        self.btnTestLaserScan.setEnabled(True)
+        self.labelTestAlignStatus.setText(f"스캔 오류: {error_msg}")
+        self._log(f"[Test LaserScan] 오류: {error_msg}")
+        self._cleanup_laser_scan_service()
+
+    def _on_test_apply_ry(self):
+        """레이저 스캔 각도를 Ry에 적용"""
+        if self._test_laser_angle_deg is None:
+            self.labelTestAlignStatus.setText("스캔 결과 없음 — 레이저 스캔 먼저 실행")
+            return
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        angle = self._test_laser_angle_deg
+        try:
+            current_pose = self.robot.read_current_pose()
+            if not current_pose:
+                self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
+                return
+
+            current_ry = current_pose[4]
+            new_ry = current_ry + angle
+            self._log(f"[Test Ry] 현재 Ry={current_ry:.2f}°, 보정={angle:+.2f}°, 목표={new_ry:.2f}°")
+            self.labelTestAlignStatus.setText(
+                f"Ry 보정: {current_ry:.2f}° → {new_ry:.2f}° ({angle:+.2f}°)")
+            QApplication.processEvents()
+
+            success, msg = self.robot.send_base_rotate(
+                'ry', angle, wait=True,
+                process_events_callback=QApplication.processEvents)
+
+            if success:
+                self._settle(0.3)
+                after_pose = self.robot.read_current_pose()
+                after_ry = after_pose[4] if after_pose else None
+                self._log(f"[Test Ry] 보정 완료: Ry={after_ry:.2f}°" if after_ry is not None
+                          else "[Test Ry] 보정 완료 (자세 읽기 실패)")
+                self.labelTestAlignStatus.setText(
+                    f"Ry 보정 완료: {after_ry:.2f}°" if after_ry is not None
+                    else "Ry 보정 완료")
+            else:
+                self._log(f"[Test Ry] 보정 실패: {msg}")
+                self.labelTestAlignStatus.setText(f"Ry 보정 실패: {msg}")
+        except Exception as e:
+            self._log(f"[Test Ry] 오류: {e}")
+            self.labelTestAlignStatus.setText(f"Ry 보정 오류: {e}")
+
+    _COUPLING_CONFIG_FILE = os.path.join(
+        os.path.dirname(__file__), '..', 'config', 'charging_gun_coupling.json')
+
+    def _on_test_move_to_entrance(self):
+        """ArUco 정렬 위치 → 충전건 입구 이동 (tool frame 오프셋 + 회전 델타)"""
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        # config 로드
+        try:
+            with open(self._COUPLING_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+        except Exception as e:
+            self.labelTestAlignStatus.setText(f"config 로드 실패: {e}")
+            return
+
+        offsets = cfg.get('offsets', {}).get('aruco_to_entrance', {})
+        tf_offset = offsets.get('tool_frame_mm', {})
+        rot_delta = offsets.get('rotation_delta_deg', {})
+        dx_t = tf_offset.get('x', 0)
+        dy_t = tf_offset.get('y', 0)
+        dz_t = tf_offset.get('z', 0)
+        drx = rot_delta.get('rx', 0)
+        dry = rot_delta.get('ry', 0)
+        drz = rot_delta.get('rz', 0)
+
+        try:
+            # 현재 자세 읽기
+            pose = self.robot.read_current_pose()
+            if not pose or len(pose) < 6:
+                self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
+                return
+
+            x, y, z, rx, ry, rz = pose[:6]
+            self._log(f"[입구이동] 현재: X={x:.1f} Y={y:.1f} Z={z:.1f} "
+                      f"Rx={rx:.1f} Ry={ry:.1f} Rz={rz:.1f}")
+
+            # 현재 자세의 회전행렬 구성 (ZYX intrinsic = XYZ extrinsic)
+            rx_r, ry_r, rz_r = np.radians(rx), np.radians(ry), np.radians(rz)
+            cx, sx = np.cos(rx_r), np.sin(rx_r)
+            cy, sy = np.cos(ry_r), np.sin(ry_r)
+            cz, sz = np.cos(rz_r), np.sin(rz_r)
+
+            R = np.array([
+                [cz*cy,  cz*sy*sx - sz*cx,  cz*sy*cx + sz*sx],
+                [sz*cy,  sz*sy*sx + cz*cx,  sz*sy*cx - cz*sx],
+                [-sy,    cy*sx,              cy*cx            ]
+            ])
+
+            # tool frame 오프셋 → base frame 변환
+            dp_tool = np.array([dx_t, dy_t, dz_t])
+            dp_base = R @ dp_tool
+
+            # 목표 자세 계산
+            tx = x + dp_base[0]
+            ty = y + dp_base[1]
+            tz = z + dp_base[2]
+            trx = rx + drx
+            t_ry = ry + dry
+            trz = rz + drz
+
+            self._log(f"[입구이동] 목표: X={tx:.1f} Y={ty:.1f} Z={tz:.1f} "
+                      f"Rx={trx:.1f} Ry={t_ry:.1f} Rz={trz:.1f}")
+            self.labelTestAlignStatus.setText(
+                f"입구 이동 중... ({dp_base[0]:+.1f}, {dp_base[1]:+.1f}, {dp_base[2]:+.1f})mm")
+            QApplication.processEvents()
+
+            # TF3 전환 후 movel (절대 좌표 이동)
+            if not self._ensure_toolframe(3):
+                self.labelTestAlignStatus.setText("TF3 전환 실패")
+                return
+
+            success, msg = self.robot.send_move_to_pose(
+                tx, ty, tz, trx, t_ry, trz,
+                wait=True,
+                process_events_callback=QApplication.processEvents)
+
+            # TF4 복귀
+            self._ensure_toolframe(4)
+
+            if success:
+                self._settle(0.3)
+                after = self.robot.read_current_pose()
+                if after:
+                    self._log(f"[입구이동] 완료: X={after[0]:.1f} Y={after[1]:.1f} Z={after[2]:.1f} "
+                              f"Rx={after[3]:.1f} Ry={after[4]:.1f} Rz={after[5]:.1f}")
+                    self.labelTestAlignStatus.setText(
+                        f"입구 도착: X={after[0]:.1f} Y={after[1]:.1f} Z={after[2]:.1f}")
+                else:
+                    self.labelTestAlignStatus.setText("입구 이동 완료")
+            else:
+                self._log(f"[입구이동] 실패: {msg}")
+                self.labelTestAlignStatus.setText(f"입구 이동 실패: {msg}")
+
+        except Exception as e:
+            self._log(f"[입구이동] 오류: {e}")
+            self.labelTestAlignStatus.setText(f"입구 이동 오류: {e}")
 
     # ==================== 설정 ====================
 

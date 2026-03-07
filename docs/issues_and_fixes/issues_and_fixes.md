@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-03-07 | DS435→ArduCam 핸드오프 — Ry 보정 시 잘못된 camera intrinsics 사용
+
+### 증상
+- DS435→ArduCam 핸드오프 4단계(ArduCam 통합 정렬)에서 Ry 보정이 실질적으로 동작하지 않음
+- 스테레오 탭, 테스트 탭 양쪽 모두 동일 증상
+
+### 원인
+- `_detect_dual_alignment()` (L1253)이 항상 `self.tabArucoReliability.camera_matrix`를 사용
+- ArUco 신뢰성 탭의 카메라 선택이 DS435인 경우, ArduCam 프레임을 DS435 intrinsics로 분석
+- `undistortPoints` → 잘못된 왜곡 보정 (center 좌표 자체가 틀림)
+- `solvePnP` → 잘못된 tvec → `angle_3d` 오류
+- `_get_effective_ry()`가 `angle_3d`를 우선 사용하므로 Ry 보정값 자체가 부정확
+- DS435 fx≈640 vs ArduCam fx≈5347 (약 8배 차이)
+
+### 영향 범위 (4곳)
+| 함수 | 프레임 소스 | 기존 intrinsics | 수정 후 |
+|------|-----------|----------------|---------|
+| `_calib_detect_aruco_alignment` | ArduCam | ArUco 탭 (불일치 가능) | ArduCam |
+| `_stereo_detect_aruco_alignment` | ArduCam | ArUco 탭 (불일치 가능) | ArduCam |
+| `_stereo_detect_full_alignment` | ArduCam | ArUco 탭 (불일치 가능) | ArduCam |
+| `_test_detect_full_alignment` | ArduCam | ArUco 탭 (불일치 가능) | ArduCam |
+| `_aruco_tab_detect_alignment` | ArUco 탭 선택 | ArUco 탭 (일치) | 변경 없음 |
+
+### 수정 내용
+1. `_detect_dual_alignment`에 `camera_matrix`, `dist_coeffs` 선택 파라미터 추가 (None이면 기존 ArUco 탭 사용)
+2. `_get_arducam_intrinsics()` 헬퍼 추가 (arducam_manager.intrinsics → numpy 변환)
+3. ArduCam 프레임을 사용하는 4개 호출부에서 ArduCam intrinsics 명시 전달
+
+### 수정 파일
+- `scripts/main_window.py`
+
+---
+
 ## 2026-03-07 | Modbus TCP Heartbeat + Keepalive 메커니즘
 
 **증상:** 로봇과 30분간 명령 전송이 없으면 로봇 컨트롤러 측에서 TCP/IP 연결을 단절함. 또한 네트워크 장애 시 연결 끊김을 감지하지 못하고 UI가 무응답 상태에 빠짐.
@@ -1583,5 +1616,49 @@ Right ROI: x=1100~1180, y=60~660
 **교훈:**
 1. 삼각측량에서 B(baseline)과 d(거리)를 정확히 모를 때는 기지 각도 시편으로 경험적 sensitivity를 산출하는 것이 실용적
 2. 카메라 교체(1280x720→1920x1080) 후 R²가 0.39→0.9998로 대폭 개선 — 고해상도/고초점거리가 삼각측량 정밀도에 직접 영향
+
+---
+
+## 2026-03-07 | 충전건 결합 오프셋 설정 — ArUco 정렬→입구→완전결합 경로 정의
+
+**목적:** ArUco 통합정렬 위치에서 충전건 결합 입구, 완전 결합까지의 변환 관계를 config로 정의하여 자동 결합 경로 생성 기반 마련
+
+**측정 좌표 (2026-03-07):**
+
+| 위치 | X | Y | Z | Rx | Ry | Rz |
+|------|---|---|---|----|----|-----|
+| ArUco 통합정렬 | 676.90 | -117.90 | 377.50 | 107.30 | -1.10 | 90.00 |
+| 충전건 입구 | 761.97 | -113.06 | 508.74 | 113.50 | -0.20 | 87.50 |
+| 완전 결합 | 991.20 | -131.30 | 478.00 | 109.40 | -0.90 | 87.90 |
+
+**변환 분석:**
+
+1. **ArUco → 입구 (tool frame 오프셋)**
+   - Rx, Ry가 ArUco 보정마다 달라지므로 base frame 델타는 비일정
+   - tool frame 오프셋으로 변환: `Δp_tool = R_aruco^T @ Δp_base`
+   - **tool frame (mm):** x=7.4, y=150.5, z=42.2 (Rx/Ry 변화에 불변)
+   - **회전 델타 (°):** ΔRx=+6.20, ΔRy=+0.90, ΔRz=-2.50
+
+2. **입구 → 완전결합 (tool Z축 리니어)**
+   - 입구에서 tool Z축 방향으로 직선 이동만으로 결합 완료
+   - **tool Z 이동:** ~223 mm
+
+**결합 절차 (계획):**
+1. ArUco 통합정렬 → Rx, Ry 보정값 획득
+2. Rx, Ry 회전 보정 적용 (위치 고정, 자세만 변경)
+3. 보정된 자세에서 입구까지 위치 이동 (base frame 오프셋 — 미측정, 추후 보완)
+4. 입구에서 tool Z축 리니어 ~223mm 이동 → 완전 결합
+
+**수정 파일:**
+- `config/charging_gun_coupling.json` — **신규 생성** (기준좌표 3개 + 오프셋 2단계)
+
+**미완료 사항:**
+- Rx, Ry 보정 후 입구까지의 base frame 위치 오프셋 실측 필요 (tool frame 오프셋 검증)
+- tool Z 리니어 거리 (~223mm) 정밀 실측 필요
+
+**교훈:**
+1. Rx, Ry가 보정마다 변하는 경우, base frame 오프셋이 비일정 → tool frame 오프셋으로 표현해야 일관성 확보
+2. 회전 보정을 먼저 적용하고 위치를 이동하면, base frame 오프셋이 일정해져 계산이 단순해짐
+3. 입구→결합은 tool Z 리니어 단일 축이므로, 정렬만 정확하면 결합 자체는 단순
 
 ---
