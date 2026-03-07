@@ -227,6 +227,7 @@ class MainWindow(QMainWindow):
         self.tabArucoReliability.jog_rotate_requested.connect(self._on_jog_rotate_from_tab)
         self.tabArucoReliability.align_parallel_requested.connect(self._on_ar_tag_align_parallel)
         self.tabArucoReliability.align_single_axis_requested.connect(self._on_ar_tag_align_single_axis)
+        self.tabArucoReliability.align_base_ry_requested.connect(self._on_ar_tag_align_base_ry)
         self.tabArucoReliability.align_aruco_y_requested.connect(self._on_aruco_align_y)
         self.tabArucoReliability.align_aruco_x_requested.connect(self._on_aruco_align_x)
         self.tabArucoReliability.align_aruco_combined_requested.connect(self._on_aruco_align_combined)

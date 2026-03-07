@@ -181,7 +181,7 @@ class TabArucoReliability(QWidget, JogMixin):
 
         # ar tag tcp align 탭 버튼
         self.btnAlignRx.clicked.connect(lambda: self._on_align_single_axis('rx'))
-        self.btnAlignRy.clicked.connect(lambda: self._on_align_single_axis('ry'))
+        self.btnAlignRy.clicked.connect(self._on_align_ry_from_angle)
         self.btnAlignRz.clicked.connect(lambda: self._on_align_single_axis('rz'))
         self.btnAlignParallel.clicked.connect(self._on_align_parallel)
 
@@ -360,6 +360,14 @@ class TabArucoReliability(QWidget, JogMixin):
             self._last_offset_y_px = offset_y
         else:
             self._last_offset_y_px = None
+
+        # Ry 정렬 버튼 활성화 (라이브 마커 각도 기반)
+        if active_ry is not None:
+            self.btnAlignRy.setEnabled(True)
+            self.btnAlignRy.setText(f"Ry={active_ry:.1f}°")
+        else:
+            self.btnAlignRy.setEnabled(False)
+            self.btnAlignRy.setText("Ry 정렬")
 
         # 통합 정렬 버튼 활성화
         has_ry = active_ry is not None
@@ -1394,10 +1402,8 @@ class TabArucoReliability(QWidget, JogMixin):
         if hasattr(self, 'btnAlignParallel'):
             self.btnAlignParallel.setEnabled(True)
             self.btnAlignRx.setEnabled(True)
-            self.btnAlignRy.setEnabled(True)
             self.btnAlignRz.setEnabled(True)
             self.btnAlignRx.setText(f"Rx={correction.delta_rx:.1f}°")
-            self.btnAlignRy.setText(f"Ry={correction.delta_ry:.1f}°")
             self.btnAlignRz.setText(f"Rz={correction.delta_rz:.1f}°")
             self.labelAlignCorrection.setText(
                 f"TCP 보정: dRx={correction.delta_rx:.2f}, dRy={correction.delta_ry:.2f}, dRz={correction.delta_rz:.2f}°")
