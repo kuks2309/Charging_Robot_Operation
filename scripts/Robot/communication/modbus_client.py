@@ -14,6 +14,7 @@ import struct
 import time
 from typing import Optional, Tuple, List
 from pymodbus.client import ModbusTcpClient
+from pymodbus.exceptions import ModbusException
 
 
 class ModbusClient:
@@ -96,11 +97,19 @@ class ModbusClient:
         self.timeout = timeout
         self._client: Optional[ModbusTcpClient] = None
         self._connected = False
+        self._connection_lost: bool = False
 
     @property
     def is_connected(self) -> bool:
-        """연결 상태"""
+        """연결 상태 (소켓 + 플래그 기반)"""
+        if self._connection_lost:
+            return False
         return self._connected and self._client is not None
+
+    def mark_connection_lost(self):
+        """외부에서 연결 끊김을 알림 (사이클 단위 판정 후 호출)"""
+        self._connection_lost = True
+        self._connected = False
 
     def connect(self) -> Tuple[bool, str]:
         """로봇에 연결 및 통신 검증"""
@@ -127,6 +136,7 @@ class ModbusClient:
             if verified:
                 # 검증 성공 -> 연결 완료
                 self._connected = True
+                self._connection_lost = False
                 # 타임아웃을 원래 값으로 복원 (향후 operation용)
                 self._client.timeout = self.timeout
                 return True, f"연결 성공: {self.ip}:{self.port}"
@@ -230,6 +240,7 @@ class ModbusClient:
             self._client.close()
             self._client = None
         self._connected = False
+        self._connection_lost = False
         return True, "연결 해제됨"
 
     # ==================== 레지스터 읽기/쓰기 ====================
@@ -244,7 +255,7 @@ class ModbusClient:
             if result.isError():
                 return None
             return list(result.registers)
-        except Exception:
+        except (ModbusException, OSError):
             return None
 
     def write_registers(self, address: int, values: List[int]) -> bool:
@@ -255,7 +266,7 @@ class ModbusClient:
         try:
             result = self._client.write_registers(address=address, values=values)
             return not result.isError()
-        except Exception:
+        except (ModbusException, OSError):
             return False
 
     def write_register(self, address: int, value: int) -> bool:
@@ -307,6 +318,9 @@ class ModbusClient:
         # 폴링 간격 0.02s: 작은 이동(1mm)은 PRS가 50ms 내 RUNNING→DONE→IDLE 완료하므로
         # 0.1s 간격으로는 RUNNING/DONE을 놓칠 수 있음
         while time.time() - start < 5.0:
+            if self._connection_lost:
+                return False, "연결 끊김"
+
             if process_events_callback:
                 process_events_callback()
 
@@ -331,6 +345,9 @@ class ModbusClient:
 
         # 2단계: 완료 대기 (Running → Done/Idle)
         while time.time() - start < timeout:
+            if self._connection_lost:
+                return False, "연결 끊김"
+
             if process_events_callback:
                 process_events_callback()
 

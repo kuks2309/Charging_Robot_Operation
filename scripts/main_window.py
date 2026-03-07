@@ -313,6 +313,11 @@ class MainWindow(QMainWindow):
         self.status_timer.timeout.connect(self._update_robot_status)
         # 연결 후 시작됨
 
+        # Heartbeat 연결 감시 변수
+        self._heartbeat_failures: int = 0
+        self._heartbeat_max_failures: int = 5  # 연속 5사이클(~500ms) 실패 시 끊김 판정
+        self._handling_connection_lost: bool = False
+
     # ==================== 유틸리티 헬퍼 ====================
 
     def _require_robot(self) -> bool:
@@ -793,6 +798,10 @@ class MainWindow(QMainWindow):
 
     def _setup_robot_connection(self):
         """로봇 연결 후 공통 설정"""
+        # Heartbeat 카운터 초기화
+        self._heartbeat_failures = 0
+        self._handling_connection_lost = False
+
         # RobotController 초기화
         self.robot_controller = RobotController(self.robot, self.pose_manager)
         self.robot_controller.set_on_error(lambda msg: self._log(f"[ERROR] {msg}"))
@@ -858,11 +867,17 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusbar.showMessage(f"연결 성공: {self.robot.ip}:{self.robot.port}")
 
-    def _on_disconnect(self):
-        """로봇 연결 해제"""
+    def _on_disconnect(self, reason="manual"):
+        """로봇 연결 해제
+
+        Args:
+            reason: "manual" (수동 해제) 또는 "connection_lost" (네트워크 끊김)
+        """
         if self.robot:
-            success, message = self.robot.disconnect()
-            self._log(message)
+            if reason == "manual":
+                success, message = self.robot.disconnect()
+                self._log(message)
+            # connection_lost인 경우 이미 mark_connection_lost() 호출됨
 
         # RobotController 해제
         self.robot_controller = None
@@ -890,7 +905,12 @@ class MainWindow(QMainWindow):
 
         # TabTaskEdit 연결 상태 업데이트
         self.tabTaskEdit.update_connection_status(False)
-        self.statusbar.showMessage("연결 해제됨")
+
+        # 상태바 메시지 구분
+        if reason == "connection_lost":
+            self.statusbar.showMessage("연결 끊김 감지 - 재연결 필요")
+        else:
+            self.statusbar.showMessage("연결 해제됨")
 
     def _ensure_toolframe(self, tf: int) -> bool:
         """지정 툴프레임 확인/설정. 성공 시 True 반환. PRS 클린업 대기 포함."""
@@ -1653,13 +1673,17 @@ class MainWindow(QMainWindow):
             self._update_statusbar()
 
     def _update_robot_status(self):
-        """로봇 상태 업데이트 (TCP 위치, 레지스터 등)"""
+        """로봇 상태 업데이트 (TCP 위치, 레지스터 등) + heartbeat 감시"""
         if not self.robot or not self.robot.is_connected:
             return
+
+        # --- heartbeat: 사이클 단위 실패 감지 ---
+        any_success = False
 
         # 카메라 포즈 읽기 (158~169)
         cam_pose = self.robot.read_camera_pose()
         if cam_pose:
+            any_success = True
             x, y, z, rx, ry, rz = cam_pose
             # TabTaskEdit에 TCP 위치 업데이트
             self.tabTaskEdit.update_tcp_position(x, y, z, rx, ry, rz)
@@ -1671,6 +1695,7 @@ class MainWindow(QMainWindow):
         # 현재 툴프레임 읽기 (레지스터 219)
         toolframe = self.robot.read_current_toolframe()
         if toolframe is not None:
+            any_success = True
             self.tabMotionTest.update_current_toolframe(toolframe)
             self.tabTaskEdit.update_current_toolframe(toolframe)
             self.tabCalibration.update_current_toolframe(toolframe)
@@ -1678,6 +1703,8 @@ class MainWindow(QMainWindow):
         # 커맨드/응답 레지스터 읽기
         cmd = self.robot.read_command()
         resp = self.robot.read_response()
+        if cmd is not None or resp is not None:
+            any_success = True
 
         # Modbus 모니터 테이블 업데이트 (실행 모니터 탭)
         if hasattr(self, 'tableModbusRegisters'):
@@ -1689,6 +1716,45 @@ class MainWindow(QMainWindow):
             if resp is not None:
                 self.tableModbusRegisters.setItem(3, 1,
                     QTableWidgetItem(str(resp)))
+
+        # --- heartbeat: 사이클 결과 판정 ---
+        if any_success:
+            self._heartbeat_failures = 0
+        else:
+            self._heartbeat_failures += 1
+            if self._heartbeat_failures >= self._heartbeat_max_failures:
+                self._handle_connection_lost()
+
+    def _handle_connection_lost(self):
+        """네트워크 연결 끊김 감지 시 처리 (재진입 방지)"""
+        if self._handling_connection_lost:
+            return
+        self._handling_connection_lost = True
+
+        try:
+            # 1. status_timer 즉시 정지 (추가 _update_robot_status 호출 차단)
+            self.status_timer.stop()
+
+            # 2. ModbusClient에 연결 끊김 알림
+            if self.robot:
+                self.robot.mark_connection_lost()
+
+            # 3. 로그 기록
+            self._log("[경고] 로봇 연결 끊김 감지! (연속 5사이클 통신 실패)")
+
+            # 4. 기존 disconnect 로직 재사용 (reason 구분)
+            self._on_disconnect(reason="connection_lost")
+
+            # 5. 비차단 알림 (QTimer.singleShot으로 현재 이벤트 루프 밖에서 실행)
+            QTimer.singleShot(0, self._show_connection_lost_warning)
+        finally:
+            self._handling_connection_lost = False
+
+    def _show_connection_lost_warning(self):
+        """연결 끊김 경고 (비차단, 이벤트 루프 밖에서 실행)"""
+        QMessageBox.warning(self, "연결 끊김",
+            "로봇과의 Modbus TCP 연결이 끊어졌습니다.\n"
+            "네트워크 상태를 확인하고 다시 연결해주세요.")
 
     # ==================== 카메라 선택 ====================
 
