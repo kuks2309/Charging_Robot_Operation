@@ -252,7 +252,7 @@ class MainWindow(QMainWindow):
         self.groupCharging.setFixedHeight(100)
         charging_layout = QHBoxLayout(self.groupCharging)
 
-        self.btnTestToggleCameras = QPushButton("카메라 정지")
+        self.btnTestToggleCameras = QPushButton("카메라 구동")
         self.btnTestToggleCameras.setCheckable(True)
         self.btnTestToggleCameras.clicked.connect(self._on_test_toggle_cameras)
         charging_layout.addWidget(self.btnTestToggleCameras)
@@ -265,11 +265,15 @@ class MainWindow(QMainWindow):
         self.btnTestHandoffDS435.clicked.connect(self._on_test_handoff_ds435_to_arducam)
         charging_layout.addWidget(self.btnTestHandoffDS435)
 
+        self.btnTestDepthAdjust = QPushButton("Depth 보정")
+        self.btnTestDepthAdjust.clicked.connect(self._on_test_depth_adjust)
+        charging_layout.addWidget(self.btnTestDepthAdjust)
+
         self.btnTestLaserScan = QPushButton("레이저 스캔")
         self.btnTestLaserScan.clicked.connect(self._on_test_laser_scan)
         charging_layout.addWidget(self.btnTestLaserScan)
 
-        self.btnTestApplyRy = QPushButton("Ry 보정 적용")
+        self.btnTestApplyRy = QPushButton("Rx 보정 적용")
         self.btnTestApplyRy.setEnabled(False)
         self.btnTestApplyRy.clicked.connect(self._on_test_apply_ry)
         charging_layout.addWidget(self.btnTestApplyRy)
@@ -277,6 +281,14 @@ class MainWindow(QMainWindow):
         self.btnTestMoveEntrance = QPushButton("입구 이동")
         self.btnTestMoveEntrance.clicked.connect(self._on_test_move_to_entrance)
         charging_layout.addWidget(self.btnTestMoveEntrance)
+
+        self.btnTestTcpZLinear = QPushButton("TCP Z 전진")
+        self.btnTestTcpZLinear.clicked.connect(self._on_test_tcp_z_linear)
+        charging_layout.addWidget(self.btnTestTcpZLinear)
+
+        self.btnTestReleaseReturn = QPushButton("해제 복귀")
+        self.btnTestReleaseReturn.clicked.connect(self._on_test_release_return)
+        charging_layout.addWidget(self.btnTestReleaseReturn)
 
         self._test_laser_angle_deg = None  # 레이저 스캔 각도 저장
 
@@ -2837,6 +2849,45 @@ class MainWindow(QMainWindow):
             self._log(f"[Handoff] camera_offset(raw): dY={raw_y:.2f}mm, dZ={raw_z:.2f}mm → 적용: dY={cam_offset_y:.2f}mm, dZ={cam_offset_z:.2f}mm")
 
             # ============================================================
+            # 0단계: Detection Pose 이동 (Rx=90, Ry=0, Rz=90)
+            # ============================================================
+            TARGET_RX, TARGET_RY, TARGET_RZ = 90.0, 0.0, 90.0
+            tab._update_ds435_calib_step(1, "⓪ Detection Pose 이동 중...")
+            QApplication.processEvents()
+
+            current_pose = self.robot.read_current_pose()
+            if not current_pose:
+                tab._update_ds435_calib_step(0, "현재 자세 읽기 실패")
+                return
+
+            rx, ry, rz = current_pose[3], current_pose[4], current_pose[5]
+            need_move = (abs(rx - TARGET_RX) > 0.5 or
+                         abs(ry - TARGET_RY) > 0.5 or
+                         abs(rz - TARGET_RZ) > 0.5)
+
+            if need_move:
+                self._log(f"[Handoff] Detection Pose 이동: "
+                          f"Rx={rx:.1f}→{TARGET_RX}, Ry={ry:.1f}→{TARGET_RY}, Rz={rz:.1f}→{TARGET_RZ}")
+                target = list(current_pose)
+                target[3] = TARGET_RX
+                target[4] = TARGET_RY
+                target[5] = TARGET_RZ
+
+                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
+                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+                result = self.robot.wait_for_done(
+                    process_events_callback=QApplication.processEvents)
+                if not result[0]:
+                    tab._update_ds435_calib_step(0, f"Detection Pose 이동 실패: {result[1]}")
+                    return
+                self._settle(0.5)
+                self._log("[Handoff] Detection Pose 이동 완료")
+            else:
+                self._log("[Handoff] Detection Pose 이동 불필요 (이미 목표 자세)")
+
+            # ============================================================
             # 1단계: DS435 마커 중심 정렬
             # ============================================================
             tab._update_ds435_calib_step(1, "① DS435 마커 중심 정렬 중...")
@@ -4253,6 +4304,43 @@ class MainWindow(QMainWindow):
             cam_offset_z = -raw_z
             self._log(f"[Test Handoff] camera_offset(raw): dY={raw_y:.2f}mm, dZ={raw_z:.2f}mm → 적용: dY={cam_offset_y:.2f}mm, dZ={cam_offset_z:.2f}mm")
 
+            # 0단계: Detection Pose 이동 (Rx=90, Ry=0, Rz=90)
+            TARGET_RX, TARGET_RY, TARGET_RZ = 90.0, 0.0, 90.0
+            self.labelTestAlignStatus.setText("⓪ Detection Pose 이동 중...")
+            QApplication.processEvents()
+
+            current_pose = self.robot.read_current_pose()
+            if not current_pose:
+                self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
+                return
+
+            rx, ry, rz = current_pose[3], current_pose[4], current_pose[5]
+            need_move = (abs(rx - TARGET_RX) > 0.5 or
+                         abs(ry - TARGET_RY) > 0.5 or
+                         abs(rz - TARGET_RZ) > 0.5)
+
+            if need_move:
+                self._log(f"[Test Handoff] Detection Pose 이동: "
+                          f"Rx={rx:.1f}→{TARGET_RX}, Ry={ry:.1f}→{TARGET_RY}, Rz={rz:.1f}→{TARGET_RZ}")
+                target = list(current_pose)
+                target[3] = TARGET_RX
+                target[4] = TARGET_RY
+                target[5] = TARGET_RZ
+
+                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
+                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+                result = self.robot.wait_for_done(
+                    process_events_callback=QApplication.processEvents)
+                if not result[0]:
+                    self.labelTestAlignStatus.setText(f"Detection Pose 이동 실패: {result[1]}")
+                    return
+                self._settle(0.5)
+                self._log("[Test Handoff] Detection Pose 이동 완료")
+            else:
+                self._log("[Test Handoff] Detection Pose 이동 불필요 (이미 목표 자세)")
+
             # 1단계: DS435 마커 중심 정렬
             self.labelTestAlignStatus.setText("① DS435 마커 중심 정렬 중...")
             QApplication.processEvents()
@@ -4298,8 +4386,20 @@ class MainWindow(QMainWindow):
                     break
 
             if depth is not None and depth > 0:
-                FINE_TOLERANCE_MM = 1.0
+                FINE_TOLERANCE_MM = 0.1
                 MAX_DEPTH_ITER = 5
+                DAMPING = 0.7  # 진동 방지 감쇠 계수
+                NUM_SAMPLES = 3  # 평균 측정 횟수
+
+                def _avg_depth():
+                    """다중 측정 평균 (노이즈 감소)"""
+                    readings = []
+                    for _ in range(NUM_SAMPLES):
+                        d = self._test_measure_ds435_marker_depth()
+                        if d is not None and d > 0:
+                            readings.append(d)
+                        self._settle(0.15)
+                    return sum(readings) / len(readings) if readings else None
 
                 for d_iter in range(MAX_DEPTH_ITER):
                     depth_error = depth - TARGET_DEPTH_MM
@@ -4313,7 +4413,7 @@ class MainWindow(QMainWindow):
                             f"② 수렴: {depth:.1f}mm (오차 {depth_error:+.1f}mm)")
                         break
 
-                    x_move = depth_error
+                    x_move = depth_error * DAMPING
                     if abs(x_move) > 100.0:
                         self._log(f"[Test Handoff] X 이동 거리 초과: {x_move:.1f}mm (±100mm 제한)")
                         self.labelTestAlignStatus.setText(f"② X 이동 거리 초과: {x_move:.1f}mm")
@@ -4331,9 +4431,9 @@ class MainWindow(QMainWindow):
 
                     self._settle(0.5)
 
-                    # 재측정
-                    depth = self._test_measure_ds435_marker_depth()
-                    if depth is None or depth <= 0:
+                    # 다중 측정 평균
+                    depth = _avg_depth()
+                    if depth is None:
                         self._log("[Test Handoff] 재측정 실패, 반복 중단")
                         break
                 else:
@@ -4506,8 +4606,86 @@ class MainWindow(QMainWindow):
         self._log(f"[Test LaserScan] 오류: {error_msg}")
         self._cleanup_laser_scan_service()
 
+    def _on_test_depth_adjust(self):
+        """독립 depth 370mm 보정 (핸드오프 없이 단독 실행)"""
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        try:
+            cfg = self._load_charging_config()
+            TARGET_DEPTH_MM = cfg.get('handoff', {}).get('target_depth_mm', 370.0)
+            FINE_TOLERANCE_MM = 0.1
+            MAX_DEPTH_ITER = 10
+            DAMPING = 0.7
+            NUM_SAMPLES = 3
+
+            self.labelTestAlignStatus.setText(f"Depth 보정: 목표 {TARGET_DEPTH_MM:.0f}mm")
+            QApplication.processEvents()
+            self._log(f"[Test Depth] === Depth 보정 시작: 목표 {TARGET_DEPTH_MM:.0f}mm ===")
+
+            def _avg_depth():
+                readings = []
+                for _ in range(NUM_SAMPLES):
+                    d = self._test_measure_ds435_marker_depth()
+                    if d is not None and d > 0:
+                        readings.append(d)
+                    self._settle(0.15)
+                return sum(readings) / len(readings) if readings else None
+
+            depth = _avg_depth()
+            if depth is None:
+                self.labelTestAlignStatus.setText("Depth 측정 실패")
+                self._log("[Test Depth] 측정 실패")
+                return
+
+            for d_iter in range(MAX_DEPTH_ITER):
+                depth_error = depth - TARGET_DEPTH_MM
+                abs_err = abs(depth_error)
+                self._log(f"[Test Depth] iter {d_iter+1}/{MAX_DEPTH_ITER}: "
+                          f"{depth:.1f}mm, 오차: {depth_error:+.1f}mm")
+
+                if abs_err < FINE_TOLERANCE_MM:
+                    self._log(f"[Test Depth] 수렴 완료 (오차 {abs_err:.1f}mm)")
+                    self.labelTestAlignStatus.setText(
+                        f"Depth 수렴: {depth:.1f}mm (오차 {depth_error:+.1f}mm)")
+                    break
+
+                x_total = depth_error * DAMPING
+                # 100mm 단위 분할 이동
+                remaining = x_total
+                move_ok = True
+                while abs(remaining) > 0.05:
+                    step = max(-100.0, min(100.0, remaining))
+                    self.labelTestAlignStatus.setText(
+                        f"Depth X 이동: {step:+.1f}mm (잔여: {remaining:+.1f}mm)")
+                    QApplication.processEvents()
+                    success, msg = self.robot.send_base_linear(
+                        'x', step, wait=True,
+                        process_events_callback=QApplication.processEvents)
+                    if not success:
+                        self._log(f"[Test Depth] X 이동 실패: {msg}")
+                        move_ok = False
+                        break
+                    self._settle(0.3)
+                    remaining -= step
+                if not move_ok:
+                    break
+
+                self._settle(0.5)
+                depth = _avg_depth()
+                if depth is None:
+                    self._log("[Test Depth] 재측정 실패")
+                    break
+            else:
+                self._log(f"[Test Depth] {MAX_DEPTH_ITER}회 후 오차: {abs(depth - TARGET_DEPTH_MM):.1f}mm")
+
+        except Exception as e:
+            self._log(f"[Test Depth] 오류: {e}")
+            self.labelTestAlignStatus.setText(f"Depth 오류: {e}")
+
     def _on_test_apply_ry(self):
-        """레이저 스캔 각도를 Ry에 적용"""
+        """레이저 스캔 각도를 Rx에 적용"""
         if self._test_laser_angle_deg is None:
             self.labelTestAlignStatus.setText("스캔 결과 없음 — 레이저 스캔 먼저 실행")
             return
@@ -4522,43 +4700,50 @@ class MainWindow(QMainWindow):
                 self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
                 return
 
-            current_ry = current_pose[4]
-            new_ry = current_ry + angle
-            self._log(f"[Test Ry] 현재 Ry={current_ry:.2f}°, 보정={angle:+.2f}°, 목표={new_ry:.2f}°")
+            current_rx = current_pose[3]
+            new_rx = current_rx + angle
+            self._log(f"[Test Rx] 현재 Rx={current_rx:.2f}°, 보정={angle:+.2f}°, 목표={new_rx:.2f}°")
             self.labelTestAlignStatus.setText(
-                f"Ry 보정: {current_ry:.2f}° → {new_ry:.2f}° ({angle:+.2f}°)")
+                f"Rx 보정: {current_rx:.2f}° → {new_rx:.2f}° ({angle:+.2f}°)")
             QApplication.processEvents()
 
             success, msg = self.robot.send_base_rotate(
-                'ry', angle, wait=True,
+                'rx', angle, wait=True,
                 process_events_callback=QApplication.processEvents)
 
             if success:
                 self._settle(0.3)
                 after_pose = self.robot.read_current_pose()
-                after_ry = after_pose[4] if after_pose else None
-                self._log(f"[Test Ry] 보정 완료: Ry={after_ry:.2f}°" if after_ry is not None
-                          else "[Test Ry] 보정 완료 (자세 읽기 실패)")
+                after_rx = after_pose[3] if after_pose else None
+                self._log(f"[Test Rx] 보정 완료: Rx={after_rx:.2f}°" if after_rx is not None
+                          else "[Test Rx] 보정 완료 (자세 읽기 실패)")
                 self.labelTestAlignStatus.setText(
-                    f"Ry 보정 완료: {after_ry:.2f}°" if after_ry is not None
-                    else "Ry 보정 완료")
+                    f"Rx 보정 완료: {after_rx:.2f}°" if after_rx is not None
+                    else "Rx 보정 완료")
             else:
-                self._log(f"[Test Ry] 보정 실패: {msg}")
-                self.labelTestAlignStatus.setText(f"Ry 보정 실패: {msg}")
+                self._log(f"[Test Rx] 보정 실패: {msg}")
+                self.labelTestAlignStatus.setText(f"Rx 보정 실패: {msg}")
         except Exception as e:
-            self._log(f"[Test Ry] 오류: {e}")
-            self.labelTestAlignStatus.setText(f"Ry 보정 오류: {e}")
+            self._log(f"[Test Rx] 오류: {e}")
+            self.labelTestAlignStatus.setText(f"Rx 보정 오류: {e}")
 
     _COUPLING_CONFIG_FILE = os.path.join(
         os.path.dirname(__file__), '..', 'config', 'charging_gun_coupling.json')
 
+    def _stop_cameras_for_movement(self):
+        """이동 전 카메라 정지 및 버튼 상태 동기화"""
+        self._stop_all_cameras()
+        self.btnTestToggleCameras.setChecked(False)
+        self.btnTestToggleCameras.setText("카메라 구동")
+
     def _on_test_move_to_entrance(self):
-        """ArUco 정렬 위치 → 충전건 입구 이동 (tool frame 오프셋 + 회전 델타)"""
+        """현재 위치 + delta → 입구 절대 좌표 계산 후 movel"""
         if not self._require_robot():
             self.labelTestAlignStatus.setText("로봇 미연결")
             return
 
-        # config 로드
+        self._stop_cameras_for_movement()
+
         try:
             with open(self._COUPLING_CONFIG_FILE, 'r', encoding='utf-8') as f:
                 cfg = json.load(f)
@@ -4566,69 +4751,35 @@ class MainWindow(QMainWindow):
             self.labelTestAlignStatus.setText(f"config 로드 실패: {e}")
             return
 
-        offsets = cfg.get('offsets', {}).get('aruco_to_entrance', {})
-        tf_offset = offsets.get('tool_frame_mm', {})
-        rot_delta = offsets.get('rotation_delta_deg', {})
-        dx_t = tf_offset.get('x', 0)
-        dy_t = tf_offset.get('y', 0)
-        dz_t = tf_offset.get('z', 0)
-        drx = rot_delta.get('rx', 0)
-        dry = rot_delta.get('ry', 0)
-        drz = rot_delta.get('rz', 0)
+        d = cfg.get('offsets', {}).get('corrected_to_entrance', {})
+        if not d:
+            self.labelTestAlignStatus.setText("config에 corrected_to_entrance 없음")
+            return
 
         try:
-            # 현재 자세 읽기
             pose = self.robot.read_current_pose()
             if not pose or len(pose) < 6:
                 self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
                 return
 
             x, y, z, rx, ry, rz = pose[:6]
-            self._log(f"[입구이동] 현재: X={x:.1f} Y={y:.1f} Z={z:.1f} "
-                      f"Rx={rx:.1f} Ry={ry:.1f} Rz={rz:.1f}")
+            tx = x + d.get('x', 0)
+            ty = y + d.get('y', 0)
+            tz = z + d.get('z', 0)
+            trx = rx + d.get('rx', 0)
+            t_ry = ry + d.get('ry', 0)
+            trz = rz + d.get('rz', 0)
 
-            # 현재 자세의 회전행렬 구성 (ZYX intrinsic = XYZ extrinsic)
-            rx_r, ry_r, rz_r = np.radians(rx), np.radians(ry), np.radians(rz)
-            cx, sx = np.cos(rx_r), np.sin(rx_r)
-            cy, sy = np.cos(ry_r), np.sin(ry_r)
-            cz, sz = np.cos(rz_r), np.sin(rz_r)
-
-            R = np.array([
-                [cz*cy,  cz*sy*sx - sz*cx,  cz*sy*cx + sz*sx],
-                [sz*cy,  sz*sy*sx + cz*cx,  sz*sy*cx - cz*sx],
-                [-sy,    cy*sx,              cy*cx            ]
-            ])
-
-            # tool frame 오프셋 → base frame 변환
-            dp_tool = np.array([dx_t, dy_t, dz_t])
-            dp_base = R @ dp_tool
-
-            # 목표 자세 계산
-            tx = x + dp_base[0]
-            ty = y + dp_base[1]
-            tz = z + dp_base[2]
-            trx = rx + drx
-            t_ry = ry + dry
-            trz = rz + drz
-
-            self._log(f"[입구이동] 목표: X={tx:.1f} Y={ty:.1f} Z={tz:.1f} "
-                      f"Rx={trx:.1f} Ry={t_ry:.1f} Rz={trz:.1f}")
+            self._log(f"[입구이동] 현재: ({x:.1f}, {y:.1f}, {z:.1f}) → "
+                      f"목표: ({tx:.1f}, {ty:.1f}, {tz:.1f})")
             self.labelTestAlignStatus.setText(
-                f"입구 이동 중... ({dp_base[0]:+.1f}, {dp_base[1]:+.1f}, {dp_base[2]:+.1f})mm")
+                f"입구 이동 중... → ({tx:.1f}, {ty:.1f}, {tz:.1f})")
             QApplication.processEvents()
-
-            # TF3 전환 후 movel (절대 좌표 이동)
-            if not self._ensure_toolframe(3):
-                self.labelTestAlignStatus.setText("TF3 전환 실패")
-                return
 
             success, msg = self.robot.send_move_to_pose(
                 tx, ty, tz, trx, t_ry, trz,
                 wait=True,
                 process_events_callback=QApplication.processEvents)
-
-            # TF4 복귀
-            self._ensure_toolframe(4)
 
             if success:
                 self._settle(0.3)
@@ -4637,7 +4788,7 @@ class MainWindow(QMainWindow):
                     self._log(f"[입구이동] 완료: X={after[0]:.1f} Y={after[1]:.1f} Z={after[2]:.1f} "
                               f"Rx={after[3]:.1f} Ry={after[4]:.1f} Rz={after[5]:.1f}")
                     self.labelTestAlignStatus.setText(
-                        f"입구 도착: X={after[0]:.1f} Y={after[1]:.1f} Z={after[2]:.1f}")
+                        f"입구 도착: ({after[0]:.1f}, {after[1]:.1f}, {after[2]:.1f})")
                 else:
                     self.labelTestAlignStatus.setText("입구 이동 완료")
             else:
@@ -4647,6 +4798,128 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log(f"[입구이동] 오류: {e}")
             self.labelTestAlignStatus.setText(f"입구 이동 오류: {e}")
+
+    def _on_test_tcp_z_linear(self):
+        """TCP Z축 전진 (config에서 거리 읽기)"""
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        self._stop_cameras_for_movement()
+
+        try:
+            with open(self._COUPLING_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+        except Exception as e:
+            self.labelTestAlignStatus.setText(f"config 로드 실패: {e}")
+            return
+
+        step = cfg.get('offsets', {}).get('entrance_to_coupling', {}).get('tool_z_step_mm', 50.0)
+
+        try:
+            self._log(f"[TCP Z] 전진: {step}mm")
+            self.labelTestAlignStatus.setText(f"TCP Z 전진 중... {step}mm")
+            QApplication.processEvents()
+
+            success, msg = self.robot.send_tcp_linear(
+                'z', step, wait=True,
+                process_events_callback=QApplication.processEvents)
+
+            if success:
+                self._settle(0.3)
+                after = self.robot.read_current_pose()
+                if after:
+                    self._log(f"[TCP Z] 완료: X={after[0]:.1f} Y={after[1]:.1f} Z={after[2]:.1f}")
+                    self.labelTestAlignStatus.setText(
+                        f"TCP Z 완료: ({after[0]:.1f}, {after[1]:.1f}, {after[2]:.1f})")
+                else:
+                    self.labelTestAlignStatus.setText(f"TCP Z 전진 완료 ({step}mm)")
+            else:
+                self._log(f"[TCP Z] 실패: {msg}")
+                self.labelTestAlignStatus.setText(f"TCP Z 실패: {msg}")
+
+        except Exception as e:
+            self._log(f"[TCP Z] 오류: {e}")
+            self.labelTestAlignStatus.setText(f"TCP Z 오류: {e}")
+
+    def _on_test_release_return(self):
+        """충전건 해제 복귀: TCP Z 후퇴 → 역 병진 변환으로 복귀"""
+        if not self._require_robot():
+            self.labelTestAlignStatus.setText("로봇 미연결")
+            return
+
+        self._stop_cameras_for_movement()
+
+        try:
+            with open(self._COUPLING_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+        except Exception as e:
+            self.labelTestAlignStatus.setText(f"config 로드 실패: {e}")
+            return
+
+        retract = cfg.get('offsets', {}).get('release_return', {}).get('tcp_z_retract_mm', 200.0)
+        d = cfg.get('offsets', {}).get('corrected_to_entrance', {})
+        if not d:
+            self.labelTestAlignStatus.setText("config에 corrected_to_entrance 없음")
+            return
+
+        try:
+            # 1단계: TCP Z 후퇴
+            self._log(f"[해제복귀] TCP Z 후퇴: -{retract}mm")
+            self.labelTestAlignStatus.setText(f"TCP Z 후퇴 중... -{retract}mm")
+            QApplication.processEvents()
+
+            self.robot.send_tcp_linear('z', -retract, wait=False)
+            success, msg = self.robot.wait_for_done_motion_aware(
+                idle_timeout=10.0, max_timeout=120.0,
+                process_events_callback=QApplication.processEvents)
+
+            if not success:
+                self._log(f"[해제복귀] TCP Z 후퇴 실패: {msg}")
+                self.labelTestAlignStatus.setText(f"TCP Z 후퇴 실패: {msg}")
+                return
+
+            self._settle(0.3)
+
+            # 2단계: 역 병진 변환 (corrected_to_entrance의 역방향)
+            pose = self.robot.read_current_pose()
+            if not pose or len(pose) < 6:
+                self.labelTestAlignStatus.setText("현재 자세 읽기 실패")
+                return
+
+            x, y, z, rx, ry, rz = pose[:6]
+            tx = x - d.get('x', 0)
+            ty = y - d.get('y', 0)
+            tz = z - d.get('z', 0)
+
+            self._log(f"[해제복귀] 역 병진 이동: ({x:.1f}, {y:.1f}, {z:.1f}) → "
+                      f"({tx:.1f}, {ty:.1f}, {tz:.1f})")
+            self.labelTestAlignStatus.setText(
+                f"복귀 이동 중... ({tx:.1f}, {ty:.1f}, {tz:.1f})")
+            QApplication.processEvents()
+
+            self.robot.send_move_to_pose(tx, ty, tz, rx, ry, rz, wait=False)
+            success, msg = self.robot.wait_for_done_motion_aware(
+                idle_timeout=10.0, max_timeout=120.0,
+                process_events_callback=QApplication.processEvents)
+
+            if success:
+                self._settle(0.3)
+                after = self.robot.read_current_pose()
+                if after:
+                    self._log(f"[해제복귀] 완료: X={after[0]:.1f} Y={after[1]:.1f} Z={after[2]:.1f} "
+                              f"Rx={after[3]:.1f} Ry={after[4]:.1f} Rz={after[5]:.1f}")
+                    self.labelTestAlignStatus.setText(
+                        f"복귀 완료: ({after[0]:.1f}, {after[1]:.1f}, {after[2]:.1f})")
+                else:
+                    self.labelTestAlignStatus.setText("복귀 완료")
+            else:
+                self._log(f"[해제복귀] 복귀 이동 실패: {msg}")
+                self.labelTestAlignStatus.setText(f"복귀 이동 실패: {msg}")
+
+        except Exception as e:
+            self._log(f"[해제복귀] 오류: {e}")
+            self.labelTestAlignStatus.setText(f"해제 복귀 오류: {e}")
 
     # ==================== 설정 ====================
 
@@ -4911,6 +5184,15 @@ class MainWindow(QMainWindow):
         # 레이저 캘리브레이션 탭 (인덱스 6) → ArduCam 강제 전환
         elif index == 6:
             self._on_camera_type_changed(CAMERA_ARDUCAM)
+        # 테스트 탭 (충전건 결합) 진입 → 카메라 자동 시작
+        elif index == self.tabWidget.indexOf(self.tabTest):
+            if not self.ds435_camera_manager.is_running:
+                self.ds435_camera_manager.start()
+            if not self.arducam_manager.is_running:
+                self.arducam_manager.start()
+            self.btnTestToggleCameras.setChecked(True)
+            self.btnTestToggleCameras.setText("카메라 정지")
+            self._log("[Test] 탭 진입: DS435 + ArduCam 카메라 자동 시작")
         else:
             # 다른 탭으로 변경 시에도 상태바 업데이트
             if self.robot and self.robot.is_connected:

@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-03-07 | DS435→ArduCam 핸드오프 — Detection Pose 미실행
+
+### 증상
+- 핸드오프 실행 시 로봇이 임의 자세에서 바로 DS435 센터링 시작
+- DS435 마커 검출 실패 또는 부정확한 정렬
+
+### 원인
+- `_on_stereo_calib_handoff_ds435_to_arducam`, `_on_test_handoff_ds435_to_arducam` 모두 Detection Pose (Rx=90, Ry=0, Rz=90) 이동 단계 없음
+- DS435 단독 정렬 함수에는 Detection Pose 포함되어 있으나, 핸드오프 함수에서는 누락
+
+### 수정 내용
+- 두 핸드오프 함수 시작부에 "0단계: Detection Pose 이동" 추가
+- 현재 자세 읽기 → Rx/Ry/Rz 차이 0.5° 초과 시 movel 이동 → 안정화 대기
+
+### 수정 파일
+- `scripts/main_window.py`
+
+---
+
 ## 2026-03-07 | DS435→ArduCam 핸드오프 — Ry 보정 시 잘못된 camera intrinsics 사용
 
 ### 증상
@@ -1564,58 +1583,55 @@ Right ROI: x=1100~1180, y=60~660
 
 ---
 
-## 2026-03-07 | 레이저 삼각측량 캘리브레이션 — 각도 추정 기능 추가
+## 2026-03-07 | 레이저 삼각측량 — 선형→비선형 기하학 모델 전환
 
-**증상:** Z축 레이저 스캔으로 slope(px/mm)는 산출되지만, 대상물 기울기 각도를 자동 추정하는 기능이 없음. `labelTiltEstimate`에 좌우 기울기 차이만 표시.
+**증상:** 선형 sensitivity 방식(`arctan(|slope|/sensitivity)`)으로 각도 추정 시, 스캔 범위(50mm vs 20mm)나 거리가 달라지면 4-5° 오차 발생. 50mm 캘리브레이션 sensitivity=2.59로 20mm 스캔 시 20° 실제 → 15.42° 추정.
 
-**원인:** 삼각측량(structured light triangulation) 기반 각도 역산 로직 미구현. 캘리브레이션 데이터(sensitivity) 없이는 slope → 각도 변환 불가.
+**원인:** slope = fy·B·tan(α)/d² 관계에서 d(카메라-표면 거리)가 Z 이동에 따라 변함. slope 자체가 Z 위치의 비선형 함수이므로, 단일 sensitivity 상수로는 거리/범위가 달라지면 정확한 역산 불가.
 
-**삼각측량 원리:**
-- 레이저: 수평에서 12.75° ±0.5° 아래, 카메라: 수평 (0°)
-- Z축 이동 시 대상물 기울기에 의해 레이저 라인의 y좌표 변화 → slope(px/mm)
-- 수직벽(0°)이면 slope≈0, 기울어질수록 |slope| 증가
-- 핵심 공식: `slope = (fy × B × tan(α)) / d²` (B=baseline, d=거리, α=수직 기준 기울기)
-- B, d를 정확히 모르므로 기지 각도(20°) 시편으로 경험적 캘리브레이션:
-  - `sensitivity = |avg_slope| / tan(20°) = 0.943 / 0.364 ≈ 2.59 px/mm`
-  - 각도 역산: `α = arctan(|slope| / sensitivity)`
+**분석:** 50mm 스캔을 10mm 구간으로 분할 시 slope가 -0.88~-0.97로 변화 (d² 의존성 확인). 논문(docs/paper/s40430-022-03458-2.pdf) 기반 비선형 기하학 모델 도출.
 
-**캘리브레이션 데이터 (1920x1080, 50mm 스캔, 1mm 스텝):**
-- Left slope: -0.935 px/mm (R²=0.9998)
-- Right slope: -0.950 px/mm (R²=0.9997)
-- Sensitivity: 2.59 px/mm
+**비선형 기하학 모델:**
+- 레이저 원점: (Bx, 0, h) — 카메라 기준 상대 위치
+- 레이저 방향: (cos α, 0, -sin α) — α는 레이저 각도
+- 표면 평면: 수직에서 φ° 기울어진 평면, 거리 d0
+- 교차점 계산 → 카메라 투영: `y = cy - fy × z_hit / x_hit`
+- `scipy.optimize.differential_evolution`으로 (φ, d0) 피팅
 
-**수정 파일 (3개):**
+```python
+def y_model(delta, d0, phi_rad):
+    tp = np.tan(phi_rad)
+    t = (d0 - Bx + tp * (h - delta)) / (cos_a + sin_a * tp)
+    z_hit = h - t * sin_a
+    x_hit = Bx + t * cos_a
+    return cy - fy * z_hit / x_hit
+```
+
+**피팅된 기하학 파라미터:**
+- h = 70.0 mm (레이저-카메라 수직 거리)
+- Bx = -30.0 mm (수평 오프셋)
+- α = 13.278° (레이저 각도, 피팅 결과)
+
+**수정 파일 (2개):**
 
 | 파일 | 변경 내용 |
 |------|-----------|
-| `config/laser_triangulation_calib.json` | **신규 생성** — sensitivity, 캘리브레이션 각도, 좌/우 slope |
-| `scripts/services/laser_scan_service.py` | 캘리브레이션 로드 + `_estimate_tilt_angle()` 추가 + 결과에 `angle_estimate` 포함 |
-| `scripts/tabs/tab_laser_scan.py` | `show_scan_results()`에 추정 각도 표시 + 수동 저장에 `angle_estimate` 포함 |
+| `config/laser_triangulation_calib.json` | `sensitivity_px_per_mm` → `h_mm=70, Bx_mm=-30, alpha_deg=13.278` |
+| `scripts/services/laser_scan_service.py` | `_load_triangulation_calib()` 새 키 검증, `_estimate_tilt_angle()` 비선형 모델 + differential_evolution, scipy import 추가 |
 
-**수정 내용:**
+**검증 결과 (기존 스캔 데이터):**
 
-1. **`config/laser_triangulation_calib.json` (신규):**
-   - `sensitivity_px_per_mm`: 2.59
-   - `calibration_angle_deg`: 20.0
-   - `left_slope`: -0.935, `right_slope`: -0.950
-
-2. **`laser_scan_service.py`:**
-   - `_CALIB_FILE` 클래스 변수로 캘리브레이션 파일 경로 정의
-   - `__init__`에서 `_load_triangulation_calib()` 호출
-   - `_estimate_tilt_angle(left, right)`: `arctan(|slope| / sensitivity)` 계산, 좌/우 평균
-   - `_do_analyze()`에서 `angle_estimate` 결과에 포함
-   - `_save_results()`에서 JSON에 `angle_estimate` 저장
-
-3. **`tab_laser_scan.py`:**
-   - `show_scan_results()`: `labelTiltEstimate`에 "추정 각도: XX.XX° (L=XX.XX° R=XX.XX°)" 표시
-   - 캘리브레이션 없을 시 "각도 추정: 캘리브레이션 없음" 표시
-   - `_on_save_scan_data()`: 수동 저장 JSON에 `angle_estimate` 포함
-
-**검증:** 20° 시편 스캔 시 추정 각도 ≈ 20° 출력 확인 필요. 다른 각도 시편으로 교차 검증 예정.
+| 실제 각도 | 스캔 범위 | 선형 방식 | 비선형 방식 | 오차 |
+|-----------|----------|----------|------------|------|
+| 20° | 50mm | 20.0° (캘리브레이션 기준) | 20.48° | +0.48° |
+| 20° | 20mm | 15.42° (**4.58° 오차**) | 20.53° | +0.53° |
+| 17° | 20mm | 16.65° | 17.72° | +0.72° |
 
 **교훈:**
-1. 삼각측량에서 B(baseline)과 d(거리)를 정확히 모를 때는 기지 각도 시편으로 경험적 sensitivity를 산출하는 것이 실용적
-2. 카메라 교체(1280x720→1920x1080) 후 R²가 0.39→0.9998로 대폭 개선 — 고해상도/고초점거리가 삼각측량 정밀도에 직접 영향
+1. 삼각측량에서 단일 sensitivity 상수는 특정 스캔 범위/거리에서만 유효 — 범용성 부족
+2. 비선형 기하학 모델은 스캔 범위/거리에 무관하게 1° 이내 정확도 유지
+3. `differential_evolution`은 초기값 불필요한 전역 최적화 — 레이저 삼각측량처럼 파라미터 범위만 알고 정확한 초기값을 모를 때 적합
+4. 기하학 파라미터(h, Bx, α)는 물리적 배치가 변하지 않는 한 재캘리브레이션 불필요
 
 ---
 
@@ -1651,6 +1667,84 @@ Right ROI: x=1100~1180, y=60~660
 
 **수정 파일:**
 - `config/charging_gun_coupling.json` — **신규 생성** (기준좌표 3개 + 오프셋 2단계)
+
+---
+
+## 2026-03-07 | 테스트 탭 — DS435→ArduCam 핸드오프 stage 2 depth 보정 미동작
+
+### 증상
+- 테스트 탭 핸드오프 2단계(X축 거리 370mm 유지)가 동작하지 않음
+- 로그/UI에 아무런 실패 메시지 없이 stage 2가 건너뜀
+
+### 원인 (3건)
+1. **경계값 조건 버그**: `abs(depth_error) > DEPTH_TOLERANCE_MM` — depth 365mm, 목표 370mm일 때 오차 5.0mm = 허용치 5.0mm → `5.0 > 5.0 = False` → 이동 안 함
+2. **Silent skip**: depth 측정 실패 또는 허용 범위 내일 때 로그/상태 출력 없음
+3. **하드코딩**: `TARGET_DEPTH_MM = 370.0` 직접 기입, config 미사용
+
+### 수정 내용
+1. `>` → `>=` 비교 (스테레오 탭 + 테스트 탭 양쪽)
+2. config 연동: `charging_coupling_config.json`의 `handoff.target_depth_mm` 사용
+3. 전구간 로깅 추가 (depth 측정 성공/실패, 이동 결과, 건너뜀 사유)
+4. **반복 수렴 제어**: 1회 이동 → 최대 5회 반복 + 3회 평균 측정 + 감쇠 계수 0.7 (DS435 depth ±2mm 노이즈 진동 방지)
+5. 수렴 기준 1.5mm (DS435 depth 해상도 고려)
+
+### 수정 파일
+- `scripts/main_window.py` — `_on_test_handoff_ds435_to_arducam()`, `_on_stereo_calib_handoff_ds435_to_arducam()`
+
+---
+
+## 2026-03-07 | 테스트 탭 — DS435 depth 다중 샘플링
+
+### 증상
+- `_test_measure_ds435_marker_depth()` 마커 중심점에서 depth=None 반환 가능성
+
+### 원인
+- DS435 depth raw에서 마커 중심 5x5 패치에 유효 픽셀이 없는 경우 존재 (sweep 데이터에서 6개 중 5개 null 관찰)
+
+### 수정 내용
+- 중심 → 마커1 → 마커2 → 주변 ±20px 오프셋 총 7포인트 순차 샘플링
+- 각 실패 단계별 로그 출력 (프레임 없음/intrinsics 없음/마커 미검출/타겟 ID 불일치/depth null)
+
+### 수정 파일
+- `scripts/main_window.py` — `_test_measure_ds435_marker_depth()`
+
+---
+
+## 2026-03-07 | 테스트 탭 — 레이저 스캔 결과 키 불일치 + disconnect 크래시
+
+### 증상
+1. 레이저 스캔 완료 후 결과 slope=0.000, R²=0.0000 표시 (실제 분석은 정상)
+2. 스캔 완료 후 `TypeError: disconnect() failed` → 앱 크래시
+
+### 원인
+1. `_on_test_laser_scan_finished`에서 `results.get('slope_left')` 사용 — 실제 키는 `results['left']['slope_px_per_mm']`
+2. `_cleanup_laser_scan_service()`에서 `step_data_captured.disconnect()` 시도 — 테스트 탭에서 해당 시그널 미연결. `except RuntimeError`로만 캐치하여 `TypeError` 누락
+
+### 수정 내용
+1. 결과 키 수정: `results['left']['slope_px_per_mm']`, `results['right']['r_squared']`, `results['angle_estimate']['estimated_deg']`
+2. `except (RuntimeError, TypeError)` 로 변경
+
+### 수정 파일
+- `scripts/main_window.py` — `_on_test_laser_scan_finished()`, `_cleanup_laser_scan_service()`
+
+---
+
+## 2026-03-07 | 테스트 탭 — Z축 미세 보정 임계값 과대 + Rx 보정 버튼 추가
+
+### 증상
+- 4단계 ArduCam 통합 정렬에서 Z축 미세 보정이 실행되지 않음
+
+### 원인
+- Z/Y 미세 보정 임계값 1.5px — Z 잔여 오차가 X 정렬 후 1.5px 이하로 감소되어 건너뜀
+
+### 수정 내용
+1. 미세 보정 임계값 1.5px → **0.5px** (0.04mm 수준 정밀 보정)
+2. 임계값 이하 시 "이미 수렴" 로그 출력 (건너뜀 사유 확인)
+3. **Rx 보정 적용 버튼 추가**: 레이저 스캔 각도 추정값을 현재 Rx에 더해 `send_base_rotate('rx', angle)` 실행
+4. 스캔 완료 전 버튼 비활성, 스캔 후 각도 유효 시 활성화
+
+### 수정 파일
+- `scripts/main_window.py` — `_test_align_aruco_combined()`, `_rebuild_test_tab()`, `_on_test_apply_ry()`
 
 **미완료 사항:**
 - Rx, Ry 보정 후 입구까지의 base frame 위치 오프셋 실측 필요 (tool frame 오프셋 검증)
