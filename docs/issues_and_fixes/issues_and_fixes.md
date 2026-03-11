@@ -2,6 +2,332 @@
 
 ---
 
+## 2026-03-11 | AI Detection — Ry 보정 부호 반전 (로봇이 반대 방향으로 움직임)
+
+### 증상
+- "Ry 보정" 버튼 클릭 시 기울기가 줄어들지 않고 오히려 커짐
+- 예: 측정 -5.00° → 보정 후 -9.80° (반대 방향 이동)
+
+### 원인
+- `align_ry`에서 `send_base_rotate('ry', angle)` 호출 시 부호 미반전
+- `compute_ry_angle`은 커플러 대칭축의 기울기를 반환 → 기울기를 상쇄하려면 `-angle` 송신 필요
+- ArUco 보정과 달리 AI 검출 기반 보정은 "마커 방향을 따라가는" 것이 아니라 "기울기를 취소"하는 방향
+
+### 수정 내용
+- `scripts/services/port_alignment_service.py` `align_ry()`:
+  - `send_base_rotate('ry', angle)` → `send_base_rotate('ry', -angle)`
+  - 로그 메시지도 동일하게 `-angle` 표시
+
+### 수정 파일
+- `scripts/services/port_alignment_service.py`
+
+---
+
+## 2026-03-11 | AI Detection — Ry 보정 single-shot → 반복 루프 (미세 조정 없음)
+
+### 증상
+- 1회 보정 후 잔여 +1.29° 남아도 재보정 없이 종료
+- 로그: `잔여 +1.29° > 1.0° — 버튼 재시도 권장`
+
+### 원인
+- `align_ry` 구현이 단순 single-shot (1회 보정 + 잔여 로그만)
+- threshold 미달 시 자동 재시도 로직 없음
+
+### 수정 내용
+- `align_ry`를 최대 5회 반복 루프로 변경
+- 매 반복: 측정 → |angle| < threshold_deg(0.5°)이면 조기 종료 → 보정 → 다음 반복
+- 최종 5회 소진 시 잔여 측정 후 메시지 반환
+
+### 수정 파일
+- `scripts/services/port_alignment_service.py`
+
+---
+
+## 2026-03-11 | AI Detection — Port Center Align 로봇 이동 비활성화 상태
+
+### 증상
+- "Port Center Align" 버튼 클릭 시 로그만 출력되고 로봇이 움직이지 않음
+
+### 원인
+- Ry 보정 테스트를 위해 `_on_port_center_align_clicked` 내 로봇 이동 코드를 주석 처리
+- `# TODO: re-enable after Ry correction integration`
+
+### 수정 내용
+- 주석 해제하여 정상 동작 복원
+- 로봇 미연결 시 오버레이만 표시, 연결 시 백그라운드 스레드(`_run_align`)로 수직 정렬 실행
+
+### 수정 파일
+- `scripts/tabs/tab_ai_detection.py`
+
+---
+
+## 2026-03-11 | Laser Calibration 탭 — 이미지 중심 오버레이 누락
+
+### 증상
+- Laser Calibration 탭 카메라 뷰에 이미지 중심 십자선이 표시되지 않음
+
+### 원인
+- `update_frame()`에 중심 오버레이 드로잉 코드 없음
+- 프로젝트 표준 유틸리티(`utils/overlay.py`)가 이미 존재했으나 해당 탭에서 미사용
+
+### 수정 내용
+- `scripts/tabs/tab_laser_calibration.py`: `from utils.overlay import draw_image_center_crosshair` 임포트 추가
+- `update_frame()` 마지막에 `draw_image_center_crosshair(display)` 호출 추가 → 모든 표시 모드(laser/conv/lines/rgb/기본)에서 항상 표시
+
+### 수정 파일
+- `scripts/tabs/tab_laser_calibration.py`
+
+---
+
+## 2026-03-11 | 종료 시 core dump — `terminate called without an active exception`
+
+### 증상
+- 앱 종료 시 카메라 정지 로그 직후 `terminate called without an active exception` 출력 후 core dump
+- 재현 순서: `카메라 정지됨` → `ArduCam 정지됨` → 크래시
+
+### 원인
+1. **`closeEvent` 종료 순서 오류**: `status_timer`를 카메라보다 나중에 정지 → 카메라 `release()` 중 타이머 콜백(keepalive 등)이 끼어들 수 있음
+2. **`__del__` 소멸자의 위험한 C++ 호출**: `ArduCamManager.__del__`, `ArduCamController.__del__`가 인터프리터 종료 시 GC에 의해 호출됨 → `cv2` 모듈이 이미 정리된 상태에서 `VideoCapture.release()` 실행 → OpenCV V4L2 백엔드 내부 스레드가 C++ 예외 발생 → `std::terminate()` (Python `try/except`로 잡을 수 없음)
+
+### 수정 내용
+- `scripts/main_window.py` `closeEvent`: `status_timer.stop()`을 카메라 정지보다 **먼저** 호출하도록 순서 변경
+- `scripts/services/arducam_manager.py`: `__del__` 제거 (`closeEvent`에서 명시적 `stop()` 호출로 충분)
+- `scripts/Sensor/arducam/arducam_controller.py`: `__del__` 제거 (동일 이유)
+
+### 수정 파일
+- `scripts/main_window.py`
+- `scripts/services/arducam_manager.py`
+- `scripts/Sensor/arducam/arducam_controller.py`
+
+---
+
+## 2026-03-11 | AI Detection 탭 — Port Center Align 로봇 이동 미구현
+
+### 증상
+- "Port Center Align" 버튼 클릭 시 로그에 `port_cy`, `img_cy`, `dy` 값은 정상 출력
+- 오버레이(중심선, 정렬선)도 표시되지 않음
+- 실제 로봇이 전혀 움직이지 않음
+
+### 원인
+1. **로봇 이동 코드 없음**: `_on_port_center_align_clicked()`가 `compute_vertical_alignment()`로 `dy_px`만 계산하고 로그/오버레이 저장 후 종료. `send_tcp_linear` 등 이동 명령 없음
+2. **robot 참조 없음**: `TabAIDetection`에 `self.robot = None` 및 `set_robot()` 미구현 → `main_window.py`에서 로봇 연결 시 탭에 전달되지 않음
+
+### 수정 내용
+
+- **`scripts/services/port_alignment_service.py`** (신규): UI 독립 정렬 알고리즘 레이어
+  - `compute_vertical_alignment(dets, img_h)`: Circle_A 최대 3개 + Port_T 최대 2개 신뢰도 상위 선택, Y 평균 → `dy_px = port_cy - img_h/2`
+    - 최소 조건: Circle_A ≥ 1개 AND Port_T ≥ 1개 (하나라도 없으면 None 반환)
+  - `PortAlignmentService.align_vertical(measure_fn)`: 2mm 테스트 이동 → px/mm 실측 → coarse 보정 → fine 정렬
+    - coarse: d0 측정 → +2mm 이동 → d1 측정 → `px_per_mm=(d1-d0)/2` → `correction=-d1/px_per_mm`
+    - 안전 체크: `|delta_px| < 2px` 불안정 중단, `|correction| > 20mm` 과대 중단
+    - fine: proportional correction, `FINE_MAX_STEP_MM=0.5`, `FINE_CONVERGE_PX=1.5`, 부호반전 2회 발산 중단
+- **`scripts/tabs/tab_ai_detection.py`**:
+  - `PortAlignmentService` 주입, `set_robot()` → `_align_svc.set_robot()` 전달
+  - `_measure_dy()`: 3-phase wait (현재 추론 완료 → 새 추론 시작 → 새 추론 완료) 후 `dy_px` 반환
+  - `_run_align()`: 백그라운드 스레드에서 `_align_svc.align_vertical(_measure_dy)` 호출
+- **`scripts/AI/view_results.py`**: `draw_center_crosshair()`, `draw_align_overlay()` 추가 (중심선·dy 오버레이)
+- `scripts/main_window.py`: 로봇 연결/해제 시 `tabAIDetection.set_robot()` 호출 추가 (line 978, 1060)
+
+### 수정 파일
+
+- `scripts/services/port_alignment_service.py` (신규)
+- `scripts/tabs/tab_ai_detection.py`
+- `scripts/AI/view_results.py`
+- `scripts/main_window.py`
+
+---
+
+## 2026-03-11 | AI Detection 탭 — 정렬 기준 오류 + dy 오버레이 미표시
+
+### 증상
+1. Port Center Align 1회 실행 후에도 잔여 오프셋이 남음 (수렴 불충분)
+2. Port hall detect 활성 중에도 이미지에 dy 오버레이(기준선·오프셋 수치)가 표시되지 않음 — 버튼 클릭 후 1회 스냅샷만 표시
+
+### 원인
+1. **정렬 기준 오류**: `compute_vertical_alignment`가 Circle_A 3개 Y 평균을 사용 → 커플러 기구학적 중심(하단 원)과 불일치. 이후 Port_T 2개 Y 평균으로 수정했으나, 실제 커플러 기구학적 중심은 Circle_A 하단(최대 Y) 원에 해당
+2. **coarse 1회 보정의 잔여 오프셋**: px/mm 실측 오차와 로봇 최소 스텝으로 인해 coarse 1회 보정 후 잔여 오프셋 발생 → fine 정렬 루프 부재
+3. **dy 오버레이 스냅샷 방식**: `_run_detection`이 `_align_result`(버튼 클릭 시 1회 저장)를 사용 → 검출 중 항상 표시되지 않음
+
+### 수정 내용
+- **`scripts/services/port_alignment_service.py`**
+  - `compute_vertical_alignment`: Circle_A 하단(Y 최대) primary, Port_T 2개 Y 평균 fallback
+  - `PortAlignmentService._fine_align()` 추가: proportional correction 반복 (`FINE_MAX_STEP_MM=0.5`, `FINE_CONVERGE_PX=1.5`, 부호반전 2회 발산 중단)
+- **`scripts/tabs/tab_ai_detection.py`**
+  - `_run_detection`: `_align_result` 스냅샷 → 매 프레임 `compute_vertical_alignment(dets, frame.shape[0])` 실시간 계산으로 교체 → dy 오버레이 항상 표시
+
+### 수정 파일
+- `scripts/services/port_alignment_service.py`
+- `scripts/tabs/tab_ai_detection.py`
+
+---
+
+## 2026-03-11 | Depth 보정 — 불안정한 측정 및 수렴 실패
+
+### 증상
+- `_on_test_depth_adjust` 실행 시 10회 반복해도 오차가 줄지 않고 발산 (±30mm 수준)
+- 같은 X 위치에서 depth가 371mm ↔ 402mm로 심하게 흔들림
+- `FINE_TOLERANCE_MM=0.1`로 설정되어 있어 절대 수렴하지 않음
+- 이동 후 로봇이 정지했음에도 depth 값이 불안정
+
+### 원인
+1. **측정 픽셀 불일치**: `_test_measure_ds435_marker_depth`가 첫 번째 유효한 샘플 픽셀을 즉시 반환. 로봇 이동 시 마커 위치가 바뀌어 어떤 픽셀이 유효한지 달라짐 → 매 iter마다 다른 물리적 위치의 depth를 읽음 (e.g. sample=(732,487)→402mm, sample=(661,486)→371mm)
+2. **비현실적인 tolerance**: `FINE_TOLERANCE_MM=0.1mm` — depth 센서 노이즈가 수mm 수준이므로 절대 달성 불가
+3. **카메라 프레임 지연**: 이동 후 `_settle(0.5s)`만으로 DS435 프레임 갱신 불충분 → 이동 전 구식 프레임에서 depth 읽음
+
+### 수정 내용
+- `_test_measure_ds435_marker_depth`: 유효한 모든 샘플을 수집 후 **중앙값 반환** (첫 번째 유효값 즉시 반환 방식 제거)
+- `FINE_TOLERANCE_MM`: `0.1` → `1.0`
+- `POST_MOVE_SETTLE_S = 1.2s`: 이동 후 카메라 프레임 안정화 대기 시간 확보 (`_settle(0.5)` 대체)
+
+### 수정 파일
+- `scripts/main_window.py` (`_test_measure_ds435_marker_depth`, `_on_test_depth_adjust`)
+
+---
+
+## 2026-03-11 | Laser Calibration 탭 — Set Detection Pose 버튼 없음
+
+### 증상
+- Laser Calibration 탭에서 Detection Pose로 이동하는 버튼이 없어 ArUco 신뢰성 검증 탭으로 직접 이동해야 했음
+
+### 원인
+- `tab_laser_calibration.py` 에 robot 연결 및 Detection Pose 기능이 구현되어 있지 않음
+- `ui/tab_laser_calibration.ui` 카메라 버튼 영역에 해당 버튼 미포함
+
+### 수정 내용
+- `ui/tab_laser_calibration.ui`: 카메라 버튼 영역(ArduCam 전용 레이블 우측)에 `btnSetDetectionPose` 버튼 추가 (빨간 스타일)
+- `scripts/tabs/tab_laser_calibration.py`: `self.robot = None`, `set_robot()`, `_on_set_detection_pose()` 추가 (ArUco 신뢰성 탭과 동일 로직: TF3 → 현재 XYZ + Rx=90/Ry=0/Rz=90 movel → TF4 복귀)
+- `scripts/main_window.py`: 로봇 연결/해제 시 `tabLaserCalibration.set_robot()` 호출 추가
+
+### 수정 파일
+- `ui/tab_laser_calibration.ui`
+- `scripts/tabs/tab_laser_calibration.py`
+- `scripts/main_window.py`
+
+---
+
+## 2026-03-11 | AI Detection 탭 신규 추가 (듀얼 카메라 뷰)
+
+### 내용
+DS435 + ArduCam 듀얼 카메라 피드를 동시에 관찰하는 전용 탭 추가. 현재는 카메라 관찰 전용이며, AI 검출 기능은 플레이스홀더.
+
+**신규 파일:**
+- `scripts/tabs/tab_ai_detection.py` — `TabAIDetection(QWidget)` 구현
+  - 640×360 고정 크기 DS435 / ArduCam 라벨 2개 (수평 배치)
+  - `update_ds435_frame()`, `update_arducam_frame()` — BGR→RGB 변환 후 QLabel 표시
+
+**수정 파일:**
+- `scripts/tabs/__init__.py` — `TabAIDetection` import/export 추가
+- `scripts/main_window.py`:
+  - `_on_ai_ds435_frame()`, `_on_ai_arducam_frame()` — 3프레임마다 1회 업데이트 (프레임 카운트 기반 스로틀링)
+  - `_on_tab_changed()`: AI Detection 탭 진입 시 DS435 + ArduCam 카메라 자동 시작 (TF 변경 없음)
+
+---
+
+## 2026-03-11 | modbus_client — write_command() pre-flight PRS IDLE 대기 + wait_for_done() 고속 완료 감지
+
+### 증상
+1. 연속 명령 전송 시 이전 명령의 stale DONE/RUNNING 상태가 남아 다음 명령이 덮어씌워지는 레이스 발생
+2. 0.1mm 같은 고속 완료 명령에서 `wait_for_done()`이 Running 상태를 놓쳐 5초 타임아웃 발생
+
+### 원인
+1. `write_command()` 가 직전 PRS cleanup 완료 여부 확인 없이 즉시 명령 전송
+2. `wait_for_done()` 에서 Running 미감지 시 완료 판정 수단이 없었음 (5초 타임아웃만 존재)
+
+### 수정 내용
+
+**1. `write_command()` pre-flight PRS IDLE 대기**
+- 명령 레지스터 쓰기 전 최대 2초간 PRS 상태(352)가 IDLE(0)이 될 때까지 폴링
+- stale DONE(2)/RUNNING(1) 소진 후 명령 전송 보장
+
+**2. `wait_for_done()` 고속 완료 감지**
+- Running 미감지 IDLE 상태에서 명령 레지스터(351) == 0 이면 완료로 판정
+- 0.1mm 고속 이동처럼 PRS가 ~50ms 내 완료 시 5초 타임아웃 없이 즉시 반환
+
+**3. `send_go_home`, `send_tcp_linear`, `send_tcp_rotate` — `stop_flag_callback` 파라미터 추가**
+- 사용자 중지 콜백을 `wait_for_done_motion_aware()` 체인으로 전달 가능
+
+### 수정 파일
+- `scripts/Robot/communication/modbus_client.py`
+
+---
+
+## 2026-03-11 | laser_scan_service — 비선형 삼각측량 코드 구현 + 각도 추정 UI 표시
+
+### 내용
+- 2026-03-07 설계 문서에서 실제 코드로 구현 (`laser_scan_service.py`)
+
+**구현 메서드:**
+- `_load_triangulation_calib()`: `config/laser_triangulation_calib.json`에서 `h_mm`, `Bx_mm`, `alpha_deg` 로드. 필수 키 미존재 시 None 반환
+- `_estimate_tilt_angle()`: 좌/우 Z-Y 데이터로 `y_model(delta, d0, phi_rad)` 피팅. `scipy.optimize.differential_evolution`으로 전역 최적화 (초기값 불필요). 좌/우 개별 추정 후 평균
+
+**결과 구조:**
+```python
+{'estimated_deg': float, 'left_deg': float, 'right_deg': float}
+```
+
+**tab_laser_scan.py 각도 추정 결과 표시:**
+- 기존: 좌우 slope 차이만 표시 (`labelTiltEstimate`)
+- 변경: `추정 각도: {deg:.2f}° (L={left}° R={right}°)` 표시
+- 캘리브레이션 없을 때: "각도 추정: 캘리브레이션 없음" 표시
+
+### 수정 파일
+- `scripts/services/laser_scan_service.py`
+- `scripts/tabs/tab_laser_scan.py`
+
+---
+
+## 2026-03-11 | ArduCam 1920×1080 — 코드 전체 반영
+
+### 증상
+- ArduCam 교체(1280×720 → 1920×1080) 이후 `arducam_controller.py` 기본 해상도와 `StereoOffsetCalculator`의 이미지 중심이 구버전 값으로 남아 계산 오차 발생
+
+### 수정 내용
+
+**1. `arducam_controller.py` 기본 해상도 변경**
+- `width=1280, height=720` → `width=1920, height=1080`
+- fallback intrinsics: `fx/fy=1920, ppx=960, ppy=540`
+
+**2. `StereoOffsetCalculator` — camera_info 검증 + 이미지 중심 동적 계산**
+- `_validate_camera_info()` 추가: sweep JSON의 `camera_info`와 현재 ArduCam intrinsics(`fy`, `width`, `height`) 비교
+  - 불일치 시 `self.is_valid = False` + 경고 로그 (sweep 재실행 권고)
+  - `camera_info` 없으면 구버전 데이터로 판단하여 경고
+- `compute_camera_offset_mm()`: ArduCam 이미지 중심을 하드코딩 제거 → sweep JSON `camera_info.arducam.width/height`에서 동적 계산
+- DS435 이미지 중심: `DS435_CENTER_X/Y = 640.0/360.0` 클래스 상수로 분리
+
+### 수정 파일
+- `scripts/Sensor/arducam/arducam_controller.py`
+- `scripts/services/stereo_offset_calculator.py`
+
+---
+
+## 2026-03-11 | _on_ar_tag_align_base_y — measure_func 파라미터로 ArduCam Y 정렬 지원
+
+### 증상
+- `_on_ar_tag_align_base_y()`가 DS435 기반 `_measure_marker_dy_px`만 내부 호출 → ArduCam 통합 정렬에서 Y축 보정 시 DS435 측정 함수를 잘못 사용
+
+### 수정 내용
+- `measure_func=None` 파라미터 추가
+  - `None`이면 기존대로 `_measure_marker_dy_px` 사용 (DS435, 하위호환)
+  - ArduCam 호출 시 `_arducam_measure_dy()` 클로저를 전달하여 ArduCam 기반 측정 수행
+- `_stereo_align_y_core()` 내 ArduCam Y 정렬 시 `measure_func=_arducam_measure_dy` 명시 전달
+
+### 수정 파일
+- `scripts/main_window.py`
+
+---
+
+## 2026-03-11 | 차량 충전건 결합 GroupBox UI 추가
+
+### 내용
+- 테스트 탭에 "차량 충전건 결합 (TF4)" GroupBox 신규 추가
+- `btnVehicleStopCameras` 버튼: DS435 + ArduCam 양쪽 카메라 즉시 정지
+- `_on_vehicle_stop_cameras()` 핸들러: 카메라 정지 + `btnTestToggleCameras` 상태 동기화
+
+### 수정 파일
+- `scripts/main_window.py`
+
+---
+
 ## 2026-03-07 | DS435→ArduCam 핸드오프 — Detection Pose 미실행
 
 ### 증상
@@ -1756,3 +2082,232 @@ def y_model(delta, d0, phi_rad):
 3. 입구→결합은 tool Z 리니어 단일 축이므로, 정렬만 정확하면 결합 자체는 단순
 
 ---
+
+## 2026-03-07 | 충전건 결합 — TF4 좌표계 불일치로 인한 위치 오차
+
+### 증상
+- ArUco 정렬 후 위치가 X=~673, Z=~377로 표시됨 (기대값: X=~522, Z=~451)
+- 입구 이동 시 ~150mm X, ~74mm Z 오차 발생
+- 같은 물리적 위치에서 좌표가 크게 다르게 읽힘
+
+### 원인
+- Tool Frame(TF)에 따라 TCP 좌표 해석이 달라짐
+- TF3(기본값)과 TF4에서 동일 물리 위치의 좌표 차이: ΔX≈+150mm, ΔZ≈-74mm
+- config 기준 좌표가 다른 TF에서 측정된 값으로 저장되어 있었음
+- 탭 전환 시 TF 상태가 보장되지 않아 혼재 발생
+
+### 수정 내용
+1. **TF4 강제 설정**: 테스트 탭(Tab4) 진입 시 `send_set_toolframe(4)` 자동 실행
+2. **이동 전 TF4 보장**: `_stop_cameras_for_movement()` 헬퍼에서 카메라 정지 + TF4 설정 + 버튼 상태 동기화
+3. **config 좌표 전면 재측정**: 모든 reference_positions를 TF4 기준으로 재측정·갱신
+4. **GroupBox 명시**: "충전건 결합 (TF4)" 라벨로 TF4 필수 표기
+
+### 수정 파일
+- `scripts/main_window.py` — `_on_tab_changed()`, `_stop_cameras_for_movement()`, GroupBox 타이틀
+- `config/charging_gun_coupling.json` — 전체 reference_positions 재측정
+
+### 교훈
+- **TF는 좌표 해석의 기준** — 동일 물리 위치도 TF에 따라 수십~수백mm 차이 발생
+- config에 좌표 저장 시 반드시 TF 기준 명시 필요
+- 워크플로우 전체에서 TF 일관성 보장이 최우선
+
+---
+
+## 2026-03-07 | 충전건 결합 — 장거리 이동 시 wait_for_done 타임아웃
+
+### 증상
+- 입구 이동(~128mm X, ~155mm Z 병진) 또는 TCP Z 리니어(223mm) 시 30초 타임아웃 발생
+- 로봇은 아직 이동 중인데 타임아웃으로 명령 실패 처리
+
+### 원인
+- `wait_for_done()` 고정 30초 타임아웃 — 장거리 저속 이동에 부족
+- 로봇이 실제로 움직이고 있는 동안에도 시간 기반으로 타임아웃 판정
+
+### 수정 내용
+1. **`wait_for_done_motion_aware()` 신규 메서드 추가** (modbus_client.py)
+   - Phase 1: Running 상태 감지 (기존 wait_for_done과 동일)
+   - Phase 2: 위치 기반 타임아웃 — 현재 TCP pose를 주기적으로 읽어 이전과 비교
+   - 위치 변화 > 0.05mm → last_motion_time 갱신 (이동 중 판정)
+   - 위치 변화 없이 idle_timeout(기본 10초) 경과 → 타임아웃
+   - max_timeout(기본 120초) 안전 제한
+2. 충전건 결합 이동 핸들러에서 `wait_for_done_motion_aware()` 사용
+
+### 수정 파일
+- `scripts/Robot/communication/modbus_client.py` — `wait_for_done_motion_aware()` 추가
+- `scripts/main_window.py` — `_on_test_move_to_entrance()`, `_on_test_release_return()` 등
+
+---
+
+## 2026-03-07 | 충전건 결합 — config 좌표 재측정 (TF4 기준)
+
+### 증상
+- config의 entrance 좌표(761.97, -113.06, 508.74)가 실제 입구 위치와 ~100mm 이상 불일치
+- delta 오프셋(97.09, -2.01, 111.79)도 부정확
+
+### 원인
+- 기존 측정이 TF4가 아닌 다른 TF 기준으로 수행됨
+- TF3↔TF4 좌표 차이가 오프셋에도 전파
+
+### 수정 내용 (TF4 기준 재측정 결과)
+
+| 항목 | 이전값 | 수정값 (TF4) |
+|------|--------|-------------|
+| ds435_detection | (469.0, -120.7, 515.2) | (524.3, -125.9, 491.7) |
+| aruco_alignment | (522.00, -117.80, 450.90) | 유지 (TF4 기준 확인) |
+| entrance | (761.97, -113.06, 508.74) | (650.50, -120.70, 606.20) |
+| corrected_to_entrance delta | (97.09, -2.01, 111.79) | (128.50, -2.90, 155.30) |
+| entrance_to_coupling tool_z_step | 50.0mm | 35.0mm |
+| release_return tcp_z_retract | 200.0mm | 100.0mm |
+
+### 수정 파일
+- `config/charging_gun_coupling.json`
+
+---
+
+## 2026-03-07 | 충전건 결합 — 해제 복귀 기능 구현
+
+### 내용
+- "해제 복귀" 버튼 (`btnTestReleaseReturn`) 추가
+- **동작 순서**:
+  1. 카메라 정지 + TF4 강제
+  2. TCP Z 후퇴 (`tcp_z_retract_mm`: 100mm, CMD 12 음수)
+  3. `wait_for_done_motion_aware()` 완료 대기
+  4. 입구→보정위치 역변환 (corrected_to_entrance delta 부호 반전)
+  5. 현재 위치 + 역delta → `send_move_to_pose()` 절대 이동
+  6. `wait_for_done_motion_aware()` 완료 대기
+
+### 수정 파일
+- `scripts/main_window.py` — `_on_test_release_return()`, 버튼 레이아웃
+
+---
+
+## 2026-03-07 | 충전건 결합 — 카메라 관리 개선
+
+### 내용
+1. **이동 전 카메라 자동 정지**: `_stop_cameras_for_movement()` 헬퍼로 통합
+2. **탭 진입 시 카메라 자동 시작**: `_on_tab_changed()`에서 테스트 탭 진입 시 ArduCam 자동 구동
+3. **토글 버튼 상태 동기화**: 카메라 정지/시작 시 `btnTestToggleCameras` checked/text 동기화
+4. **config 핫 리로드**: 매 버튼 클릭마다 `charging_gun_coupling.json` 재로드 (수동 재시작 불필요)
+
+### 수정 파일
+- `scripts/main_window.py`
+
+---
+
+## 2026-03-11 | "Running 상태 감지 실패 (5초 타임아웃)" — Phase 1 근본 원인 3가지 수정
+
+**증상:** 로봇 이동 명령 후 "이동 실패: Running 상태 감지 실패 (5초 타임아웃)" 에러 발생. motion-aware timeout 수정 이후에도 간헐적으로 재현.
+
+**원인 분석 (3가지):**
+
+1. **잔여 STATUS_DONE false positive**: 이전 명령의 `task_done=2(DONE)`가 레지스터에 남은 상태에서 다음 명령의 Phase 1이 폴링을 시작하면 즉시 성공 반환(false positive). 실제 명령이 처리되지 않았을 수 있음. 무증상 버그.
+
+2. **PRS cleanup 레이스 — 명령 덮어쓰기**: PRS cleanup 순서 `task_done=2 → task_number=0 → task_done=0`. Python이 `task_done=2`를 읽어 성공 반환 후 즉시 새 명령을 쓰면, PRS cleanup의 `task_number=0`이 새 명령을 덮어씀. 명령 소실 → Phase 1이 5초간 IDLE만 감지 → 타임아웃.
+
+3. **고속 완료 명령 미감지**: `toolframe()`, `workframe()` 등 즉시 완료 명령은 `RUNNING→DONE→IDLE` 전체 사이클이 ~3ms. Python 폴링 간격 20ms 내에 모든 상태 변화가 완료되어 아무것도 감지하지 못함 → 타임아웃.
+
+**수정 내용:**
+
+1. **`write_command()` pre-flight 체크 추가**: 명령 전송 전 PRS가 `STATUS_IDLE(0)` 상태가 될 때까지 최대 2초 대기. 이전 명령의 DONE/RUNNING 소진 후에만 새 명령 전송 → 원인 1, 2 해결.
+
+2. **Phase 1 고속 완료 감지 추가** (`wait_for_done`, `wait_for_done_motion_aware`): `STATUS_IDLE` + 명령 레지스터(351) == 0 이면 "고속 처리 완료" 반환. PRS가 명령을 읽고 즉시 처리한 경우(`task_number=0`으로 클리어됨) 정상 완료로 판단 → 원인 3 해결.
+
+**수정 파일:** `scripts/Robot/communication/modbus_client.py`
+
+---
+
+---
+
+## 2026-03-11 | ArduCam 이미지 미표시 — device_index 오류
+
+### 증상
+- Stereo Calibration 탭과 테스트(충전건 결합) 탭에서 ArduCam 이미지가 표시되지 않음
+- DS435 이미지는 정상 표시
+
+### 원인
+- `main_window.py`에서 `ArduCamManager(device_index=6, ...)`로 하드코딩
+- RealSense 카메라가 `/dev/video2`~`/dev/video7`(인덱스 2~7)을 점유하면서 FHD Camera(ArduCam)가 `/dev/video0`(인덱스 0)으로 밀림
+- index=6은 RealSense 가상 디바이스를 가리켜 프레임 미출력
+
+### 수정 내용
+- `main_window.py:68`: `device_index=6` → `device_index=0`
+
+### 현재 장치 배치 (참고)
+| 장치 | /dev/video | OpenCV 인덱스 |
+|------|-----------|--------------|
+| FHD Camera (ArduCam) | video0, video1 | 0 |
+| RealSense Depth Ca | video2~video7 | 2~7 |
+
+---
+
+## 2026-03-11 | ArduCam 포트 자동 감지 기능 추가
+
+### 배경
+- USB 장치 연결 순서/재부팅에 따라 ArduCam device_index가 변동
+- 하드코딩된 인덱스를 매번 수동 수정해야 하는 문제
+
+### 구현 내용
+sysfs 기반 자동 감지:
+- `/sys/class/video4linux/videoN/name` — 장치명 키워드 매칭 (`"FHD Camera"`)
+- `/sys/class/video4linux/videoN/index == 0` — 캡처 노드만 선택 (메타데이터 노드 제외)
+- 감지 실패 시 `fallback_index: 0` 사용 + 로그 출력
+
+### 수정/추가 파일
+- `scripts/utils/camera_utils.py` (신규) — `detect_arducam_index(keyword) -> Optional[int]`
+- `config/camera_config.json` (신규) — `device_index: "auto"`, `name_keyword: "FHD Camera"`, `fallback_index: 0`
+- `scripts/main_window.py` — config 로드 → 자동 감지 → fallback 순으로 인덱스 결정 후 ArduCamManager 생성
+- `scripts/services/arducam_manager.py` — `list_available_cameras()` sysfs 실제 장치명 표시
+- `scripts/test_arducam_dual_aruco.py`, `scripts/utils/coordinate_visualizer.py`, `scripts/analyze_ippe_ambiguity.py`, `scripts/test_aruco_detect.py` — `DEVICE_INDEX = 6` 하드코딩 → `detect_arducam_index() if is not None else 6`
+
+### 주의
+- `detect_arducam_index() or N` 패턴 금지 (index=0일 때 0 or N → N 버그)
+- 반드시 `idx if idx is not None else fallback` 패턴 사용
+
+---
+
+## 2026-03-11 | AI Detection 탭 — 카메라 피드 미표시 (`isVisible()` 오작동)
+
+### 증상
+- "AI detection" 탭 클릭 시 DS435/ArduCam 카메라 피드가 표시되지 않음 (검은 화면 유지)
+- 다른 탭(테스트, Stereo Calibration 등)에서는 동일 카메라가 정상 표시
+
+### 원인
+- `_on_ai_ds435_frame()` / `_on_ai_arducam_frame()` 에서 `self.tabAIDetection.isVisible()` 체크 사용
+- **`QWidget.isVisible()`은 Qt UI 파일(`uic.loadUi`)로 생성된 위젯에는 정상 동작하지만, Python 코드로 생성 후 `insertTab()`으로 동적 삽입된 QWidget에서는 현재 탭이어도 `False`를 반환할 수 있음**
+- `tabTest`(UI 파일 위젯)는 정상 → `tabAIDetection`(동적 생성 위젯)만 실패
+
+### 수정 내용
+- `isVisible()` → `self.tabWidget.currentWidget() is self.tabAIDetection` 로 교체
+- `currentWidget()`은 탭위젯에 직접 현재 페이지를 조회하므로 동적 삽입 탭에서도 확실히 동작
+
+### 교훈
+- **동적으로 `insertTab()`된 QWidget은 `isVisible()` 대신 `tabWidget.currentWidget() is widget` 패턴 사용**
+- `uic.loadUi()`로 로드된 원본 탭 위젯(tabTest 등)과 Python 코드로 삽입된 탭 위젯의 동작이 다름
+
+### 수정 파일
+- `scripts/main_window.py` (`_on_ai_ds435_frame`, `_on_ai_arducam_frame`)
+
+---
+
+## 2026-03-11 | AI Detection 탭 신규 생성
+
+### 구현 내용
+- 탭 위치: "Laser Scan" 탭 다음, "테스트" 탭 앞 (인덱스 9)
+- 카메라 뷰: DS435 640×360 + ArduCam 640×360 (`setFixedSize` 고정, `#222` 배경)
+- 그룹박스 2개: `"DS435 AI Detection"`, `"Arducam AI Detection"` (각 fixedHeight=100)
+- `"Port hall detect"` 버튼: YOLOv8-seg 추론 토글 (checkable)
+  - 모델: `config/AI_weights/ArduCam/best.onnx`
+  - 추론: `scripts/AI/view_results.py`의 `overlay_masks()` 재사용
+  - **백그라운드 `threading.Thread`로 추론 (CPU 1~5초/프레임 → UI 블로킹 방지)**
+  - 추론 중에는 이전 결과 유지, 완료 시 세그멘테이션 오버레이 표시
+
+### 이미지 크기 이슈 방지 설계
+- `setFixedSize(640, 360)` 엄격 적용 (Expanding 정책 금지)
+- `cv2.resize(frame, (640, 360))` — 표시 전 항상 명시적 리사이즈
+- `currentWidget()` 기반 가시성 체크 (위 이슈 참조)
+
+### 신규/수정 파일
+- `scripts/tabs/tab_ai_detection.py` (신규)
+- `scripts/tabs/__init__.py` (`TabAIDetection` import/export 추가)
+- `scripts/main_window.py` (import, insertTab, 프레임 핸들러, 시그널 연결, 탭 활성화)
+- 수동 고정 필요 시 `config/camera_config.json`에서 `"device_index": 0` 처럼 정수 지정
