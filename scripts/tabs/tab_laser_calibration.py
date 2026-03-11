@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import pyqtSignal
 
 from utils.common import display_frame_on_label
+from utils.overlay import draw_image_center_crosshair
 from tabs.jog_mixin import JogMixin
 from Sensor.laser.extract_laser_center import (
     extract_laser_center,
@@ -64,6 +65,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         # widgetRight, groupResult 크기는 UI 파일에서 관리
         self.labelAngle.setWordWrap(True)                 # 긴 기울기 텍스트 줄바꿈
 
+        self.robot = None
         self.camera_manager = None
         self.current_frame = None       # 원본 프레임
         self._raw_frame = None          # 오버레이 없는 순수 원본 프레임 (ArUco 검출 전용)
@@ -108,6 +110,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.btnFitLines.toggled.connect(self._on_toggle_fit_lines)
         self.btnRgbMask.toggled.connect(self._on_toggle_rgb_mask)
         self.btnSaveImage.clicked.connect(self._on_save_image)
+        self.btnSetDetectionPose.clicked.connect(self._on_set_detection_pose)
         self._connect_jog_buttons()
         # 캘리브레이션 버튼
         self.btnAlignAruco.clicked.connect(self._on_btn_align_aruco)
@@ -207,6 +210,70 @@ class TabLaserCalibration(QWidget, JogMixin):
                 btn.setChecked(False)
                 btn.setText(text_off)
         self._clear_result_labels()
+
+    def set_robot(self, robot):
+        self.robot = robot
+
+    def _on_set_detection_pose(self):
+        """set_rz.py 방식: TF3 전환 → 현재 XYZ + 목표 RxRyRz movel → TF4 복귀"""
+        if self.robot is None:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
+            return
+
+        import time
+        from PyQt5.QtWidgets import QApplication, QMessageBox
+
+        try:
+            self._log("Detection Pose: TF3으로 전환")
+            success, msg = self.robot.send_set_toolframe(3, wait=True)
+            if not success:
+                self._log(f"TF3 전환 실패: {msg}")
+                return
+            time.sleep(0.5)
+
+            pose = self.robot.read_current_pose()
+            if pose is None:
+                QMessageBox.warning(self, "경고", "TCP 좌표를 읽을 수 없습니다.")
+                return
+
+            x, y, z = pose[0], pose[1], pose[2]
+            tgt_rx, tgt_ry, tgt_rz = 90.0, 0.0, 90.0
+
+            self._log(f"현재: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
+            self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
+
+            to_int16 = self.robot.to_uint16
+            regs = [
+                to_int16(int(round(x * 10))),
+                to_int16(int(round(y * 10))),
+                to_int16(int(round(z * 10))),
+                to_int16(int(round(tgt_rx * 10))),
+                to_int16(int(round(tgt_ry * 10))),
+                to_int16(int(round(tgt_rz * 10))),
+            ]
+            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+            success, msg = self.robot.wait_for_done_motion_aware(
+                process_events_callback=QApplication.processEvents
+            )
+            if not success:
+                self._log(f"Detection Pose 이동 실패: {msg}")
+                return
+
+            self._log("Detection Pose 이동 완료")
+            time.sleep(0.5)
+
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            if success:
+                self._log("TF4 복귀 완료")
+            else:
+                self._log(f"TF4 복귀 실패: {msg}")
+
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "오류", f"Detection Pose 실패: {e}")
 
     def set_camera_manager(self, camera_manager):
         self.camera_manager = camera_manager
@@ -327,6 +394,9 @@ class TabLaserCalibration(QWidget, JogMixin):
                 cv2.line(display, (0, ly), (w, ly), (0, 0, 255), 1)
                 cv2.putText(display, f"laser={laser_y:.1f}px", (w - 160, ly + 15),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
+
+        # 이미지 중심 십자선 (항상 표시)
+        draw_image_center_crosshair(display)
 
         display_frame_on_label(display, self.labelCameraView)
 

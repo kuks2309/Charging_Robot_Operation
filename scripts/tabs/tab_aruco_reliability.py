@@ -1559,7 +1559,7 @@ class TabArucoReliability(QWidget, JogMixin):
             self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
 
             # 4) 완료 대기
-            success, msg = self.robot.wait_for_done(
+            success, msg = self.robot.wait_for_done_motion_aware(
                 process_events_callback=QApplication.processEvents
             )
             if not success:

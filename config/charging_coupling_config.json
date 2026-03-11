@@ -1,0 +1,12 @@
+{
+    "laser_scan": {
+        "step_mm": 2.0,
+        "num_steps": 10
+    },
+    "handoff": {
+        "target_depth_mm": 370.0,
+        "depth_tolerance_mm": 5.0,
+        "camera_offset_y_mm": 0.0,
+        "camera_offset_z_mm": 0.0
+    }
+}

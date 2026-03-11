@@ -23,7 +23,8 @@ from job_types import JOB_TYPES
 # 카메라 타입 상수
 CAMERA_DS435 = "DS435"
 CAMERA_ARDUCAM = "ArduCam"
-from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration, TabStereoCalibration, TabLaserScan
+from tabs import TabTaskEdit, TabVision, TabCalibration, TabArucoReliability, TabEyeInHand, TabMotionTest, TabLaserCalibration, TabStereoCalibration, TabLaserScan, TabAIDetection
+from utils.camera_utils import detect_arducam_index
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', 'ui')
@@ -64,8 +65,26 @@ class MainWindow(QMainWindow):
         self.ds435_camera_manager.set_log_callback(self._log)
         self.ds435_camera_manager.frame_ready.connect(self._on_camera_frame)
 
-        # ArduCam 카메라 매니저 초기화
-        self.arducam_manager = ArduCamManager(device_index=6, color_resolution=(1920, 1080))
+        # ArduCam 카메라 매니저 초기화 (시작 시 포트 자동 감지)
+        _cam_config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'camera_config.json')
+        _arducam_cfg = {"device_index": "auto", "name_keyword": "FHD Camera", "fallback_index": 0}
+        try:
+            with open(_cam_config_path, 'r', encoding='utf-8') as _f:
+                _loaded = json.load(_f).get('arducam', {})
+                _arducam_cfg.update(_loaded)
+        except OSError:
+            pass
+        _dev_idx_cfg = _arducam_cfg.get('device_index', 'auto')
+        if _dev_idx_cfg == 'auto':
+            _detected = detect_arducam_index(_arducam_cfg.get('name_keyword', 'FHD Camera'))
+            _fallback = int(_arducam_cfg.get('fallback_index', 0))
+            _resolved_index = _detected if _detected is not None else _fallback
+            _detect_method = f"auto-detected (index={_resolved_index})" if _detected is not None else f"fallback (index={_resolved_index})"
+        else:
+            _resolved_index = int(_dev_idx_cfg)
+            _detect_method = f"manual (index={_resolved_index})"
+        print(f"[ArduCam] {_detect_method}")
+        self.arducam_manager = ArduCamManager(device_index=_resolved_index, color_resolution=(1920, 1080))
         self.arducam_manager.set_log_callback(self._log)
         self.arducam_manager.frame_ready.connect(self._on_camera_frame)
 
@@ -91,6 +110,10 @@ class MainWindow(QMainWindow):
         # 테스트 탭 카메라 프레임 시그널
         self.ds435_camera_manager.frame_ready.connect(self._on_test_ds435_frame)
         self.arducam_manager.frame_ready.connect(self._on_test_arducam_frame)
+
+        # AI Detection 탭 카메라 프레임 시그널
+        self.ds435_camera_manager.frame_ready.connect(self._on_ai_ds435_frame)
+        self.arducam_manager.frame_ready.connect(self._on_ai_arducam_frame)
 
         # 정렬 서비스 초기화
         self.alignment_service = AlignmentService(self.vision_manager)
@@ -185,6 +208,10 @@ class MainWindow(QMainWindow):
         self.tabLaserScan = TabLaserScan(self)
         self.tabWidget.insertTab(8, self.tabLaserScan, "Laser Scan")
 
+        # AI Detection 탭 (인덱스 9에 삽입 — tabTest 앞)
+        self.tabAIDetection = TabAIDetection(self)
+        self.tabWidget.insertTab(9, self.tabAIDetection, "AI detection")
+
         # 테스트 탭 내용 교체 (충전건 결합)
         self._rebuild_test_tab()
 
@@ -248,7 +275,7 @@ class MainWindow(QMainWindow):
         # ── 하단: 충전건 결합 컨트롤 ──
         control_row = QHBoxLayout()
 
-        self.groupCharging = QGroupBox("충전건 결합")
+        self.groupCharging = QGroupBox("충전건 결합 (TF4)")
         self.groupCharging.setFixedHeight(100)
         charging_layout = QHBoxLayout(self.groupCharging)
 
@@ -299,6 +326,15 @@ class MainWindow(QMainWindow):
         control_row.addWidget(self.groupCharging)
         outer_layout.addLayout(control_row)
 
+        # ── 차량 충전건 결합 ──
+        self.groupVehicleCharging = QGroupBox("차량 충전건 결합 (TF4)")
+        self.groupVehicleCharging.setFixedHeight(100)
+        vehicle_layout = QHBoxLayout(self.groupVehicleCharging)
+        self.btnVehicleStopCameras = QPushButton("카메라 중단")
+        self.btnVehicleStopCameras.clicked.connect(self._on_vehicle_stop_cameras)
+        vehicle_layout.addWidget(self.btnVehicleStopCameras)
+        outer_layout.addWidget(self.groupVehicleCharging)
+
         outer_layout.addStretch()
 
     def _connect_tab_signals(self):
@@ -345,6 +381,9 @@ class MainWindow(QMainWindow):
 
         # Motion Test 탭 시그널
         self.tabMotionTest.log_message.connect(self._log)
+
+        # AI Detection 탭 시그널
+        self.tabAIDetection.log_message.connect(self._log)
 
         # 레이저 캘리브레이션 탭 시그널
         self.tabLaserCalibration.log_message.connect(self._log)
@@ -552,6 +591,7 @@ class MainWindow(QMainWindow):
                 raise Exception(f"툴프레임 {tf_num} 설정 실패: {tf_msg}")
             self._log(f"툴프레임 {tf_num} 설정 완료")
             self._update_statusbar()
+            time.sleep(0.2)  # PRS cleanup 대기 (레이스 컨디션 방지)
             success, message = self.robot.send_tcp_linear(axis, distance)
 
         if not success:
@@ -601,6 +641,7 @@ class MainWindow(QMainWindow):
                 raise Exception(f"툴프레임 {tf_num} 설정 실패: {tf_msg}")
             self._log(f"툴프레임 {tf_num} 설정 완료")
             self._update_statusbar()
+            time.sleep(0.2)  # PRS cleanup 대기 (레이스 컨디션 방지)
             success, message = self.robot.send_tcp_linear('xyz', (x, y, z))
 
         if not success:
@@ -930,6 +971,12 @@ class MainWindow(QMainWindow):
         # ArUco 신뢰성 검증 탭에 로봇 설정
         self.tabArucoReliability.set_robot(self.robot)
 
+        # Laser Calibration 탭에 로봇 설정
+        self.tabLaserCalibration.set_robot(self.robot)
+
+        # AI Detection 탭에 로봇 설정
+        self.tabAIDetection.set_robot(self.robot)
+
         # Task 편집 탭의 연결 상태 업데이트
         self.tabTaskEdit.update_connection_status(True)
 
@@ -1006,6 +1053,12 @@ class MainWindow(QMainWindow):
         # ArUco 신뢰성 검증 탭 로봇 해제
         self.tabArucoReliability.set_robot(None)
 
+        # Laser Calibration 탭 로봇 해제
+        self.tabLaserCalibration.set_robot(None)
+
+        # AI Detection 탭 로봇 해제
+        self.tabAIDetection.set_robot(None)
+
         # 타이머 정지
         self.status_timer.stop()
 
@@ -1041,7 +1094,8 @@ class MainWindow(QMainWindow):
         # 베이스 좌표계 이동 (processEvents 콜백으로 UI 블로킹 방지)
         success, message = self.robot.send_base_linear(
             axis, distance,
-            process_events_callback=QApplication.processEvents)
+            process_events_callback=QApplication.processEvents,
+            idle_timeout=5.0)
         if not success:
             self._log(f"조그 이동 실패: {message}")
             QMessageBox.warning(self, "오류", f"조그 이동 실패:\n{message}")
@@ -1056,7 +1110,8 @@ class MainWindow(QMainWindow):
         # 베이스 좌표계 회전 (processEvents 콜백으로 UI 블로킹 방지)
         success, message = self.robot.send_base_rotate(
             axis, angle,
-            process_events_callback=QApplication.processEvents)
+            process_events_callback=QApplication.processEvents,
+            idle_timeout=5.0)
         if not success:
             self._log(f"조그 회전 실패: {message}")
             QMessageBox.warning(self, "오류", f"조그 회전 실패:\n{message}")
@@ -1112,18 +1167,21 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log(f"[ArUco] Rz + Y 보정 오류: {e}")
 
-    def _on_ar_tag_align_base_y(self, dy_px: float):
+    def _on_ar_tag_align_base_y(self, dy_px: float, measure_func=None):
         """ArUco 정렬 탭 - 적응형 Base Y 위치 보정
 
         1단계: +5mm 테스트 이동 → px/mm 비율 산출 (부호 자동 결정)
         2단계: 비율 기반 보정 이동 (fine translate, 0.1mm 해상도)
         3단계: 재측정 검증
 
-        Note:
-            _ds435_adaptive_align()과 알고리즘 구조가 유사하나
-            MAX_CORRECTION 초과 시 처리가 다름 (이쪽: 안전 중단,
-            DS435: 2단계 분할 이동). 측정 함수도 상이하여 통합 보류.
+        Args:
+            dy_px: 초기 오프셋 (픽셀)
+            measure_func: 재측정 함수 () -> Optional[float].
+                          None이면 DS435 기반 _measure_marker_dy_px 사용.
+                          ArduCam 호출 시 ArduCam 측정 함수를 전달해야 함.
         """
+        if measure_func is None:
+            measure_func = self._measure_marker_dy_px
         if not self._require_robot():
             return
 
@@ -1170,7 +1228,7 @@ class MainWindow(QMainWindow):
                     process_events_callback=QApplication.processEvents)
                 return
 
-            d1 = self._measure_marker_dy_px()
+            d1 = measure_func()
             if d1 is None:
                 self._log("[ArUco] 테스트 후 마커 감지 실패, 복귀")
                 self.robot.send_base_linear(
@@ -1213,7 +1271,7 @@ class MainWindow(QMainWindow):
             # --- 3단계: 이동완료 대기 후 검증 ---
             self._settle(0.5)
 
-            d_final = self._measure_marker_dy_px()
+            d_final = measure_func()
             if d_final is not None:
                 self._log(f"[ArUco] Base Y 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
             else:
@@ -2188,6 +2246,8 @@ class MainWindow(QMainWindow):
         """스테레오 탭 ArUco 정렬 Y: Z축 이동으로 이미지 세로(mid_y) 중심 정렬."""
         if not self._require_robot():
             return
+        if not self._ensure_toolframe(4):
+            return
 
         tab = self.tabStereoCalibration
         self._set_stereo_align_buttons_enabled(False)
@@ -2281,11 +2341,17 @@ class MainWindow(QMainWindow):
             self._log(f"[StereoCalib X] Ry 보정 불필요: {ry_disp:.2f}°")
 
         # 2) 재검출 → Base Y 보정 (이미지 가로 중심 오프셋)
+        # 10px 미만은 미세 정렬(_fine_align_axis)에 위임 (5mm 테스트 이동 불필요)
+        # ArduCam 측정 함수: detect_func로부터 offset_y 추출
+        def _arducam_measure_dy():
+            a = detect_func()
+            return a.offset_y if a is not None and a.offset_y is not None else None
+
         alignment2 = detect_func()
-        if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 5.0:
+        if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 10.0:
             status_func(1, f"Base Y 보정 중: {alignment2.offset_y:.1f}px")
             self._log(f"[StereoCalib X] Base Y 보정: {alignment2.offset_y:.1f}px")
-            self._on_ar_tag_align_base_y(alignment2.offset_y)
+            self._on_ar_tag_align_base_y(alignment2.offset_y, measure_func=_arducam_measure_dy)
             self._settle()
         elif alignment2 is not None:
             oy_disp = alignment2.offset_y if alignment2.offset_y is not None else 0
@@ -2306,6 +2372,8 @@ class MainWindow(QMainWindow):
         """스테레오 탭 ArUco 정렬 X: Ry 회전 + Base Y 이동으로 이미지 가로 중심 정렬"""
         if not self._require_robot():
             return
+        if not self._ensure_toolframe(4):
+            return
 
         tab = self.tabStereoCalibration
         self._set_stereo_align_buttons_enabled(False)
@@ -2322,6 +2390,8 @@ class MainWindow(QMainWindow):
     def _on_stereo_calib_align_aruco_combined(self):
         """스테레오 탭 통합 정렬: Y축(Z이동 세로중심) → X축(Ry+BaseY 가로중심) 순차 실행"""
         if not self._require_robot():
+            return
+        if not self._ensure_toolframe(4):
             return
 
         tab = self.tabStereoCalibration
@@ -2392,6 +2462,8 @@ class MainWindow(QMainWindow):
         """스테레오 탭 DS435 ArUco 정렬: DS435 프레임으로 검출 → Y/Z 센터링"""
         if not self._require_robot():
             return
+        if not self._ensure_toolframe(4):
+            return
 
         tab = self.tabStereoCalibration
 
@@ -2424,7 +2496,7 @@ class MainWindow(QMainWindow):
                 self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
                 self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
 
-                result = self.robot.wait_for_done(
+                result = self.robot.wait_for_done_motion_aware(
                     process_events_callback=QApplication.processEvents)
                 if not result[0]:
                     tab._update_ds435_calib_step(0, f"Detection Pose 이동 실패: {result[1]}")
@@ -2816,6 +2888,8 @@ class MainWindow(QMainWindow):
         """
         if not self._require_robot():
             return
+        if not self._ensure_toolframe(4):
+            return
 
         tab = self.tabStereoCalibration
         self._set_stereo_align_buttons_enabled(False)
@@ -2877,7 +2951,7 @@ class MainWindow(QMainWindow):
                 self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
                 self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
 
-                result = self.robot.wait_for_done(
+                result = self.robot.wait_for_done_motion_aware(
                     process_events_callback=QApplication.processEvents)
                 if not result[0]:
                     tab._update_ds435_calib_step(0, f"Detection Pose 이동 실패: {result[1]}")
@@ -3439,7 +3513,7 @@ class MainWindow(QMainWindow):
         self.robot.send_base_linear('z', distance,
             wait=False,
             process_events_callback=QApplication.processEvents)
-        done_ok, done_msg = self.robot.wait_for_done(
+        done_ok, done_msg = self.robot.wait_for_done_motion_aware(
             process_events_callback=QApplication.processEvents,
             stop_flag_callback=lambda: tab._z_adjust_cancel)
         if not done_ok:
@@ -3889,6 +3963,16 @@ class MainWindow(QMainWindow):
             self.btnTestToggleCameras.setText("카메라 구동")
             self._log("[Test] DS435 + ArduCam 카메라 정지")
 
+    def _on_vehicle_stop_cameras(self):
+        """차량 충전건 결합 탭 - 카메라 중단"""
+        if self.ds435_camera_manager.is_running:
+            self.ds435_camera_manager.stop()
+        if self.arducam_manager.is_running:
+            self.arducam_manager.stop()
+        self.btnTestToggleCameras.setChecked(False)
+        self.btnTestToggleCameras.setText("카메라 구동")
+        self._log("[Vehicle] DS435 + ArduCam 카메라 중단")
+
     _test_ds435_frame_count = 0
     _test_arducam_frame_count = 0
     _test_ds435_last_markers = []
@@ -3904,6 +3988,25 @@ class MainWindow(QMainWindow):
         from PyQt5.QtGui import QImage, QPixmap
         q_image = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
         label.setPixmap(QPixmap.fromImage(q_image))
+
+    _ai_ds435_frame_count = 0
+    _ai_arducam_frame_count = 0
+
+    def _on_ai_ds435_frame(self, frame):
+        """AI Detection 탭 DS435 프레임: 원본 피드 표시"""
+        if self.tabWidget.currentWidget() is not self.tabAIDetection:
+            return
+        self._ai_ds435_frame_count += 1
+        if self._ai_ds435_frame_count % 3 == 0:
+            self.tabAIDetection.update_ds435_frame(frame)
+
+    def _on_ai_arducam_frame(self, frame):
+        """AI Detection 탭 ArduCam 프레임: 원본 피드 표시"""
+        if self.tabWidget.currentWidget() is not self.tabAIDetection:
+            return
+        self._ai_arducam_frame_count += 1
+        if self._ai_arducam_frame_count % 3 == 0:
+            self.tabAIDetection.update_arducam_frame(frame)
 
     def _on_test_ds435_frame(self, frame):
         """테스트 탭 DS435 프레임: ArUco 검출 + depth + 오버레이"""
@@ -4090,14 +4193,20 @@ class MainWindow(QMainWindow):
             for dx, dy in [(0, -20), (0, 20), (-20, 0), (20, 0)]:
                 sample_points.append((int(mid_x + dx), int(mid_y + dy)))
 
+            depths = []
             for sx, sy in sample_points:
-                depth = self.ds435_camera_manager.get_distance_at(sx, sy, from_color=True)
-                if depth is not None and depth > 0:
-                    self._log(f"[Test] depth 측정: {depth:.1f}mm (sample=({sx},{sy}))")
-                    return depth
+                d = self.ds435_camera_manager.get_distance_at(sx, sy, from_color=True)
+                if d is not None and d > 0:
+                    depths.append((d, sx, sy))
 
-            self._log(f"[Test] depth 측정: 모든 샘플 포인트 depth=None (mid=({int(mid_x)},{int(mid_y)}))")
-            return None
+            if not depths:
+                self._log(f"[Test] depth 측정: 모든 샘플 포인트 depth=None (mid=({int(mid_x)},{int(mid_y)}))")
+                return None
+
+            depths.sort(key=lambda x: x[0])
+            median_d, sx, sy = depths[len(depths) // 2]
+            self._log(f"[Test] depth 측정: {median_d:.1f}mm (sample=({sx},{sy}), 유효 {len(depths)}/{len(sample_points)})")
+            return median_d
         except Exception as e:
             self._log(f"[Test] depth 측정 오류: {e}")
             return None
@@ -4114,6 +4223,8 @@ class MainWindow(QMainWindow):
     def _test_align_aruco_combined(self):
         """테스트 탭 전용: ArduCam 통합 정렬 (stereo tab 비의존)"""
         if not self._require_robot():
+            return
+        if not self._ensure_toolframe(4):
             return
 
         detect = self._test_detect_full_alignment
@@ -4188,6 +4299,8 @@ class MainWindow(QMainWindow):
         if not self._require_robot():
             self.labelTestAlignStatus.setText("로봇 미연결")
             return
+        if not self._ensure_toolframe(4):
+            return
 
         TARGET_RX, TARGET_RY, TARGET_RZ = 90.0, 0.0, 90.0
 
@@ -4215,7 +4328,7 @@ class MainWindow(QMainWindow):
                 self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
                 self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
 
-                result = self.robot.wait_for_done(
+                result = self.robot.wait_for_done_motion_aware(
                     process_events_callback=QApplication.processEvents)
                 if not result[0]:
                     self.labelTestAlignStatus.setText(f"Detection Pose 이동 실패: {result[1]}")
@@ -4275,6 +4388,8 @@ class MainWindow(QMainWindow):
         if not self._require_robot():
             self.labelTestAlignStatus.setText("로봇 미연결")
             return
+        if not self._ensure_toolframe(4):
+            return
 
         try:
             from services.stereo_offset_calculator import StereoOffsetCalculator
@@ -4331,7 +4446,7 @@ class MainWindow(QMainWindow):
                 self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
                 self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
 
-                result = self.robot.wait_for_done(
+                result = self.robot.wait_for_done_motion_aware(
                     process_events_callback=QApplication.processEvents)
                 if not result[0]:
                     self.labelTestAlignStatus.setText(f"Detection Pose 이동 실패: {result[1]}")
@@ -4615,10 +4730,11 @@ class MainWindow(QMainWindow):
         try:
             cfg = self._load_charging_config()
             TARGET_DEPTH_MM = cfg.get('handoff', {}).get('target_depth_mm', 370.0)
-            FINE_TOLERANCE_MM = 0.1
+            FINE_TOLERANCE_MM = 1.0
             MAX_DEPTH_ITER = 10
             DAMPING = 0.7
             NUM_SAMPLES = 3
+            POST_MOVE_SETTLE_S = 1.2  # 이동 후 카메라 프레임 안정화 대기
 
             self.labelTestAlignStatus.setText(f"Depth 보정: 목표 {TARGET_DEPTH_MM:.0f}mm")
             QApplication.processEvents()
@@ -4672,7 +4788,7 @@ class MainWindow(QMainWindow):
                 if not move_ok:
                     break
 
-                self._settle(0.5)
+                self._settle(POST_MOVE_SETTLE_S)
                 depth = _avg_depth()
                 if depth is None:
                     self._log("[Test Depth] 재측정 실패")
@@ -4731,10 +4847,12 @@ class MainWindow(QMainWindow):
         os.path.dirname(__file__), '..', 'config', 'charging_gun_coupling.json')
 
     def _stop_cameras_for_movement(self):
-        """이동 전 카메라 정지 및 버튼 상태 동기화"""
+        """이동 전 카메라 정지, TF4 강제, 버튼 상태 동기화"""
         self._stop_all_cameras()
         self.btnTestToggleCameras.setChecked(False)
         self.btnTestToggleCameras.setText("카메라 구동")
+        if self.robot and self.robot.is_connected:
+            self.robot.send_set_toolframe(4, wait=True)
 
     def _on_test_move_to_entrance(self):
         """현재 위치 + delta → 입구 절대 좌표 계산 후 movel"""
@@ -5184,8 +5302,18 @@ class MainWindow(QMainWindow):
         # 레이저 캘리브레이션 탭 (인덱스 6) → ArduCam 강제 전환
         elif index == 6:
             self._on_camera_type_changed(CAMERA_ARDUCAM)
-        # 테스트 탭 (충전건 결합) 진입 → 카메라 자동 시작
+        # 테스트 탭 (충전건 결합) 진입 → TF4 강제 + 카메라 자동 시작
         elif index == self.tabWidget.indexOf(self.tabTest):
+            if self.robot and self.robot.is_connected:
+                try:
+                    success, msg = self.robot.send_set_toolframe(4, wait=True)
+                    if success:
+                        self._log("[Test] 탭 진입: TF4 설정 완료")
+                        self._update_statusbar()
+                    else:
+                        self._log(f"[Test] TF4 설정 실패: {msg}")
+                except Exception as e:
+                    self._log(f"[Test] TF4 설정 오류: {e}")
             if not self.ds435_camera_manager.is_running:
                 self.ds435_camera_manager.start()
             if not self.arducam_manager.is_running:
@@ -5193,6 +5321,13 @@ class MainWindow(QMainWindow):
             self.btnTestToggleCameras.setChecked(True)
             self.btnTestToggleCameras.setText("카메라 정지")
             self._log("[Test] 탭 진입: DS435 + ArduCam 카메라 자동 시작")
+        # AI Detection 탭 진입 → 카메라 자동 시작 (TF 변경 없음)
+        elif index == self.tabWidget.indexOf(self.tabAIDetection):
+            if not self.ds435_camera_manager.is_running:
+                self.ds435_camera_manager.start()
+            if not self.arducam_manager.is_running:
+                self.arducam_manager.start()
+            self._log("[AI Detection] 탭 진입: DS435 + ArduCam 카메라 자동 시작")
         else:
             # 다른 탭으로 변경 시에도 상태바 업데이트
             if self.robot and self.robot.is_connected:
@@ -5233,15 +5368,15 @@ class MainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
+            # 타이머 먼저 정지 (카메라 정지 전 콜백 차단)
+            if hasattr(self, 'status_timer'):
+                self.status_timer.stop()
+
             # 모든 카메라 정지
             if self.ds435_camera_manager.is_running:
                 self.ds435_camera_manager.stop()
             if self.arducam_manager.is_running:
                 self.arducam_manager.stop()
-
-            # 타이머 정지
-            if hasattr(self, 'status_timer'):
-                self.status_timer.stop()
 
             # 로봇 연결 해제
             if self.robot and self.robot.is_connected:

@@ -119,17 +119,17 @@
             </widget>
            </item>
            <item>
-            <spacer name="horizontalSpacerCameraLabel">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
+            <widget class="QPushButton" name="btnSetDetectionPose">
+             <property name="text">
+              <string>Set Detection Pose</string>
              </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
+             <property name="styleSheet">
+              <string>QPushButton { padding: 4px 8px; font-weight: bold; background-color: #E53935; color: white; border-radius: 3px; }
+QPushButton:hover { background-color: #EF5350; }
+QPushButton:pressed { background-color: #C62828; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
              </property>
-            </spacer>
+            </widget>
            </item>
            <item>
             <widget class="QPushButton" name="btnStartCamera">
@@ -657,7 +657,7 @@ QPushButton:checked { background-color: #E91E96; color: white; }</string>
         <!-- ===== TAB 2: 캘리브레이션 ===== -->
         <widget class="QWidget" name="tabCalibration">
          <attribute name="title">
-          <string>캘리브레이션</string>
+          <string>캘리브레이션(aruco)</string>
          </attribute>
          <layout class="QVBoxLayout" name="verticalLayoutTabCalib">
           <property name="spacing"><number>4</number></property>
@@ -902,6 +902,13 @@ QPushButton:disabled {
           </item>
 
          </layout>
+        </widget>
+
+        <!-- ===== TAB 3: 캘리브레이션 지그 ===== -->
+        <widget class="QWidget" name="tabCalibJig">
+         <attribute name="title">
+          <string>캘리브레이션 지그</string>
+         </attribute>
         </widget>
 
        </widget>

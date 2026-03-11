@@ -271,7 +271,9 @@ def run_realtime_mode():
     from Robot.communication.modbus_client import ModbusClient
 
     CALIB_FILE = os.path.join(PROJECT_ROOT, 'config', 'arducam_calibration.yaml')
-    DEVICE_INDEX = 6
+    from utils.camera_utils import detect_arducam_index
+    _detected = detect_arducam_index()
+    DEVICE_INDEX = _detected if _detected is not None else 6  # fallback: 6 (기존 동작 보존)
     MARKER_SIZE = 0.015  # m (15mm)
 
     import yaml
@@ -303,8 +305,8 @@ def run_realtime_mode():
     if not cap.isOpened():
         print(f"ArduCam 열기 실패 (device={DEVICE_INDEX})")
         sys.exit(1)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     print("\n실시간 3D 시각화 시작 (창 닫기로 종료)")
 

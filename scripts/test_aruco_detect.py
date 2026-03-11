@@ -4,8 +4,12 @@ import cv2
 import numpy as np
 import yaml
 import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-DEVICE_INDEX = 6
+from utils.camera_utils import detect_arducam_index
+_detected = detect_arducam_index()
+DEVICE_INDEX = _detected if _detected is not None else 6  # fallback: 6 (기존 동작 보존)
 CALIB_FILE = os.path.join(os.path.dirname(__file__), '..', 'config', 'arducam_calibration.yaml')
 
 def main():
@@ -17,8 +21,8 @@ def main():
     if not cap.isOpened():
         print(f"[FAIL] 카메라 {DEVICE_INDEX} 열기 실패")
         return
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     print(f"[OK] 카메라: {int(cap.get(3))}x{int(cap.get(4))}")
 
     for _ in range(10):

@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from cv2 import aruco
+from utils.overlay import draw_image_center_crosshair, draw_text_with_background
 
 class ArucoCameraPoseEstimator:
     """
@@ -802,32 +803,7 @@ class ArucoCameraPoseEstimator:
 
     def _draw_text_with_background(self, image, text_lines, pos, alpha=0.5):
         """Helper function to draw text with semi-transparent background"""
-        text_height = 20
-        max_text_width = max([cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0][0]
-                            for line in text_lines])
-
-        # Background rectangle with transparency
-        bg_top_left = (pos[0] - 5, pos[1] - 15)
-        bg_bottom_right = (pos[0] + max_text_width + 10,
-                         pos[1] + len(text_lines) * text_height + 5)
-
-        # Create overlay for semi-transparent background
-        overlay = image.copy()
-        cv2.rectangle(overlay, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
-        cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
-
-        # Border
-        cv2.rectangle(image, bg_top_left, bg_bottom_right, (255, 255, 255), 1)
-
-        # Text lines with outline for better visibility
-        for j, line in enumerate(text_lines):
-            line_pos = (pos[0], pos[1] + j * text_height)
-            # Black outline
-            cv2.putText(image, line, line_pos, cv2.FONT_HERSHEY_SIMPLEX,
-                      0.4, (0, 0, 0), 2)
-            # White text
-            cv2.putText(image, line, line_pos, cv2.FONT_HERSHEY_SIMPLEX,
-                      0.4, (255, 255, 255), 1)
+        draw_text_with_background(image, text_lines, pos, alpha=alpha)
 
     def _rotation_matrix_to_euler(self, R):
         """Convert rotation matrix to Euler angles (roll, pitch, yaw) in degrees"""
@@ -1026,10 +1002,7 @@ def draw_dual_marker_overlay(frame, markers, tag_id1, tag_id2, alignment=None, c
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
     # Image center crosshair (gray, V+H)
-    h, w = frame.shape[:2]
-    img_cx, img_cy = w // 2, h // 2
-    cv2.line(frame, (img_cx, 0), (img_cx, h), (128, 128, 128), 1)
-    cv2.line(frame, (0, img_cy), (w, img_cy), (128, 128, 128), 1)
+    draw_image_center_crosshair(frame)
 
     # Alignment-dependent drawing
     if alignment is not None:

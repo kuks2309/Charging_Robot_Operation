@@ -32,8 +32,8 @@ class ChessboardAlignmentService(QObject):
     status_changed = pyqtSignal(str)  # 상태 변경 로그
     alignment_completed = pyqtSignal(bool, str, float, float)  # success, msg, error_x, error_y
 
-    # 상수 (해상도 1280x720 기준)
-    PIXEL_TO_MM = 0.0625  # 픽셀 → mm 변환 비율 (640x480 대비 1/2)
+    # 상수 (1920x1080 기준, fy 비율 이론값 — 현장 측정 후 확정)
+    PIXEL_TO_MM = 0.0468  # 0.0625 × (fy_old/fy_new) = 0.0625 × (4003.2/5347.3)
     RETRY_THRESHOLD_PX = 5.0  # 재정렬 임계값 (픽셀)
 
     def __init__(self, robot_client=None):

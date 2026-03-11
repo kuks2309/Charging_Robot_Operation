@@ -556,6 +556,23 @@ class SweepCalibrationService(QObject):
 
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
 
+        # 카메라 인트린식 메타데이터 (카메라 교체 시 sweep 무효화 검증용)
+        camera_info = {}
+        if self._ds435 and self._ds435.intrinsics:
+            di = self._ds435.intrinsics
+            camera_info['ds435'] = {
+                'width': getattr(di, 'width', 0),
+                'height': getattr(di, 'height', 0),
+                'fy': getattr(di, 'fy', 0),
+            }
+        if self._arducam and self._arducam.intrinsics:
+            ai = self._arducam.intrinsics
+            camera_info['arducam'] = {
+                'width': getattr(ai, 'width', 0),
+                'height': getattr(ai, 'height', 0),
+                'fy': getattr(ai, 'fy', 0),
+            }
+
         save_data = {
             'timestamp': datetime.now().isoformat(),
             'origin_pose': [float(v) for v in self._origin_pose[:6]],
@@ -563,6 +580,7 @@ class SweepCalibrationService(QObject):
                 'step_mm': self._step_mm,
                 'count': self._count,
             },
+            'camera_info': camera_info,
             'results': results,
             'raw_data': {
                 axis: self._data[axis] for axis in ('z', 'x', 'y')

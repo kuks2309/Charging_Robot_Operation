@@ -23,7 +23,7 @@ DEFAULT_CALIBRATION_FILE = os.path.join(
 class Intrinsics:
     """카메라 내부 파라미터 (CameraManager와 동일)"""
     def __init__(self, fx: float, fy: float, ppx: float, ppy: float, coeffs: list,
-                 width: int = 1280, height: int = 720):
+                 width: int = 1920, height: int = 1080):
         self.fx = fx
         self.fy = fy
         self.ppx = ppx
@@ -63,8 +63,8 @@ class Intrinsics:
             return cls(
                 fx=fx, fy=fy, ppx=ppx, ppy=ppy,
                 coeffs=coeffs,
-                width=data.get('image_width', 1280),
-                height=data.get('image_height', 720)
+                width=data.get('image_width', 1920),
+                height=data.get('image_height', 1080)
             )
         except Exception as e:
             print(f"Failed to load calibration: {e}")
@@ -93,7 +93,7 @@ class ArduCamManager(QObject):
     error_occurred = pyqtSignal(str)
 
     def __init__(self, device_index: int = 0,
-                 color_resolution: Tuple[int, int] = (1280, 720),
+                 color_resolution: Tuple[int, int] = (1920, 1080),
                  depth_resolution: Tuple[int, int] = (640, 480),
                  fps: int = 30,
                  calibration_file: str = None):
@@ -178,9 +178,15 @@ class ArduCamManager(QObject):
         for i in range(max_index):
             cap = cv2.VideoCapture(i)
             if cap.isOpened():
+                sysfs_name_path = f"/sys/class/video4linux/video{i}/name"
+                try:
+                    with open(sysfs_name_path) as _f:
+                        device_name = _f.read().strip()
+                except OSError:
+                    device_name = f"USB Camera {i}"
                 available.append({
                     'index': i,
-                    'name': f"USB Camera {i}",
+                    'name': device_name,
                     'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                     'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 })
@@ -365,7 +371,3 @@ class ArduCamManager(QObject):
             self._log(f"스냅샷 저장 실패: {e}")
             return None
 
-    def __del__(self):
-        """소멸자"""
-        if self._running:
-            self.stop()

@@ -21,7 +21,9 @@ CALIB_FILE = os.path.normpath(os.path.join(PROJECT_ROOT, '..', 'config', 'arduca
 
 ARUCO_DICT_TYPE = cv2.aruco.DICT_5X5_50
 MARKER_SIZE = 0.015
-DEVICE_INDEX = 6
+from utils.camera_utils import detect_arducam_index
+_detected = detect_arducam_index()
+DEVICE_INDEX = _detected if _detected is not None else 6  # fallback: 6 (기존 동작 보존)
 DURATION = 5.0  # seconds
 
 
@@ -64,8 +66,8 @@ def main():
     if not cap.isOpened():
         print(f"Camera open failed (device_index={DEVICE_INDEX})")
         sys.exit(1)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     # 데이터 저장: marker_id -> list of frame_data
     all_data = {}  # marker_id -> [{'sol0_euler', 'sol1_euler', 'sol0_tvec', 'sol1_tvec', 'sol0_z_axis', 'sol1_z_axis', 'reproj0', 'reproj1'}]

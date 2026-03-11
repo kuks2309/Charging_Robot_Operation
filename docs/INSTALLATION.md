@@ -4,6 +4,7 @@
 - [시스템 요구사항](#시스템-요구사항)
 - [Python 가상환경 설정](#python-가상환경-설정)
 - [의존성 패키지 설치](#의존성-패키지-설치)
+- [YOLOv8 설치 (CPU)](#yolov8-설치-cpu)
 - [Qt5와 OpenCV 충돌 해결](#qt5와-opencv-충돌-해결)
 - [실행 방법](#실행-방법)
 - [문제 해결](#문제-해결)
@@ -88,6 +89,52 @@ pip install PyQt5 \
 | netifaces | >= 0.11 | 네트워크 인터페이스 조회 |
 | scipy | >= 1.7 | 과학 연산 (좌표 변환 등) |
 | matplotlib | >= 3.3 | 3D 좌표계 시각화 |
+
+---
+
+## YOLOv8 설치 (CPU)
+
+GPU 없이 CPU만으로 YOLOv8 추론을 사용하기 위한 설치 방법입니다.
+
+> **주의:** CUDA 버전 PyTorch와 혼용 시 충돌이 발생합니다. 반드시 CPU 전용 인덱스를 사용하세요.
+
+### 1. PyTorch CPU 전용 설치
+
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+### 2. Ultralytics(YOLOv8) 설치
+
+```bash
+pip install ultralytics
+```
+
+### 설치된 버전
+
+| 패키지 | 버전 | 용도 |
+|--------|------|------|
+| torch | 2.10.0+cpu | PyTorch CPU 런타임 |
+| torchvision | 0.25.0+cpu | 이미지 변환/전처리 |
+| ultralytics | 8.4.21 | YOLOv8 추론 프레임워크 |
+
+### 동작 확인
+
+```python
+from ultralytics import YOLO
+import torch
+
+print(torch.__version__)      # 2.10.0+cpu
+print(torch.cuda.is_available())  # False (CPU 전용)
+
+model = YOLO("yolov8n.pt")   # nano 모델 (첫 실행 시 자동 다운로드)
+```
+
+### 주의사항
+
+- CPU 전용이므로 `torch.cuda.is_available()`은 `False` 반환 (정상)
+- ultralytics는 자동으로 CPU 디바이스를 선택함
+- 모델 가중치(`.pt` 파일)는 `config/AI_weights/` 에 저장하여 관리
 
 ---
 

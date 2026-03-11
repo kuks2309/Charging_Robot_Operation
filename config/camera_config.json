@@ -1,0 +1,8 @@
+{
+  "_note": "카메라 장치 설정. device_index를 정수로 지정하면 수동 고정.",
+  "arducam": {
+    "device_index": "auto",
+    "name_keyword": "FHD Camera",
+    "fallback_index": 0
+  }
+}

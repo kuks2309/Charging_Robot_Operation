@@ -28,7 +28,7 @@ class CalibrationMixin:
     - 위치 생성/순차 이동/자동 캡처
     """
 
-    PIXEL_TO_MM = 0.25
+    PIXEL_TO_MM = 0.187  # 1920x1080 기준, fy 비율(4003.2/5347.3=0.7486) 이론값, 현장 측정 후 확정
 
     def init_mixin(self):
         """Mixin 초기화"""

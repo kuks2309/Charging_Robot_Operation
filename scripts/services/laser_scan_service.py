@@ -25,6 +25,7 @@ from datetime import datetime
 import numpy as np
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication
+from scipy.optimize import differential_evolution
 
 from Sensor.laser.extract_laser_center import (
     extract_laser_center_conv,
@@ -53,6 +54,12 @@ class LaserScanService(QObject):
     CANCELLED = 'CANCELLED'
     ERROR = 'ERROR'
 
+    # 삼각측량 캘리브레이션 파일 경로
+    _CALIB_FILE = os.path.join(
+        os.path.dirname(__file__), '..', '..', 'config',
+        'laser_triangulation_calib.json'
+    )
+
     def __init__(self, robot, arducam_manager, roi_config,
                  camera_matrix=None, dist_coeffs=None, parent=None):
         """
@@ -80,6 +87,26 @@ class LaserScanService(QObject):
         self._origin_pose = None
         self._scan_data = []
         self._cancel_requested = False
+
+        # 삼각측량 캘리브레이션 로드
+        self._triang_calib = self._load_triangulation_calib()
+
+    def _load_triangulation_calib(self) -> dict | None:
+        """삼각측량 기하학 캘리브레이션 파일 로드.
+
+        필수 키: h_mm, Bx_mm, alpha_deg
+        """
+        try:
+            with open(self._CALIB_FILE, 'r', encoding='utf-8') as f:
+                calib = json.load(f)
+            if all(k in calib for k in ('h_mm', 'Bx_mm', 'alpha_deg')):
+                return calib
+            self._log("[LaserScan] 캘리브레이션 파일에 필수 키 누락 (h_mm, Bx_mm, alpha_deg)")
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            self._log(f"[LaserScan] 삼각측량 캘리브레이션 로드 실패: {exc}")
+        return None
 
     @property
     def is_running(self) -> bool:
@@ -304,9 +331,16 @@ class LaserScanService(QObject):
         left_analysis = self._fit_roi(left_z_offsets, left_y_means, 'left')
         right_analysis = self._fit_roi(right_z_offsets, right_y_means, 'right')
 
+        # 비선형 기하학 모델 기반 각도 추정
+        angle_estimate = self._estimate_tilt_angle(
+            left_z_offsets, left_y_means,
+            right_z_offsets, right_y_means,
+        )
+
         results = {
             'left': left_analysis,
             'right': right_analysis,
+            'angle_estimate': angle_estimate,
             'parameters': {
                 'step_mm': self._step_mm,
                 'total_distance': self._total_distance,
@@ -320,6 +354,85 @@ class LaserScanService(QObject):
         self.status_updated.emit("스캔 분석 완료!")
         self._log("[LaserScan] 완료")
         self.scan_finished.emit(results)
+
+    def _estimate_tilt_angle(
+        self,
+        left_z: list, left_y: list,
+        right_z: list, right_y: list,
+    ) -> dict:
+        """비선형 기하학 모델 기반 표면 기울기 각도 추정.
+
+        레이저-카메라 삼각측량 기하학:
+          laser hit point = laser_origin + t * laser_dir
+          표면 평면과 교차 → 카메라 투영 → y_pixel
+          differential_evolution으로 (phi, d0) 피팅.
+        """
+        if self._triang_calib is None:
+            return {'estimated_deg': None, 'error': 'no_calibration'}
+        if self._camera_matrix is None:
+            return {'estimated_deg': None, 'error': 'no_camera_matrix'}
+
+        h = self._triang_calib['h_mm']
+        Bx = self._triang_calib['Bx_mm']
+        alpha_rad = np.radians(self._triang_calib['alpha_deg'])
+        fy = self._camera_matrix[1, 1]
+        cy = self._camera_matrix[1, 2]
+
+        sa, ca = np.sin(alpha_rad), np.cos(alpha_rad)
+
+        def y_model(deltas, d0, phi_rad):
+            tp = np.tan(phi_rad)
+            t = (d0 - Bx + tp * (h - deltas)) / (ca + sa * tp)
+            z_hit = h - t * sa
+            x_hit = Bx + t * ca
+            return cy - fy * z_hit / x_hit
+
+        def residual_sum(params, z_arr, y_arr):
+            d0, phi_deg = params
+            phi_rad = np.radians(phi_deg)
+            y_pred = y_model(z_arr, d0, phi_rad)
+            return np.sum((y_arr - y_pred) ** 2)
+
+        estimates = {}
+        for side, z_list, y_list in [('left', left_z, left_y),
+                                      ('right', right_z, right_y)]:
+            if len(z_list) < 3:
+                continue
+            z_arr = np.array(z_list, dtype=np.float64)
+            y_arr = np.array(y_list, dtype=np.float64)
+
+            result = differential_evolution(
+                residual_sum,
+                bounds=[(100, 1500), (-45, 45)],  # d0 [mm], phi [deg]
+                args=(z_arr, y_arr),
+                seed=42, maxiter=500, tol=1e-10,
+            )
+            d0_fit, phi_fit = result.x
+            estimates[side] = float(phi_fit)
+            self._log(
+                f"[LaserScan] {side}: phi={phi_fit:.2f}°, "
+                f"d0={d0_fit:.1f}mm, cost={result.fun:.2f}"
+            )
+
+        if not estimates:
+            return {'estimated_deg': None, 'error': 'no_valid_data'}
+
+        avg_angle = sum(estimates.values()) / len(estimates)
+
+        self._log(
+            f"[LaserScan] 각도 추정: "
+            + ", ".join(f"{k}={v:.2f}°" for k, v in estimates.items())
+            + f" → 평균={avg_angle:.2f}°"
+        )
+
+        return {
+            'estimated_deg': round(avg_angle, 2),
+            'left_deg': estimates.get('left'),
+            'right_deg': estimates.get('right'),
+            'model': 'nonlinear_geometric',
+            'params': {'h_mm': h, 'Bx_mm': Bx,
+                       'alpha_deg': self._triang_calib['alpha_deg']},
+        }
 
     def _fit_roi(self, z_offsets, y_means, label: str) -> dict:
         """단일 ROI에 대한 선형회귀 수행"""
@@ -489,6 +602,7 @@ class LaserScanService(QObject):
             'parameters': results['parameters'],
             'left': results['left'],
             'right': results['right'],
+            'angle_estimate': results.get('angle_estimate'),
             'raw_data': self._serialize_raw_data(results['raw_data']),
         }
 

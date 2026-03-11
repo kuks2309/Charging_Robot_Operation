@@ -151,3 +151,20 @@ turtlesim==1.4.3
 unique-identifier-msgs==2.2.1
 visualization-msgs==4.9.0
 xacro==2.1.1
+
+# YOLOv8 (CPU-only) - 객체 인식
+onnx==1.20.1
+onnxruntime==1.23.2
+ml-dtypes==0.5.4
+torch==2.10.0+cpu
+torchvision==0.25.0+cpu
+ultralytics==8.4.21
+ultralytics-thop==2.0.18
+polars==1.38.1
+polars-runtime-32==1.38.1
+psutil==7.2.2
+certifi==2026.2.25
+charset-normalizer==3.4.5
+idna==3.11
+requests==2.32.5
+urllib3==2.6.3

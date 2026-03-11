@@ -6,6 +6,7 @@
 from typing import Optional, Tuple
 import cv2
 import numpy as np
+from utils.overlay import draw_center_marker
 
 
 class ChessboardDetector:
@@ -206,22 +207,13 @@ class ChessboardDetector:
         # 체스보드 중심 표시 (빨간색)
         if center is not None:
             cx, cy = int(center[0]), int(center[1])
-
-            if draw_crosshair:
-                cv2.line(result, (0, cy), (w, cy), (0, 0, 255), 1)
-                cv2.line(result, (cx, 0), (cx, h), (0, 0, 255), 1)
-
-            cv2.circle(result, (cx, cy), 8, (0, 0, 255), -1)
+            draw_center_marker(result, cx, cy, (0, 0, 255), radius=8, thickness=-1,
+                               draw_crosshair_flag=draw_crosshair)
 
         # 이미지 중심 표시 (파란색)
         if draw_image_center:
-            img_cx, img_cy = w // 2, h // 2
-
-            if draw_crosshair:
-                cv2.line(result, (0, img_cy), (w, img_cy), (255, 0, 0), 1)
-                cv2.line(result, (img_cx, 0), (img_cx, h), (255, 0, 0), 1)
-
-            cv2.circle(result, (img_cx, img_cy), 5, (255, 0, 0), -1)
+            draw_center_marker(result, w // 2, h // 2, (255, 0, 0), radius=5, thickness=-1,
+                               draw_crosshair_flag=draw_crosshair)
 
         return result
 

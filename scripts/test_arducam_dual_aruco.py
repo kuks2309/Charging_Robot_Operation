@@ -63,7 +63,9 @@ def marker_to_base(tvec, rvec, robot_pose):
 # ArUco 설정
 ARUCO_DICT_TYPE = cv2.aruco.DICT_5X5_50
 MARKER_SIZE = 0.015  # m (15mm)
-DEVICE_INDEX = 6
+from utils.camera_utils import detect_arducam_index
+_detected = detect_arducam_index()
+DEVICE_INDEX = _detected if _detected is not None else 6  # fallback: 6 (기존 동작 보존)
 KNOWN_MARKER_DISTANCE = 0.059  # m (59mm) - 두 마커 중심 간 실제 거리 (실측)
 
 
@@ -193,8 +195,8 @@ def main():
         print(f"ArduCam 열기 실패 (device_index={DEVICE_INDEX})")
         sys.exit(1)
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     # CSV 저장 설정 (프로젝트루트/data/)
     project_root = os.path.normpath(os.path.join(PROJECT_ROOT, '..'))

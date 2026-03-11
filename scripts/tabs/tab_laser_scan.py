@@ -343,13 +343,22 @@ class TabLaserScan(QWidget, JogMixin):
         else:
             self.labelRightSlope.setText("- px/mm")
 
-        # 좌우 기울기 차이로 틸트 추정
-        if (left and left.get('slope_px_per_mm') is not None and
-                right and right.get('slope_px_per_mm') is not None):
-            diff = abs(left['slope_px_per_mm'] - right['slope_px_per_mm'])
-            self.labelTiltEstimate.setText(f"좌우 기울기 차: {diff:.3f} px/mm")
+        # 삼각측량 각도 추정 표시
+        angle_est = results.get('angle_estimate')
+        if angle_est and angle_est.get('estimated_deg') is not None:
+            deg = angle_est['estimated_deg']
+            left_deg = angle_est.get('left_deg')
+            right_deg = angle_est.get('right_deg')
+            parts = [f"추정 각도: {deg:.2f}°"]
+            if left_deg is not None and right_deg is not None:
+                parts.append(f"(L={left_deg:.2f}° R={right_deg:.2f}°)")
+            self.labelTiltEstimate.setText(" ".join(parts))
         else:
-            self.labelTiltEstimate.setText("기울기 추정: -")
+            err = angle_est.get('error', '') if angle_est else 'no_calibration'
+            if err == 'no_calibration':
+                self.labelTiltEstimate.setText("각도 추정: 캘리브레이션 없음")
+            else:
+                self.labelTiltEstimate.setText("각도 추정: -")
 
     def reset_scan_ui(self):
         """스캔 UI 초기화 (진행바/상태만 — 저장 버튼은 결과 유지)"""
@@ -375,6 +384,7 @@ class TabLaserScan(QWidget, JogMixin):
             'parameters': results.get('parameters'),
             'left': results.get('left'),
             'right': results.get('right'),
+            'angle_estimate': results.get('angle_estimate'),
             'raw_data': results.get('raw_data', []),
         }
         json_path = os.path.join(save_dir, f'scan_{ts}.json')

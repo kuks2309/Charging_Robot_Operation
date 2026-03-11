@@ -288,7 +288,20 @@ class ModbusClient:
         return result[0] if result else None
 
     def write_command(self, value: int) -> bool:
-        """커맨드 레지스터(351) 쓰기"""
+        """커맨드 레지스터(351) 쓰기
+
+        Pre-flight: PRS cleanup 완료 대기 (stale DONE/RUNNING 소진 후 명령 전송).
+        이전 명령의 task_done=2(DONE) 또는 task_done=1(RUNNING)이 남아있으면
+        Phase 1 false positive / 명령 덮어쓰기 레이스 발생.
+        """
+        # PRS가 IDLE(0) 상태가 될 때까지 최대 2초 대기
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            status = self.read_status()
+            if status == self.STATUS_IDLE or status is None:
+                break
+            time.sleep(0.01)
+
         self._last_command_time = time.time()
         return self.write_register(self.REGISTER_COMMAND, value)
 
@@ -338,9 +351,13 @@ class ModbusClient:
                 return True, "명령 완료"
             elif status == self.STATUS_ERROR:
                 return False, "로봇 오류 발생"
-            elif status == self.STATUS_IDLE and saw_running:
-                # Running을 거친 후 IDLE이면 완료 (빠른 명령)
-                return True, "명령 완료"
+            elif status == self.STATUS_IDLE:
+                if saw_running:
+                    return True, "명령 완료"
+                # 고속 완료 감지: 명령 레지스터가 클리어되면 PRS가 처리 완료한 것
+                cmd = self.read_command()
+                if cmd == 0:
+                    return True, "명령 완료 (고속 처리)"
 
             time.sleep(0.02)
         else:
@@ -373,6 +390,88 @@ class ModbusClient:
 
         return False, "타임아웃"
 
+    def wait_for_done_motion_aware(self, idle_timeout: float = 10.0, max_timeout: float = 120.0,
+                                    process_events_callback=None, stop_flag_callback=None) -> Tuple[bool, str]:
+        """
+        이동 감지 기반 타임아웃 — 위치 변화가 있으면 타임아웃 리셋
+
+        Args:
+            idle_timeout: 위치 변화 없을 때 타임아웃 (초)
+            max_timeout: 최대 대기 시간 (초, 안전장치)
+            process_events_callback: UI 이벤트 처리 콜백
+            stop_flag_callback: 중지 확인 콜백
+        """
+        start = time.time()
+        saw_running = False
+
+        # 1단계: Running 상태 감지 (최대 5초)
+        while time.time() - start < 5.0:
+            if self._connection_lost:
+                return False, "연결 끊김"
+            if process_events_callback:
+                process_events_callback()
+            if stop_flag_callback and stop_flag_callback():
+                return False, "사용자 중지"
+
+            status = self.read_status()
+            if status == self.STATUS_RUNNING:
+                saw_running = True
+                break
+            elif status == self.STATUS_DONE:
+                return True, "명령 완료"
+            elif status == self.STATUS_ERROR:
+                return False, "로봇 오류 발생"
+            elif status == self.STATUS_IDLE:
+                if saw_running:
+                    return True, "명령 완료"
+                # 고속 완료 감지: 명령 레지스터가 클리어되면 PRS가 처리 완료한 것
+                cmd = self.read_command()
+                if cmd == 0:
+                    return True, "명령 완료 (고속 처리)"
+            time.sleep(0.02)
+        else:
+            return False, "Running 상태 감지 실패 (5초 타임아웃)"
+
+        # 2단계: 완료 대기 (이동 감지 기반 타임아웃)
+        last_pose = self.read_current_pose()
+        last_motion_time = time.time()
+
+        while time.time() - start < max_timeout:
+            if self._connection_lost:
+                return False, "연결 끊김"
+            if process_events_callback:
+                process_events_callback()
+            if stop_flag_callback and stop_flag_callback():
+                return False, "사용자 중지"
+
+            status = self.read_status()
+            if status is not None:
+                if status == self.STATUS_DONE:
+                    return True, "명령 완료"
+                elif status == self.STATUS_IDLE:
+                    return True, "명령 완료"
+                elif status == self.STATUS_ERROR:
+                    return False, "로봇 오류 발생"
+
+            # 위치 변화 감지 → 변화 있으면 타임아웃 리셋
+            current_pose = self.read_current_pose()
+            if current_pose is None:
+                # 통신 실패 = 상태 불명 → 이동 중으로 간주 (조기 타임아웃 방지)
+                last_motion_time = time.time()
+            elif current_pose and last_pose:
+                delta = sum(abs(c - l) for c, l in zip(current_pose[:3], last_pose[:3]))
+                if delta > 0.05:  # 0.05mm 이상 변화 → 이동 중
+                    last_motion_time = time.time()
+                    last_pose = current_pose
+
+            # 이동 멈춤 후 idle_timeout 경과 시 타임아웃
+            if time.time() - last_motion_time > idle_timeout:
+                return False, f"이동 정지 후 {idle_timeout:.0f}초 타임아웃"
+
+            time.sleep(0.1)
+
+        return False, f"최대 대기 시간 {max_timeout:.0f}초 초과"
+
     # ==================== int16 변환 유틸리티 ====================
 
     @staticmethod
@@ -391,14 +490,18 @@ class ModbusClient:
 
     # ==================== 모션 명령 ====================
 
-    def send_go_home(self, wait: bool = True) -> Tuple[bool, str]:
+    def send_go_home(self, wait: bool = True, process_events_callback=None,
+                     idle_timeout: float = 10.0) -> Tuple[bool, str]:
         """Go Home 명령 (command 1)"""
         self.write_command(self.CMD_GO_HOME)
         if wait:
-            return self.wait_for_done()
+            return self.wait_for_done_motion_aware(
+                idle_timeout=idle_timeout,
+                process_events_callback=process_events_callback)
         return True, "명령 전송됨"
 
-    def send_tcp_linear(self, axis: str, distance: float, wait: bool = True, process_events_callback=None) -> Tuple[bool, str]:
+    def send_tcp_linear(self, axis: str, distance: float, wait: bool = True, process_events_callback=None,
+                        idle_timeout: float = 10.0) -> Tuple[bool, str]:
         """
         TCP 상대 이동 (툴 좌표계)
 
@@ -434,10 +537,13 @@ class ModbusClient:
             return False, "잘못된 축 지정"
 
         if wait:
-            return self.wait_for_done(process_events_callback=process_events_callback)
+            return self.wait_for_done_motion_aware(
+                idle_timeout=idle_timeout,
+                process_events_callback=process_events_callback)
         return True, "명령 전송됨"
 
-    def send_tcp_rotate(self, axis: str, angle, wait: bool = True, process_events_callback=None) -> Tuple[bool, str]:
+    def send_tcp_rotate(self, axis: str, angle, wait: bool = True, process_events_callback=None,
+                        idle_timeout: float = 10.0) -> Tuple[bool, str]:
         """
         TCP 상대 회전 (툴 좌표계)
 
@@ -480,7 +586,9 @@ class ModbusClient:
             return False, "잘못된 축 지정 (rx/ry/rz/rxryrz) 또는 각도 형식"
 
         if wait:
-            result = self.wait_for_done(process_events_callback=process_events_callback)
+            result = self.wait_for_done_motion_aware(
+                idle_timeout=idle_timeout,
+                process_events_callback=process_events_callback)
             # 회전 후 좌표 출력
             after_pose = self.read_current_pose()
             if after_pose:
@@ -494,7 +602,8 @@ class ModbusClient:
 
     def send_move_to_pose(self, x: float, y: float, z: float,
                           rx: float, ry: float, rz: float, wait: bool = True,
-                          process_events_callback=None, stop_flag_callback=None) -> Tuple[bool, str]:
+                          process_events_callback=None, stop_flag_callback=None,
+                          idle_timeout: float = 10.0) -> Tuple[bool, str]:
         """
         절대 좌표 이동 (command 20)
 
@@ -525,7 +634,8 @@ class ModbusClient:
         self.write_command(self.CMD_MOVE_TO_POSE)
 
         if wait:
-            return self.wait_for_done(
+            return self.wait_for_done_motion_aware(
+                idle_timeout=idle_timeout,
                 process_events_callback=process_events_callback,
                 stop_flag_callback=stop_flag_callback
             )
@@ -586,7 +696,8 @@ class ModbusClient:
         return True, "워크프레임 설정"
 
     def send_base_linear(self, axis: str, distance: float, wait: bool = True,
-                         absolute: bool = False, process_events_callback=None) -> Tuple[bool, str]:
+                         absolute: bool = False, process_events_callback=None,
+                         idle_timeout: float = 10.0) -> Tuple[bool, str]:
         """
         베이스 좌표계 상대 이동 (transx, transy, transz, trans)
 
@@ -629,7 +740,9 @@ class ModbusClient:
             return False, "잘못된 축 지정"
 
         if wait:
-            result = self.wait_for_done(process_events_callback=process_events_callback)
+            result = self.wait_for_done_motion_aware(
+                idle_timeout=idle_timeout,
+                process_events_callback=process_events_callback)
             # 이동 후 좌표 출력
             after_pose = self.read_current_pose()
             if after_pose:
@@ -662,7 +775,8 @@ class ModbusClient:
                                      process_events_callback=process_events_callback)
 
     def send_base_rotate(self, axis: str, angle: float, wait: bool = True,
-                         process_events_callback=None) -> Tuple[bool, str]:
+                         process_events_callback=None,
+                         idle_timeout: float = 10.0) -> Tuple[bool, str]:
         """
         베이스 좌표계 Euler 각도 직접 변경 (movel 방식)
 
@@ -709,7 +823,9 @@ class ModbusClient:
         self.write_command(self.CMD_MOVE_TO_POSE)
 
         if wait:
-            result = self.wait_for_done(process_events_callback=process_events_callback)
+            result = self.wait_for_done_motion_aware(
+                idle_timeout=idle_timeout,
+                process_events_callback=process_events_callback)
             after_pose = self.read_current_pose()
             if after_pose:
                 print(f"[BASE ROTATE] 회전 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, "

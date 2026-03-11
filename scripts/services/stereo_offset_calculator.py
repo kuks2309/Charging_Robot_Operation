@@ -19,15 +19,16 @@ logger = logging.getLogger(__name__)
 class StereoOffsetCalculator:
     """Sweep 데이터 기반 DS435-ArduCam mm 오프셋 계산기"""
 
-    # 이미지 중심 (1280x720)
-    IMAGE_CENTER_X = 640.0
-    IMAGE_CENTER_Y = 360.0
+    # DS435 이미지 중심 (1280x720 고정)
+    DS435_CENTER_X = 640.0
+    DS435_CENTER_Y = 360.0
 
-    def __init__(self, sweep_json_path: str):
+    def __init__(self, sweep_json_path: str, current_arducam_intrinsics=None):
         """sweep JSON 로드 및 카메라 간 오프셋 계산.
 
         Args:
             sweep_json_path: sweep 캘리브레이션 JSON 파일 경로
+            current_arducam_intrinsics: 현재 ArduCam 인트린식 (fy, width, height 비교용)
         """
         self._path = sweep_json_path
         self._data = None
@@ -36,6 +37,8 @@ class StereoOffsetCalculator:
         self._origin_pose_z = 0.0
         self._ds435_px_per_mm = {'y': 0.0, 'z': 0.0}
         self._arducam_px_per_mm = {'y': 0.0, 'z': 0.0}
+        self.is_valid = True
+        self._current_arducam_intrinsics = current_arducam_intrinsics
 
         self._load_and_compute(sweep_json_path)
 
@@ -43,6 +46,9 @@ class StereoOffsetCalculator:
         """JSON 로드 및 오프셋 계산"""
         with open(path, 'r') as f:
             self._data = json.load(f)
+
+        # sweep 데이터 카메라 정보 검증
+        self._validate_camera_info()
 
         results = self._data['results']
         origin_pose = self._data['origin_pose']
@@ -66,12 +72,18 @@ class StereoOffsetCalculator:
         arducam_mid_x = results['y']['arducam']['mid_x'][0]
         arducam_mid_y = results['z']['arducam']['mid_y'][0]
 
+        # 카메라별 이미지 중심 (camera_info에서 추출, 없으면 DS435 기본값)
+        cam_info = self._data.get('camera_info', {})
+        ar_info = cam_info.get('arducam', {})
+        ar_center_x = ar_info.get('width', 1280) / 2.0
+        ar_center_y = ar_info.get('height', 720) / 2.0
+
         # 각 카메라에서 마커가 이미지 중심으로부터 떨어진 거리를 mm로 변환
         # "마커를 이미지 중심에 놓으려면 로봇을 얼마나 이동해야 하는가"
-        ds_dy_mm = (ds435_mid_x - self.IMAGE_CENTER_X) / self._ds435_px_per_mm['y']
-        ds_dz_mm = (ds435_mid_y - self.IMAGE_CENTER_Y) / self._ds435_px_per_mm['z']
-        ar_dy_mm = (arducam_mid_x - self.IMAGE_CENTER_X) / self._arducam_px_per_mm['y']
-        ar_dz_mm = (arducam_mid_y - self.IMAGE_CENTER_Y) / self._arducam_px_per_mm['z']
+        ds_dy_mm = (ds435_mid_x - self.DS435_CENTER_X) / self._ds435_px_per_mm['y']
+        ds_dz_mm = (ds435_mid_y - self.DS435_CENTER_Y) / self._ds435_px_per_mm['z']
+        ar_dy_mm = (arducam_mid_x - ar_center_x) / self._arducam_px_per_mm['y']
+        ar_dz_mm = (arducam_mid_y - ar_center_y) / self._arducam_px_per_mm['z']
 
         # 카메라 간 오프셋 = ArduCam 광축 오프셋 - DS435 광축 오프셋
         # 의미: DS435 중심에 마커가 있을 때, ArduCam 중심으로 옮기기 위한 추가 이동량
@@ -87,6 +99,37 @@ class StereoOffsetCalculator:
             f"  카메라 오프셋: dY={self._camera_offset_y_mm:.2f}mm, dZ={self._camera_offset_z_mm:.2f}mm\n"
             f"  sweep 원점 Z: {self._origin_pose_z:.1f}mm"
         )
+
+    def _validate_camera_info(self):
+        """sweep JSON의 camera_info와 현재 카메라 인트린식 비교 검증"""
+        cam_info = self._data.get('camera_info')
+        if cam_info is None:
+            logger.warning(
+                "[StereoOffset] sweep JSON에 camera_info 없음 — "
+                "카메라 교체 전 데이터일 수 있음. 오프셋 정확도 미보장.")
+            self.is_valid = False
+            return
+
+        if self._current_arducam_intrinsics is None:
+            return
+
+        intrinsics = self._current_arducam_intrinsics
+        sweep_ar = cam_info.get('arducam', {})
+        sweep_fy = sweep_ar.get('fy', 0)
+        sweep_w = sweep_ar.get('width', 0)
+        sweep_h = sweep_ar.get('height', 0)
+
+        current_fy = getattr(intrinsics, 'fy', 0)
+        current_w = getattr(intrinsics, 'width', 0)
+        current_h = getattr(intrinsics, 'height', 0)
+
+        if (sweep_w != current_w or sweep_h != current_h
+                or abs(sweep_fy - current_fy) > 1.0):
+            logger.warning(
+                f"[StereoOffset] 카메라 불일치! sweep: {sweep_w}x{sweep_h} fy={sweep_fy:.1f}, "
+                f"현재: {current_w}x{current_h} fy={current_fy:.1f}. "
+                f"sweep 재실행 필요.")
+            self.is_valid = False
 
     @property
     def camera_offset_mm(self) -> Tuple[float, float]:

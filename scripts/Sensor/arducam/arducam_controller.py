@@ -22,8 +22,8 @@ class CameraIntrinsics:
     ppx: float  # principal point x (cx)
     ppy: float  # principal point y (cy)
     coeffs: list  # distortion coefficients [k1, k2, p1, p2, k3]
-    width: int = 1280
-    height: int = 720
+    width: int = 1920
+    height: int = 1080
 
     @classmethod
     def from_yaml(cls, filepath: str) -> 'CameraIntrinsics':
@@ -43,8 +43,8 @@ class CameraIntrinsics:
                 data.get('p2', 0.0),
                 data.get('k3', 0.0)
             ],
-            width=data.get('image_width', 1280),
-            height=data.get('image_height', 720)
+            width=data.get('image_width', 1920),
+            height=data.get('image_height', 1080)
         )
 
     def to_matrix(self) -> np.ndarray:
@@ -89,10 +89,10 @@ class ArduCamController:
         else:
             # 기본값 사용 (이상적인 핀홀 카메라)
             self.intrinsics = CameraIntrinsics(
-                fx=1280.0, fy=1280.0,
-                ppx=640.0, ppy=360.0,
+                fx=1920.0, fy=1920.0,
+                ppx=960.0, ppy=540.0,
                 coeffs=[0.0, 0.0, 0.0, 0.0, 0.0],
-                width=1280, height=720
+                width=1920, height=1080
             )
             self._use_calibration_file = False
             print(f"[ArduCam] Using default calibration (file not found: {calib_path})")
@@ -240,10 +240,6 @@ class ArduCamController:
 
         return devices
 
-    def __del__(self):
-        """소멸자"""
-        if self.is_running:
-            self.stop()
 
 
 # 테스트 코드

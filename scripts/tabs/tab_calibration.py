@@ -22,6 +22,7 @@ from utils.common import (
     Messages,
 )
 from utils.chessboard_detector import ChessboardDetector
+from utils.overlay import draw_crosshair, draw_center_marker
 from utils.camera_calib_position_generator import (
     generate_planar_positions_vision_tf,
     generate_base_positions_with_rotation,
@@ -339,8 +340,7 @@ class TabCalibration(QWidget):
             cx, cy = w // 2, h // 2
 
             # 중심점 십자선 표시
-            cv2.line(display_frame, (cx - 20, cy), (cx + 20, cy), (255, 255, 255), 2)
-            cv2.line(display_frame, (cx, cy - 20), (cx, cy + 20), (255, 255, 255), 2)
+            draw_crosshair(display_frame, cx, cy, (255, 255, 255), thickness=2, full_frame=False, arm_length=20)
             cv2.circle(display_frame, (cx, cy), 5, (0, 255, 255), -1)
 
             # 거리 텍스트 표시
@@ -667,8 +667,8 @@ class TabCalibration(QWidget):
     # ==================== 체스보드 로봇 정렬 ====================
 
     # 픽셀당 mm 변환 비율 (카메라 캘리브레이션 후 조정 필요)
-    # 해상도 1280x720 기준 (640x480 대비 2배 해상도 → 1/2 비율)
-    PIXEL_TO_MM = 0.25  # 기본값: 1픽셀 = 0.25mm (카메라 높이에 따라 달라짐)
+    # 1920x1080 기준, fy 비율(4003.2/5347.3=0.7486) 이론값 — 현장 측정 후 확정
+    PIXEL_TO_MM = 0.187  # 0.25 × (fy_old/fy_new) = 0.25 × 0.7486
 
     @require_robot_connection
     @require_camera_running
@@ -690,15 +690,10 @@ class TabCalibration(QWidget):
 
             # 체스보드 중심점 표시 (빨간색 - 화면 전체 라인)
             h, w = frame_copy.shape[:2]
-            cv2.line(frame_copy, (0, cy), (w, cy), (0, 0, 255), 1)
-            cv2.line(frame_copy, (cx, 0), (cx, h), (0, 0, 255), 1)
-            cv2.circle(frame_copy, (cx, cy), 8, (0, 0, 255), -1)
+            draw_center_marker(frame_copy, cx, cy, (0, 0, 255), radius=8, thickness=-1)
 
             # 이미지 중심점 표시 (파란색 - 화면 전체 라인)
-            img_cx, img_cy = w // 2, h // 2
-            cv2.line(frame_copy, (0, img_cy), (w, img_cy), (255, 0, 0), 1)
-            cv2.line(frame_copy, (img_cx, 0), (img_cx, h), (255, 0, 0), 1)
-            cv2.circle(frame_copy, (img_cx, img_cy), 8, (255, 0, 0), 2)
+            draw_center_marker(frame_copy, w // 2, h // 2, (255, 0, 0), radius=8, thickness=2)
 
             # 정보 텍스트
             cv2.putText(frame_copy, "Chessboard Detected", (10, 30),

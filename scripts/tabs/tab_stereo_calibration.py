@@ -13,6 +13,7 @@ from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import pyqtSignal, Qt
 
 from Sensor.aruco.aruco_detector import ArucoCameraPoseEstimator
+from utils.overlay import draw_image_center_crosshair
 
 # UI 파일 경로
 UI_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'ui')
@@ -169,9 +170,7 @@ class TabStereoCalibration(QWidget):
         h, w = overlay.shape[:2]
 
         # 이미지 중심 십자선 (회색)
-        img_cx, img_cy = w // 2, h // 2
-        cv2.line(overlay, (img_cx, 0), (img_cx, h), (128, 128, 128), 1)
-        cv2.line(overlay, (0, img_cy), (w, img_cy), (128, 128, 128), 1)
+        draw_image_center_crosshair(overlay)
 
         if not markers:
             return overlay
