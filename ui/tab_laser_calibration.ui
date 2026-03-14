@@ -909,6 +909,405 @@ QPushButton:disabled {
          <attribute name="title">
           <string>캘리브레이션 지그</string>
          </attribute>
+         <layout class="QVBoxLayout" name="verticalLayoutTabCalibJig">
+          <property name="spacing"><number>4</number></property>
+          <property name="leftMargin"><number>4</number></property>
+          <property name="topMargin"><number>4</number></property>
+          <property name="rightMargin"><number>4</number></property>
+          <property name="bottomMargin"><number>4</number></property>
+
+          <!-- 초기 위치 -->
+          <item>
+           <widget class="QGroupBox" name="groupJigPositions">
+            <property name="title">
+             <string>초기 위치 (TF4)</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayoutJigPositions">
+             <property name="spacing"><number>4</number></property>
+             <property name="leftMargin"><number>6</number></property>
+             <property name="topMargin"><number>6</number></property>
+             <property name="rightMargin"><number>6</number></property>
+             <property name="bottomMargin"><number>6</number></property>
+             <!-- 수직 -->
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayoutJigPosVertical">
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QLabel" name="labelJigPosVerticalTitle">
+                 <property name="text"><string>수직:</string></property>
+                 <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelJigPosVertical">
+                 <property name="text"><string>-</string></property>
+                 <property name="styleSheet"><string>font-size: 11px; color: #555;</string></property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacerJigPosV">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnSaveJigPosVertical">
+                 <property name="text"><string>저장</string></property>
+                 <property name="maximumSize"><size><width>50</width><height>16777215</height></size></property>
+                 <property name="styleSheet"><string>QPushButton { padding: 3px 8px; }</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnMoveJigPosVertical">
+                 <property name="text"><string>이동</string></property>
+                 <property name="maximumSize"><size><width>50</width><height>16777215</height></size></property>
+                 <property name="styleSheet"><string>QPushButton { padding: 3px 8px; background-color: #1565C0; color: white; }
+QPushButton:hover { background-color: #1976D2; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string></property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <!-- 수평 -->
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayoutJigPosHorizontal">
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QLabel" name="labelJigPosHorizontalTitle">
+                 <property name="text"><string>수평:</string></property>
+                 <property name="minimumSize"><size><width>30</width><height>0</height></size></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelJigPosHorizontal">
+                 <property name="text"><string>-</string></property>
+                 <property name="styleSheet"><string>font-size: 11px; color: #555;</string></property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacerJigPosH">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnSaveJigPosHorizontal">
+                 <property name="text"><string>저장</string></property>
+                 <property name="maximumSize"><size><width>50</width><height>16777215</height></size></property>
+                 <property name="styleSheet"><string>QPushButton { padding: 3px 8px; }</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnMoveJigPosHorizontal">
+                 <property name="text"><string>이동</string></property>
+                 <property name="maximumSize"><size><width>50</width><height>16777215</height></size></property>
+                 <property name="styleSheet"><string>QPushButton { padding: 3px 8px; background-color: #1565C0; color: white; }
+QPushButton:hover { background-color: #1976D2; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string></property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- 캘리브레이션 -->
+          <item>
+           <widget class="QGroupBox" name="groupCalibration">
+            <property name="title">
+             <string>캘리브레이션</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayoutCalibration">
+             <property name="spacing"><number>4</number></property>
+             <property name="leftMargin"><number>6</number></property>
+             <property name="topMargin"><number>6</number></property>
+             <property name="rightMargin"><number>6</number></property>
+             <property name="bottomMargin"><number>6</number></property>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayoutCalibration">
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QPushButton" name="btnCreateROI">
+                 <property name="text">
+                  <string>Laser ROI 생성</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="styleSheet">
+                  <string>QPushButton { padding: 5px 10px; font-weight: bold; }
+QPushButton:checked { background-color: #FF8F00; color: white; }</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnLaserDetect">
+                 <property name="text">
+                  <string>Laser 검출</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="styleSheet">
+                  <string>QPushButton { padding: 5px 10px; font-weight: bold; }
+QPushButton:checked { background-color: #0288D1; color: white; }</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacerCalibration">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size><width>40</width><height>20</height></size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelJigDetectResult">
+               <property name="text">
+                <string>-</string>
+               </property>
+               <property name="styleSheet">
+                <string>font-size: 12px; color: #0288D1; padding: 2px 4px;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- 수직 캘리브레이션 -->
+          <item>
+           <widget class="QGroupBox" name="groupVerticalCalib">
+            <property name="title">
+             <string>수직 캘리브레이션 (5단 지그)</string>
+            </property>
+            <layout class="QVBoxLayout" name="vLayoutVertCalib">
+             <property name="spacing"><number>4</number></property>
+             <property name="leftMargin"><number>6</number></property>
+             <property name="topMargin"><number>8</number></property>
+             <property name="rightMargin"><number>6</number></property>
+             <property name="bottomMargin"><number>6</number></property>
+
+             <!-- Step indicator -->
+             <item>
+              <layout class="QHBoxLayout" name="hLayoutStepIndicator">
+               <property name="spacing"><number>3</number></property>
+               <item>
+                <widget class="QLabel" name="labelStep1">
+                 <property name="text"><string>Step 1</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="minimumSize"><size><width>58</width><height>28</height></size></property>
+                 <property name="styleSheet"><string>border: 1px solid #888; border-radius: 4px; padding: 2px; background: #555; color: #ccc; font-size: 11px;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelStep2">
+                 <property name="text"><string>Step 2</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="minimumSize"><size><width>58</width><height>28</height></size></property>
+                 <property name="styleSheet"><string>border: 1px solid #888; border-radius: 4px; padding: 2px; background: #555; color: #ccc; font-size: 11px;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelStep3">
+                 <property name="text"><string>Step 3</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="minimumSize"><size><width>58</width><height>28</height></size></property>
+                 <property name="styleSheet"><string>border: 1px solid #888; border-radius: 4px; padding: 2px; background: #555; color: #ccc; font-size: 11px;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelStep4">
+                 <property name="text"><string>Step 4</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="minimumSize"><size><width>58</width><height>28</height></size></property>
+                 <property name="styleSheet"><string>border: 1px solid #888; border-radius: 4px; padding: 2px; background: #555; color: #ccc; font-size: 11px;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelStep5">
+                 <property name="text"><string>Step 5</string></property>
+                 <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 <property name="minimumSize"><size><width>58</width><height>28</height></size></property>
+                 <property name="styleSheet"><string>border: 1px solid #888; border-radius: 4px; padding: 2px; background: #555; color: #ccc; font-size: 11px;</string></property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="hSpacerStepInd">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+
+             <!-- Config row: step interval -->
+             <item>
+              <layout class="QHBoxLayout" name="hLayoutVertConfig">
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QLabel" name="labelStepIntervalTitle">
+                 <property name="text"><string>스텝 간격:</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QDoubleSpinBox" name="spinStepInterval">
+                 <property name="minimum"><double>1.0</double></property>
+                 <property name="maximum"><double>100.0</double></property>
+                 <property name="value"><double>10.0</double></property>
+                 <property name="singleStep"><double>1.0</double></property>
+                 <property name="suffix"><string> mm</string></property>
+                 <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="hSpacerVertConfig">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+
+             <!-- Scan buttons -->
+             <item>
+              <layout class="QHBoxLayout" name="hLayoutVertButtons">
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QPushButton" name="btnMoveToVertScan">
+                 <property name="text"><string>위치로 이동</string></property>
+                 <property name="styleSheet"><string>QPushButton { padding: 5px 10px; background-color: #37474F; color: white; border-radius: 4px; }
+QPushButton:hover { background-color: #546E7A; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnScanVertical">
+                 <property name="text"><string>캡처 추가</string></property>
+                 <property name="styleSheet">
+                  <string>QPushButton { padding: 5px 12px; font-weight: bold; background-color: #1565C0; color: white; border-radius: 4px; }
+QPushButton:hover { background-color: #1976D2; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnClearVertScan">
+                 <property name="text"><string>클리어</string></property>
+                 <property name="styleSheet"><string>QPushButton { padding: 5px 10px; }</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelVertScanStatus">
+                 <property name="text"><string>-</string></property>
+                 <property name="styleSheet"><string>font-size: 11px; color: #0288D1; padding: 2px 6px;</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelCaptureCount">
+                 <property name="text"><string>캡처: 0회</string></property>
+                 <property name="styleSheet"><string>font-size: 11px; color: #FF8F00; padding: 2px 6px; font-weight: bold;</string></property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="hSpacerVertButtons">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+
+             <!-- Step results -->
+             <item>
+              <widget class="QWidget" name="widgetStepResults">
+               <layout class="QGridLayout" name="gridStepResults">
+                <property name="spacing"><number>2</number></property>
+                <property name="leftMargin"><number>0</number></property>
+                <property name="topMargin"><number>0</number></property>
+                <property name="rightMargin"><number>0</number></property>
+                <property name="bottomMargin"><number>0</number></property>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="labelStepRes1">
+                  <property name="text"><string>Step 1: -</string></property>
+                  <property name="styleSheet"><string>font-size: 11px; color: #aaa; padding: 1px 4px;</string></property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="labelStepRes2">
+                  <property name="text"><string>Step 2: -</string></property>
+                  <property name="styleSheet"><string>font-size: 11px; color: #aaa; padding: 1px 4px;</string></property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="labelStepRes3">
+                  <property name="text"><string>Step 3: -</string></property>
+                  <property name="styleSheet"><string>font-size: 11px; color: #aaa; padding: 1px 4px;</string></property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="labelStepRes4">
+                  <property name="text"><string>Step 4: -</string></property>
+                  <property name="styleSheet"><string>font-size: 11px; color: #aaa; padding: 1px 4px;</string></property>
+                 </widget>
+                </item>
+                <item row="4" column="0">
+                 <widget class="QLabel" name="labelStepRes5">
+                  <property name="text"><string>Step 5: -</string></property>
+                  <property name="styleSheet"><string>font-size: 11px; color: #aaa; padding: 1px 4px;</string></property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+
+             <!-- Fit button + result -->
+             <item>
+              <layout class="QHBoxLayout" name="hLayoutVertFit">
+               <property name="spacing"><number>4</number></property>
+               <item>
+                <widget class="QPushButton" name="btnFitVertModel">
+                 <property name="text"><string>모델 피팅 &amp; 저장</string></property>
+                 <property name="enabled"><bool>false</bool></property>
+                 <property name="styleSheet">
+                  <string>QPushButton { padding: 5px 10px; font-weight: bold; background-color: #2E7D32; color: white; border-radius: 4px; }
+QPushButton:hover { background-color: #388E3C; }
+QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelVertFitResult">
+                 <property name="text"><string>-</string></property>
+                 <property name="styleSheet"><string>font-size: 11px; color: #2E7D32; padding: 2px 6px;</string></property>
+                 <property name="wordWrap"><bool>true</bool></property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Spacer -->
+          <item>
+           <spacer name="verticalSpacerTabCalibJig">
+            <property name="orientation"><enum>Qt::Vertical</enum></property>
+            <property name="sizeHint" stdset="0">
+             <size><width>20</width><height>40</height></size>
+            </property>
+           </spacer>
+          </item>
+
+         </layout>
         </widget>
 
        </widget>
