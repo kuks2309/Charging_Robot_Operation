@@ -27,10 +27,7 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 from scipy.optimize import differential_evolution
 
-from Sensor.laser.extract_laser_center import (
-    extract_laser_center_conv,
-    fit_laser_line,
-)
+from services.laser_detection_service import LaserDetectionService
 from utils.image_processing import compute_roi_rects
 
 
@@ -502,45 +499,25 @@ class LaserScanService(QObject):
         return left_result, right_result
 
     def _detect_in_roi(self, frame: np.ndarray, roi_rect: tuple):
-        """ROI 내에서 레이저 중심선 검출.
+        """ROI 내에서 레이저 중심선 검출 — LaserDetectionService 위임.
 
         Args:
             frame: 전체 프레임 (BGR)
             roi_rect: (x0, y0, x1, y1) — 원본 이미지 좌표
 
         Returns:
-            dict with detection results, or None if detection failed
+            dict with {y_mean, y_min, y_max, angle_deg, num_inliers}, or None
         """
-        x0, y0, x1, y1 = roi_rect
-        if (x1 - x0) < 10 or (y1 - y0) < 10:
+        result = LaserDetectionService.detect_in_roi(frame, roi_rect)
+        if result is None or len(result['inlier_y']) == 0:
             return None
-
-        cropped = frame[y0:y1, x0:x1]
-        cols, centers_y, est_width = extract_laser_center_conv(cropped)
-
-        if len(cols) == 0:
-            return None
-
-        # 좌표를 원본 이미지 기준으로 변환
-        cols = cols + x0
-        centers_y = centers_y + y0
-
-        coeffs, inlier_cols, inlier_y = fit_laser_line(cols, centers_y)
-
-        if coeffs is None or len(coeffs) < 2:
-            return None
-        if len(inlier_y) == 0:
-            return None
-
-        angle_deg = float(np.degrees(np.arctan(coeffs[0])))
-        y_mean = float(np.mean(inlier_y))
-
+        iy = result['inlier_y']
         return {
-            'y_mean': y_mean,
-            'y_min': float(inlier_y.min()),
-            'y_max': float(inlier_y.max()),
-            'angle_deg': angle_deg,
-            'num_inliers': len(inlier_y),
+            'y_mean': float(np.mean(iy)),
+            'y_min': float(iy.min()),
+            'y_max': float(iy.max()),
+            'angle_deg': result['angle_deg'],
+            'num_inliers': len(iy),
         }
 
     # ==================== Utilities ====================
