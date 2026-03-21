@@ -1968,9 +1968,11 @@ class MainWindow(QMainWindow):
         if (any_success and cam_pose and
                 time.time() - self.robot._last_command_time > 60):
             if resp == 0:  # Idle
-                regs = [self.robot.to_uint16(int(round(v * 10))) for v in cam_pose]
-                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+                self.robot.send_move_to_pose(
+                    cam_pose[0], cam_pose[1], cam_pose[2],
+                    cam_pose[3], cam_pose[4], cam_pose[5],
+                    wait=False
+                )
                 self._log("[Keepalive] 현재 위치로 movel 전송 (idle 60초 경과)")
 
     def _handle_connection_lost(self):
@@ -2548,12 +2550,11 @@ class MainWindow(QMainWindow):
                 target[4] = TARGET_RY
                 target[5] = TARGET_RZ
 
-                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
-                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-                result = self.robot.wait_for_done_motion_aware(
-                    process_events_callback=QApplication.processEvents)
+                result = self.robot.send_move_to_pose(
+                    target[0], target[1], target[2],
+                    target[3], target[4], target[5],
+                    wait=True
+                )
                 if not result[0]:
                     tab._update_ds435_calib_step(0, f"Detection Pose 이동 실패: {result[1]}")
                     return
@@ -3003,12 +3004,11 @@ class MainWindow(QMainWindow):
                 target[4] = TARGET_RY
                 target[5] = TARGET_RZ
 
-                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
-                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-                result = self.robot.wait_for_done_motion_aware(
-                    process_events_callback=QApplication.processEvents)
+                result = self.robot.send_move_to_pose(
+                    target[0], target[1], target[2],
+                    target[3], target[4], target[5],
+                    wait=True
+                )
                 if not result[0]:
                     tab._update_ds435_calib_step(0, f"Detection Pose 이동 실패: {result[1]}")
                     return
@@ -4700,12 +4700,11 @@ class MainWindow(QMainWindow):
                 target[4] = TARGET_RY
                 target[5] = TARGET_RZ
 
-                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
-                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-                result = self.robot.wait_for_done_motion_aware(
-                    process_events_callback=QApplication.processEvents)
+                result = self.robot.send_move_to_pose(
+                    target[0], target[1], target[2],
+                    target[3], target[4], target[5],
+                    wait=True
+                )
                 if not result[0]:
                     self.labelTestAlignStatus.setText(f"Detection Pose 이동 실패: {result[1]}")
                     return
@@ -4818,12 +4817,11 @@ class MainWindow(QMainWindow):
                 target[4] = TARGET_RY
                 target[5] = TARGET_RZ
 
-                regs = [self.robot.to_uint16(int(round(v * 10))) for v in target]
-                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-                result = self.robot.wait_for_done_motion_aware(
-                    process_events_callback=QApplication.processEvents)
+                result = self.robot.send_move_to_pose(
+                    target[0], target[1], target[2],
+                    target[3], target[4], target[5],
+                    wait=True
+                )
                 if not result[0]:
                     self.labelTestAlignStatus.setText(f"Detection Pose 이동 실패: {result[1]}")
                     return

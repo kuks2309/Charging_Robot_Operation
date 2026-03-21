@@ -41,6 +41,9 @@ class ModbusClient:
     STATUS_DONE = 2
     STATUS_ERROR = 3
 
+    # movel 장경로 보호 임계값 (로봇 3축 보호 범위 ±160° 기준)
+    MOVEL_LONG_PATH_THRESHOLD = 160  # 이 각도 이상의 회전 delta는 증분(CMD 54-56)으로 전환
+
     # 연결 검증 설정
     VERIFICATION_TIMEOUT = 2.0  # 검증 타임아웃 (초)
     VERIFICATION_RETRIES = 3    # 최대 재시도 횟수
@@ -661,7 +664,7 @@ class ModbusClient:
                 for axis_name, cur, tgt in axis_map:
                     cur_n = self.normalize_angle(cur)
                     raw_delta = tgt - cur_n  # wrapping 없는 raw 차이
-                    if abs(raw_delta) >= 180:
+                    if abs(raw_delta) >= self.MOVEL_LONG_PATH_THRESHOLD:
                         # movel이 장경로(-350° 등)로 회전할 시나리오 → 증분 회전으로 사전 보정
                         short_delta = raw_delta
                         while short_delta > 180: short_delta -= 360
@@ -873,9 +876,9 @@ class ModbusClient:
         # 핵심: raw_delta(wrapping 전)로 감지. wrapping 후 delta는 항상 단경로이므로 감지 불가.
         before_normalized = self.normalize_angle(before_pose[idx])
         raw_delta = target[idx] - before_normalized  # wrapping 없는 raw 차이
-        if abs(raw_delta) >= 180:
-            # ±180° 경계 교차 → 증분 회전(CMD 54-56)으로 전환
-            print(f"[BASE ROTATE] ±180° 경계 교차 감지 (delta={movel_delta:.1f}°) → 증분 회전으로 전환")
+        if abs(raw_delta) >= self.MOVEL_LONG_PATH_THRESHOLD:
+            # 로봇 3축 보호 범위(±160°) 초과 → 증분 회전(CMD 54-56)으로 전환
+            print(f"[BASE ROTATE] ±180° 경계 교차 감지 (raw_delta={raw_delta:.1f}°) → 증분 회전으로 전환")
             cmd_map = {
                 'rx': (self.REGISTER_POSE_RX, self.CMD_BASE_ROTATE_X),
                 'ry': (self.REGISTER_POSE_RY, self.CMD_BASE_ROTATE_Y),

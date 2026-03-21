@@ -352,47 +352,49 @@ class TabLaserCalibration(QWidget, JogMixin):
         from PyQt5.QtWidgets import QApplication, QMessageBox
 
         try:
-            pose = self.robot.read_current_pose()
-            if pose is None:
-                QMessageBox.warning(self, "경고", "TCP 좌표를 읽을 수 없습니다.")
+            # TF5 강제 설정
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
+            if not success:
+                self._log(f"TF5 설정 실패: {msg}")
                 return
 
-            x, y, z = pose[0], pose[1], pose[2]
-
-            # config에서 목표 RxRyRz 읽기 (매번 핫 리로드)
-            tgt_rx, tgt_ry, tgt_rz = 90.0, 0.0, 180.0  # 기본값
+            # config에서 목표 포즈 읽기 (매번 핫 리로드)
             try:
                 with open(LASER_DETECTION_POSE_FILE, 'r', encoding='utf-8') as f:
                     dp_cfg = json.load(f)
-                tgt_rx = dp_cfg.get('target_rx', 90.0)
-                tgt_ry = dp_cfg.get('target_ry', 0.0)
-                tgt_rz = dp_cfg.get('target_rz', 180.0)
             except Exception as e:
-                self._log(f"Detection Pose config 로드 실패 (기본값 사용): {e}")
+                self._log(f"Detection Pose config 로드 실패: {e}")
+                return
 
-            self._log(f"현재: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
-            self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
+            tgt_x = dp_cfg.get('target_x')
+            tgt_y = dp_cfg.get('target_y')
+            tgt_z = dp_cfg.get('target_z')
+            tgt_rx = dp_cfg.get('target_rx')
+            tgt_ry = dp_cfg.get('target_ry')
+            tgt_rz = dp_cfg.get('target_rz')
 
-            to_int16 = self.robot.to_uint16
-            regs = [
-                to_int16(int(round(x * 10))),
-                to_int16(int(round(y * 10))),
-                to_int16(int(round(z * 10))),
-                to_int16(int(round(tgt_rx * 10))),
-                to_int16(int(round(tgt_ry * 10))),
-                to_int16(int(round(tgt_rz * 10))),
-            ]
-            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+            if any(v is None for v in [tgt_x, tgt_y, tgt_z, tgt_rx, tgt_ry, tgt_rz]):
+                self._log("Detection Pose config에 필수 값 누락")
+                return
 
-            success, msg = self.robot.wait_for_done_motion_aware(
-                process_events_callback=QApplication.processEvents
+            self._log(f"목표: X={tgt_x:.1f} Y={tgt_y:.1f} Z={tgt_z:.1f} "
+                      f"Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
+
+            success, msg = self.robot.send_move_to_pose(
+                tgt_x, tgt_y, tgt_z, tgt_rx, tgt_ry, tgt_rz,
+                wait=True,
+                process_events_callback=QApplication.processEvents,
             )
             if not success:
                 self._log(f"Detection Pose 이동 실패: {msg}")
                 return
 
             self._log("Detection Pose 이동 완료")
+
+            # movel 후 TF5 재설정
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
+            if not success:
+                self._log(f"TF5 재설정 실패: {msg}")
 
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox
@@ -1180,20 +1182,11 @@ class TabLaserCalibration(QWidget, JogMixin):
 
         from PyQt5.QtWidgets import QApplication
         try:
-            to_int16 = self.robot.to_uint16
-            regs = [
-                to_int16(int(round(pos['x']  * 10))),
-                to_int16(int(round(pos['y']  * 10))),
-                to_int16(int(round(pos['z']  * 10))),
-                to_int16(int(round(pos['rx'] * 10))),
-                to_int16(int(round(pos['ry'] * 10))),
-                to_int16(int(round(pos['rz'] * 10))),
-            ]
-            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-            success, msg = self.robot.wait_for_done_motion_aware(
-                process_events_callback=QApplication.processEvents
+            success, msg = self.robot.send_move_to_pose(
+                pos['x'], pos['y'], pos['z'],
+                pos['rx'], pos['ry'], pos['rz'],
+                wait=True,
+                process_events_callback=QApplication.processEvents,
             )
             if not success:
                 self._log(f"지그 {label} 위치 이동 실패: {msg}")

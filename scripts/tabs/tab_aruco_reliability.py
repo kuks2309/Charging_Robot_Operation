@@ -1580,7 +1580,6 @@ class TabArucoReliability(QWidget, JogMixin):
             self._log(f"목표: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
 
             # 3) 개별 축 회전 (delta가 0.5° 이상인 축만)
-            to_int16 = self.robot.to_uint16
             rot_x, rot_y, rot_z = cur_rx, cur_ry, cur_rz
 
             for axis_name, cur_val, tgt_val in [('Rx', cur_rx, tgt_rx), ('Ry', cur_ry, tgt_ry), ('Rz', cur_rz, tgt_rz)]:
@@ -1598,18 +1597,9 @@ class TabArucoReliability(QWidget, JogMixin):
                     rot_z = tgt_rz
 
                 self._log(f"  {axis_name}: {cur_val:.1f} → {tgt_val:.1f} (Δ={delta:.2f}°)")
-                regs = [
-                    to_int16(int(round(cur_x * 10))),
-                    to_int16(int(round(cur_y * 10))),
-                    to_int16(int(round(cur_z * 10))),
-                    to_int16(int(round(rot_x * 10))),
-                    to_int16(int(round(rot_y * 10))),
-                    to_int16(int(round(rot_z * 10))),
-                ]
-                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-                success, msg = self.robot.wait_for_done_motion_aware(
+                success, msg = self.robot.send_move_to_pose(
+                    cur_x, cur_y, cur_z, rot_x, rot_y, rot_z,
+                    wait=True,
                     process_events_callback=QApplication.processEvents
                 )
                 if not success:
@@ -1674,22 +1664,11 @@ class TabArucoReliability(QWidget, JogMixin):
             self._log(f"현재: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
             self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
 
-            to_int16 = self.robot.to_uint16
-
             # 3) 1단계: 현재 XYZ 유지 + 목표 RxRyRz로 회전
             self._log("1단계: RxRyRz 회전")
-            regs_rot = [
-                to_int16(int(round(cur_x * 10))),
-                to_int16(int(round(cur_y * 10))),
-                to_int16(int(round(cur_z * 10))),
-                to_int16(int(round(tgt_rx * 10))),
-                to_int16(int(round(tgt_ry * 10))),
-                to_int16(int(round(tgt_rz * 10))),
-            ]
-            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs_rot)
-            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-            success, msg = self.robot.wait_for_done_motion_aware(
+            success, msg = self.robot.send_move_to_pose(
+                cur_x, cur_y, cur_z, tgt_rx, tgt_ry, tgt_rz,
+                wait=True,
                 process_events_callback=QApplication.processEvents
             )
             if not success:
@@ -1700,18 +1679,9 @@ class TabArucoReliability(QWidget, JogMixin):
 
             # 4) 2단계: 목표 XYZ로 위치 이동 (RxRyRz 유지)
             self._log("2단계: XYZ 위치 이동")
-            regs_pos = [
-                to_int16(int(round(x * 10))),
-                to_int16(int(round(y * 10))),
-                to_int16(int(round(z * 10))),
-                to_int16(int(round(tgt_rx * 10))),
-                to_int16(int(round(tgt_ry * 10))),
-                to_int16(int(round(tgt_rz * 10))),
-            ]
-            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs_pos)
-            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
-
-            success, msg = self.robot.wait_for_done_motion_aware(
+            success, msg = self.robot.send_move_to_pose(
+                x, y, z, tgt_rx, tgt_ry, tgt_rz,
+                wait=True,
                 process_events_callback=QApplication.processEvents
             )
             if not success:
