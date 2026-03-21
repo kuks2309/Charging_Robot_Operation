@@ -135,6 +135,11 @@ class TabArucoReliability(QWidget, JogMixin):
         self.capture_timer = QTimer()
         self.capture_timer.timeout.connect(self._on_capture_next)
 
+        # 로봇 포즈 업데이트 타이머 (1초 주기)
+        self._robot_pose_timer = QTimer()
+        self._robot_pose_timer.timeout.connect(self._update_robot_pose_ui)
+        self._robot_pose_timer.start(1000)
+
         # 카메라 선택 버튼 그룹 (DS435/ArduCam)
         self.camera_select_button_group = QButtonGroup(self)
         self.camera_select_button_group.addButton(self.radioDS435, 0)
