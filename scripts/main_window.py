@@ -1669,53 +1669,16 @@ class MainWindow(QMainWindow):
             self._set_aruco_align_buttons_enabled(True)
 
     def _on_aruco_align_combined(self):
-        """통합 정렬: 수평 먼저 → 수직 (수평 정렬이 Rz 정확도에 영향)"""
+        """통합 정렬: 수평 정렬 → 수직 정렬 순차 실행"""
         if not self._require_robot():
             return
 
-        self._set_aruco_align_buttons_enabled(False)
-        try:
-            self._log("[통합] ArUco 통합 정렬 시작 (Y → X)")
-            QApplication.processEvents()
+        self._log("[통합] 수평 정렬 시작")
+        self._on_aruco_align_y()
+        self._settle()
 
-            # 1) Y 정렬 (Ry + Base Y)
-            alignment = self._aruco_tab_detect_alignment()
-            if alignment is not None:
-                active_ry = self._get_effective_ry(alignment)
-                if active_ry is not None and abs(active_ry) >= 0.5:
-                    self._log(f"[통합] Ry 보정: {active_ry:.2f}°")
-                    self._on_ar_tag_align_base_ry(active_ry)
-                    self._settle()
-
-                alignment2 = self._aruco_tab_detect_alignment()
-                if alignment2 is not None and alignment2.offset_y is not None and abs(alignment2.offset_y) >= 5.0:
-                    self._log(f"[통합] Y 보정: {alignment2.offset_y:.1f}px")
-                    self._on_ar_tag_align_base_y(alignment2.offset_y)
-                    self._settle()
-
-            # 2) X 정렬 (Rz)
-            alignment3 = self._aruco_tab_detect_alignment()
-            if alignment3 is not None and alignment3.angle_rx is not None and abs(alignment3.angle_rx) >= 0.3:
-                tab = self.tabArucoReliability
-                distance = getattr(tab, '_last_marker_distance', None) or 360.0
-                self._log(f"[통합] Rz 보정: {alignment3.angle_rx:.2f}°, D={distance:.0f}mm")
-                self._on_ar_tag_align_base_rz(alignment3.angle_rx, distance)
-                self._settle()
-
-            # 3) 최종 결과
-            final = self._aruco_tab_detect_alignment()
-            if final is not None:
-                ry_f = self._get_effective_ry(final)
-                rx_f = final.angle_rx if final.angle_rx is not None else 0
-                oy_f = final.offset_y if final.offset_y is not None else 0
-                self._log(f"[통합] 정렬 완료: Ry={ry_f:.2f}°, Rz={rx_f:.2f}°, offset_y={oy_f:.1f}px")
-            else:
-                self._log("[통합] 최종 검출 실패")
-
-        except Exception as e:
-            self._log(f"[통합] 오류: {e}")
-        finally:
-            self._set_aruco_align_buttons_enabled(True)
+        self._log("[통합] 수직 정렬 시작")
+        self._on_aruco_align_x()
 
     def _measure_marker_dy_px(self):
         """현재 카메라 프레임에서 마커 중점의 dY 픽셀 오프셋 측정"""
