@@ -3985,6 +3985,18 @@ class MainWindow(QMainWindow):
         pose = self.robot.read_current_pose()
         z_tcp = pose[2] if pose is not None else 0.0
 
+        # -- 이미지 저장 --
+        try:
+            frame = self.arducam_manager.get_latest_frame() if self.arducam_manager else None
+            if frame is not None:
+                import cv2
+                img_dir = os.path.join(os.path.dirname(state['csv_path']), 'images')
+                os.makedirs(img_dir, exist_ok=True)
+                img_path = os.path.join(img_dir, f"step_{step_idx + 1:02d}_Z{z_tcp:.1f}.png")
+                cv2.imwrite(img_path, frame)
+        except Exception:
+            pass
+
         # -- 다중 측정 + outlier 제거 --
         import time
         n_meas = state.get('measurements_per_pos', 10)
