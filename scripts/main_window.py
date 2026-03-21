@@ -3987,7 +3987,7 @@ class MainWindow(QMainWindow):
 
         # -- 이미지 저장 --
         try:
-            frame = self.arducam_manager.get_latest_frame() if self.arducam_manager else None
+            frame = self.arducam_manager.get_frame() if self.arducam_manager else None
             if frame is not None:
                 import cv2
                 img_dir = os.path.join(os.path.dirname(state['csv_path']), 'images')
