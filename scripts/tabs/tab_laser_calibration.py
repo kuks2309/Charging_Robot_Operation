@@ -34,6 +34,7 @@ LASER_HORIZ_SCAN_ROI_FILE = os.path.join(CONFIG_DIR, 'laser', 'horizontal', 'las
 JIG_POSITIONS_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_jig_positions.json')
 LASER_JIG_STEP_CONFIG_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_jig_step_config.json')
 LASER_VERT_CALIB_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_vertical_triangulation_calib.json')
+LASER_DETECTION_POSE_FILE = os.path.join(CONFIG_DIR, 'laser', 'laser_detection_pose.json')
 LASER_VERT_CALIB_DATA_DIR = os.path.join(
     os.path.dirname(__file__), '..', '..', 'data', 'laser_scan', 'calibration', 'vertical'
 )
@@ -365,7 +366,17 @@ class TabLaserCalibration(QWidget, JogMixin):
                 return
 
             x, y, z = pose[0], pose[1], pose[2]
-            tgt_rx, tgt_ry, tgt_rz = 90.0, 0.0, 90.0
+
+            # config에서 목표 RxRyRz 읽기 (매번 핫 리로드)
+            tgt_rx, tgt_ry, tgt_rz = 90.0, 0.0, 90.0  # 기본값
+            try:
+                with open(LASER_DETECTION_POSE_FILE, 'r', encoding='utf-8') as f:
+                    dp_cfg = json.load(f)
+                tgt_rx = dp_cfg.get('target_rx', 90.0)
+                tgt_ry = dp_cfg.get('target_ry', 0.0)
+                tgt_rz = dp_cfg.get('target_rz', 90.0)
+            except Exception as e:
+                self._log(f"Detection Pose config 로드 실패 (기본값 사용): {e}")
 
             self._log(f"현재: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
             self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
@@ -839,7 +850,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         """캘리브레이션 테이블 초기화"""
         table = self.tableCalibData
         table.setColumnCount(7)
-        table.setHorizontalHeaderLabels(['#', 'X1(mm)', 'Z1(mm)', 'X2(mm)', 'Z2(mm)', 'ΔX(mm)', 'ΔZ(mm)'])
+        table.setHorizontalHeaderLabels(['#', 'Y1(mm)', 'Z1(mm)', 'Y2(mm)', 'Z2(mm)', 'ΔY(mm)', 'ΔZ(mm)'])
         table.setColumnWidth(0, 30)
         for col in range(1, 7):
             table.setColumnWidth(col, 65)
@@ -1050,17 +1061,17 @@ class TabLaserCalibration(QWidget, JogMixin):
         return LaserDetectionService.get_laser_y_at_center(
             frame, min_half_width=min_hw, max_half_width=max_hw)
 
-    def _add_calib_row(self, x1, z1, x2, z2):
+    def _add_calib_row(self, y1, z1, y2, z2):
         """캘리브레이션 데이터 행 추가"""
-        dx = x2 - x1
+        dy = y2 - y1
         dz = z2 - z1
         self._calib_data.append({
-            'x1': x1, 'z1': z1, 'x2': x2, 'z2': z2, 'dx': dx, 'dz': dz
+            'y1': y1, 'z1': z1, 'y2': y2, 'z2': z2, 'dy': dy, 'dz': dz
         })
         row = self.tableCalibData.rowCount()
         self.tableCalibData.insertRow(row)
         from PyQt5.QtWidgets import QTableWidgetItem
-        values = [str(row + 1), f"{x1:.2f}", f"{z1:.2f}", f"{x2:.2f}", f"{z2:.2f}", f"{dx:.2f}", f"{dz:.2f}"]
+        values = [str(row + 1), f"{y1:.2f}", f"{z1:.2f}", f"{y2:.2f}", f"{z2:.2f}", f"{dy:.2f}", f"{dz:.2f}"]
         for col, val in enumerate(values):
             self.tableCalibData.setItem(row, col, QTableWidgetItem(val))
 

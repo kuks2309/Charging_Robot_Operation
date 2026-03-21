@@ -93,14 +93,17 @@ class LaserScanService(QObject):
     def _load_triangulation_calib(self) -> dict | None:
         """삼각측량 기하학 캘리브레이션 파일 로드.
 
-        필수 키: h_mm, Bx_mm, alpha_deg
+        필수 키: h_mm, By_mm (또는 하위호환 Bx_mm), alpha_deg
         """
         try:
             with open(self._CALIB_FILE, 'r', encoding='utf-8') as f:
                 calib = json.load(f)
-            if all(k in calib for k in ('h_mm', 'Bx_mm', 'alpha_deg')):
+            # 하위호환: 기존 Bx_mm 키를 By_mm으로 매핑
+            if 'Bx_mm' in calib and 'By_mm' not in calib:
+                calib['By_mm'] = calib['Bx_mm']
+            if all(k in calib for k in ('h_mm', 'By_mm', 'alpha_deg')):
                 return calib
-            self._log("[LaserScan] 캘리브레이션 파일에 필수 키 누락 (h_mm, Bx_mm, alpha_deg)")
+            self._log("[LaserScan] 캘리브레이션 파일에 필수 키 누락 (h_mm, By_mm, alpha_deg)")
         except FileNotFoundError:
             pass
         except Exception as exc:
@@ -372,7 +375,7 @@ class LaserScanService(QObject):
             return {'estimated_deg': None, 'error': 'no_camera_matrix'}
 
         h = self._triang_calib['h_mm']
-        Bx = self._triang_calib['Bx_mm']
+        By = self._triang_calib['By_mm']
         alpha_rad = np.radians(self._triang_calib['alpha_deg'])
         fy = self._camera_matrix[1, 1]
         cy = self._camera_matrix[1, 2]
@@ -381,10 +384,10 @@ class LaserScanService(QObject):
 
         def y_model(deltas, d0, phi_rad):
             tp = np.tan(phi_rad)
-            t = (d0 - Bx + tp * (h - deltas)) / (ca + sa * tp)
+            t = (d0 - By + tp * (h - deltas)) / (ca + sa * tp)
             z_hit = h - t * sa
-            x_hit = Bx + t * ca
-            return cy - fy * z_hit / x_hit
+            y_hit = By + t * ca
+            return cy - fy * z_hit / y_hit
 
         def residual_sum(params, z_arr, y_arr):
             d0, phi_deg = params
@@ -429,7 +432,7 @@ class LaserScanService(QObject):
             'left_deg': estimates.get('left'),
             'right_deg': estimates.get('right'),
             'model': 'nonlinear_geometric',
-            'params': {'h_mm': h, 'Bx_mm': Bx,
+            'params': {'h_mm': h, 'By_mm': By,
                        'alpha_deg': self._triang_calib['alpha_deg']},
         }
 

@@ -3602,9 +3602,9 @@ class MainWindow(QMainWindow):
 
         tab = self.tabLaserCalibration
         tab.set_current_pose(*pose[:6])
-        tab._calib_pos1 = (pose[0], pose[2])  # x, z
-        tab._update_calib_step(3, f"위치 1 저장: X={pose[0]:.2f}, Z={pose[2]:.2f}")
-        self._log(f"[Calib] 위치 1 저장: X={pose[0]:.2f}, Z={pose[2]:.2f}")
+        tab._calib_pos1 = (pose[1], pose[2])  # y, z
+        tab._update_calib_step(3, f"위치 1 저장: Y={pose[1]:.2f}, Z={pose[2]:.2f}")
+        self._log(f"[Calib] 위치 1 저장: Y={pose[1]:.2f}, Z={pose[2]:.2f}")
 
     def _on_calib_move_x_adjust_z(self):
         """X 이동 + Z 재조정"""
@@ -3613,20 +3613,20 @@ class MainWindow(QMainWindow):
 
         tab = self.tabLaserCalibration
         x_step = tab.spinXMoveStep.value()
-        tab._update_calib_step(4, f"X {x_step}mm 이동 중...")
-        self._log(f"[Calib] X {x_step}mm 이동 시작")
+        tab._update_calib_step(4, f"Y {x_step}mm 이동 중...")
+        self._log(f"[Calib] Y {x_step}mm 이동 시작")
 
         try:
-            # X 이동
+            # Y 이동
             success, msg = self.robot.send_base_linear(
-                'x', x_step,
+                'y', x_step,
                 process_events_callback=QApplication.processEvents)
             if not success:
-                self._log(f"[Calib] X 이동 실패: {msg}")
-                tab._update_calib_step(0, f"X 이동 실패: {msg}")
+                self._log(f"[Calib] Y 이동 실패: {msg}")
+                tab._update_calib_step(0, f"Y 이동 실패: {msg}")
                 return
 
-            self._calib_wait_for_position_stable('x')
+            self._calib_wait_for_position_stable('y')
             time.sleep(0.2)  # PRS 클린업 대기
 
             # Z 재조정
@@ -3638,13 +3638,13 @@ class MainWindow(QMainWindow):
             tab.set_z_adjust_status(False)
 
             if z_result:
-                tab._update_calib_step(4, "X 이동 + Z 재조정 완료")
-                self._log("[Calib] X 이동 + Z 재조정 완료")
+                tab._update_calib_step(4, "Y 이동 + Z 재조정 완료")
+                self._log("[Calib] Y 이동 + Z 재조정 완료")
             else:
                 tab._update_calib_step(0, "Z 재조정 실패")
                 self._log("[Calib] Z 재조정 실패")
         except Exception as e:
-            self._log(f"[Calib] X 이동 + Z 재조정 오류: {e}")
+            self._log(f"[Calib] Y 이동 + Z 재조정 오류: {e}")
             tab._update_calib_step(0, f"오류: {e}")
             tab.set_z_adjust_status(False)
 
@@ -3664,14 +3664,14 @@ class MainWindow(QMainWindow):
             self._log("[Calib] 위치 읽기 실패")
             return
 
-        x1, z1 = tab._calib_pos1
-        x2, z2 = pose[0], pose[2]
-        tab._add_calib_row(x1, z1, x2, z2)
+        y1, z1 = tab._calib_pos1
+        y2, z2 = pose[1], pose[2]
+        tab._add_calib_row(y1, z1, y2, z2)
 
-        dx = x2 - x1
+        dy = y2 - y1
         dz = z2 - z1
-        tab._update_calib_step(5, f"비교 저장: ΔX={dx:.2f}, ΔZ={dz:.2f}")
-        self._log(f"[Calib] 비교 저장: X1={x1:.2f}, Z1={z1:.2f}, X2={x2:.2f}, Z2={z2:.2f}, ΔX={dx:.2f}, ΔZ={dz:.2f}")
+        tab._update_calib_step(5, f"비교 저장: ΔY={dy:.2f}, ΔZ={dz:.2f}")
+        self._log(f"[Calib] 비교 저장: Y1={y1:.2f}, Z1={z1:.2f}, Y2={y2:.2f}, Z2={z2:.2f}, ΔY={dy:.2f}, ΔZ={dz:.2f}")
 
         # 다음 반복을 위해 pos1 초기화
         tab._calib_pos1 = None
@@ -3761,24 +3761,24 @@ class MainWindow(QMainWindow):
                     tab._update_calib_step(0, "오류: 위치 읽기 실패")
                     tab._reset_auto_calib_ui()
                     return
-                self._auto_calib_pos1 = (pose[0], pose[2])
+                self._auto_calib_pos1 = (pose[1], pose[2])
                 tab.set_current_pose(*pose[:6])
-                self._log(f"[Calib] Auto 위치 1: X={pose[0]:.2f}, Z={pose[2]:.2f}")
+                self._log(f"[Calib] Auto 위치 1: Y={pose[1]:.2f}, Z={pose[2]:.2f}")
                 self._auto_calib_state = 'MOVING_X'
                 QTimer.singleShot(100, self._auto_calib_step)
 
             elif state == 'MOVING_X':
                 x_step = tab.spinXMoveStep.value()
-                tab._update_calib_step(4, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] X {x_step}mm 이동 중...")
+                tab._update_calib_step(4, f"[{self._auto_calib_iteration+1}/{self._auto_calib_total}] Y {x_step}mm 이동 중...")
                 success, msg = self.robot.send_base_linear(
-                    'x', x_step,
+                    'y', x_step,
                     process_events_callback=QApplication.processEvents)
                 if not success:
                     self._auto_calib_state = 'ERROR'
-                    tab._update_calib_step(0, f"오류: X 이동 실패 - {msg}")
+                    tab._update_calib_step(0, f"오류: Y 이동 실패 - {msg}")
                     tab._reset_auto_calib_ui()
                     return
-                self._calib_wait_for_position_stable('x')
+                self._calib_wait_for_position_stable('y')
                 time.sleep(0.2)
                 self._auto_calib_state = 'Z_READJUSTING'
                 QTimer.singleShot(100, self._auto_calib_step)
@@ -3812,14 +3812,14 @@ class MainWindow(QMainWindow):
                     tab._reset_auto_calib_ui()
                     return
 
-                pos2 = (pose[0], pose[2])
+                pos2 = (pose[1], pose[2])
                 tab._add_calib_row(
                     self._auto_calib_pos1[0], self._auto_calib_pos1[1],
                     pos2[0], pos2[1])
 
-                dx = pos2[0] - self._auto_calib_pos1[0]
+                dy = pos2[0] - self._auto_calib_pos1[0]
                 dz = pos2[1] - self._auto_calib_pos1[1]
-                self._log(f"[Calib] Auto 반복 {self._auto_calib_iteration+1}: ΔX={dx:.2f}, ΔZ={dz:.2f}")
+                self._log(f"[Calib] Auto 반복 {self._auto_calib_iteration+1}: ΔY={dy:.2f}, ΔZ={dz:.2f}")
 
                 self._auto_calib_iteration += 1
                 tab.progressCalib.setValue(self._auto_calib_iteration)
