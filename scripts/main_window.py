@@ -1151,15 +1151,15 @@ class MainWindow(QMainWindow):
 
             x, y, z, rx, ry, rz = current_pose
             new_rz = rz + angle
-            # Y 보정: ΔY = D × tan(ΔRz)
-            dy = distance * math.tan(math.radians(angle))
-            new_y = y - dy
+            # X 보정 (좌측 배치: Y→-X 매핑): ΔX = D × tan(ΔRz)
+            dx = distance * math.tan(math.radians(angle))
+            new_x = x + dx
 
-            self._log(f"[ArUco] Rz 보정: ΔRz={angle:.2f}°, D={distance:.0f}mm, ΔY={dy:.2f}mm")
-            self._log(f"[ArUco] 현재: Y={y:.1f}, Rz={rz:.1f} → 목표: Y={new_y:.1f}, Rz={new_rz:.1f}")
+            self._log(f"[ArUco] Rz 보정: ΔRz={angle:.2f}°, D={distance:.0f}mm, ΔX={dx:.2f}mm")
+            self._log(f"[ArUco] 현재: X={x:.1f}, Rz={rz:.1f} → 목표: X={new_x:.1f}, Rz={new_rz:.1f}")
 
             success, msg = self.robot.send_move_to_pose(
-                x, new_y, z, rx, ry, new_rz,
+                new_x, y, z, rx, ry, new_rz,
                 wait=True, process_events_callback=QApplication.processEvents)
             if success:
                 self._log(f"[ArUco] Rz + Y 보정 완료")
@@ -1170,9 +1170,9 @@ class MainWindow(QMainWindow):
             self._log(f"[ArUco] Rz + Y 보정 오류: {e}")
 
     def _on_ar_tag_align_base_y(self, dy_px: float, measure_func=None):
-        """ArUco 정렬 탭 - 적응형 Base Y 위치 보정
+        """ArUco 정렬 탭 - 적응형 Base X 위치 보정 (좌측 배치: Y→-X 매핑)
 
-        1단계: +5mm 테스트 이동 → px/mm 비율 산출 (부호 자동 결정)
+        1단계: -5mm 테스트 이동 (Base X) → px/mm 비율 산출 (부호 자동 결정)
         2단계: 비율 기반 보정 이동 (fine translate, 0.1mm 해상도)
         3단계: 재측정 검증
 
@@ -1192,41 +1192,41 @@ class MainWindow(QMainWindow):
         MAX_CORRECTION_MM = 50.0
 
         if abs(dy_px) < DEAD_ZONE_PX:
-            self._log("[ArUco] Base Y: 오프셋 3px 미만, 보정 불필요")
+            self._log("[ArUco] Base X: 오프셋 3px 미만, 보정 불필요")
             return
 
         try:
             d0 = dy_px
-            # 오프셋 반대 방향으로 테스트 (d0>0: 마커 오른쪽 → Y-, d0<0: 마커 왼쪽 → Y+)
-            test_cmd = -TEST_MM if d0 > 0 else TEST_MM
-            self._log(f"[ArUco] Base Y 보정 시작: d0={d0:.1f}px")
+            # 좌측 배치 Y→-X: 오프셋 반대 방향으로 테스트 (Base X, 부호 반전)
+            test_cmd = TEST_MM if d0 > 0 else -TEST_MM
+            self._log(f"[ArUco] Base X 보정 시작: d0={d0:.1f}px")
 
             # --- 1단계: 테스트 이동으로 px/mm 비율 산출 ---
-            # 이동 전 로봇 Y 좌표 기록
+            # 이동 전 로봇 X 좌표 기록 (좌측 배치: Y→-X 매핑)
             pose_before = self.robot.read_current_pose()
             if pose_before is None:
                 self._log("[ArUco] 현재 포즈 읽기 실패")
                 return
-            y_before = pose_before[1]
+            x_before = pose_before[0]
 
-            self._log(f"[ArUco] 1단계: {test_cmd:+.1f}mm 테스트 이동")
+            self._log(f"[ArUco] 1단계: Base X {test_cmd:+.1f}mm 테스트 이동")
             success, msg = self.robot.send_base_linear(
-                'y', test_cmd, wait=True,
+                'x', test_cmd, wait=True,
                 process_events_callback=QApplication.processEvents)
             if not success:
                 self._log(f"[ArUco] 테스트 이동 실패: {msg}")
                 return
 
             # 위치 안정화 대기: 이동 후 위치가 변하지 않을 때까지 폴링 (최대 10초)
-            _, final_y = self._wait_for_position_stable(
-                axis_idx=1, reference_val=y_before)
-            actual_mm = final_y - y_before
+            _, final_x = self._wait_for_position_stable(
+                axis_idx=0, reference_val=x_before)
+            actual_mm = final_x - x_before
             self._log(f"[ArUco] 실제 이동: {actual_mm:.2f}mm (명령: {test_cmd:+.1f}mm)")
 
             if abs(actual_mm) < 0.5:
                 self._log("[ArUco] 실제 이동 < 0.5mm, 로봇 이동 불가. 복귀")
                 self.robot.send_base_linear(
-                    'y', -test_cmd, wait=True,
+                    'x', -test_cmd, wait=True,
                     process_events_callback=QApplication.processEvents)
                 return
 
@@ -1234,7 +1234,7 @@ class MainWindow(QMainWindow):
             if d1 is None:
                 self._log("[ArUco] 테스트 후 마커 감지 실패, 복귀")
                 self.robot.send_base_linear(
-                    'y', -test_cmd, wait=True,
+                    'x', -test_cmd, wait=True,
                     process_events_callback=QApplication.processEvents)
                 return
 
@@ -1244,7 +1244,7 @@ class MainWindow(QMainWindow):
             if abs(delta_px) < 2:
                 self._log("[ArUco] 픽셀 변화 < 2px, 측정 불안정. 복귀")
                 self.robot.send_base_linear(
-                    'y', -test_cmd, wait=True,
+                    'x', -test_cmd, wait=True,
                     process_events_callback=QApplication.processEvents)
                 return
 
@@ -1254,7 +1254,7 @@ class MainWindow(QMainWindow):
 
             # --- 2단계: 비율 기반 보정 이동 ---
             correction_mm = -d1 / px_per_mm
-            self._log(f"[ArUco] 2단계: 보정 {correction_mm:.1f}mm")
+            self._log(f"[ArUco] 2단계: Base X 보정 {correction_mm:.1f}mm")
 
             if abs(correction_mm) > MAX_CORRECTION_MM:
                 self._log(f"[ArUco] 보정 과대 ({correction_mm:.1f}mm > {MAX_CORRECTION_MM}mm), 안전 중단")
@@ -1262,7 +1262,7 @@ class MainWindow(QMainWindow):
 
             # 0.1mm 해상도 정밀 이동 사용
             success, msg = self.robot.send_base_linear(
-                'y', correction_mm, wait=True,
+                'x', correction_mm, wait=True,
                 process_events_callback=QApplication.processEvents)
             if not success:
                 self._log(f"[ArUco] 보정 이동 실패: {msg}")
@@ -1275,9 +1275,9 @@ class MainWindow(QMainWindow):
 
             d_final = measure_func()
             if d_final is not None:
-                self._log(f"[ArUco] Base Y 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
+                self._log(f"[ArUco] Base X 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
             else:
-                self._log(f"[ArUco] Base Y 보정 완료: 총 {total_mm:.1f}mm (검증 측정 실패)")
+                self._log(f"[ArUco] Base X 보정 완료: 총 {total_mm:.1f}mm (검증 측정 실패)")
 
             self._update_statusbar()
         except Exception as e:
@@ -1745,25 +1745,19 @@ class MainWindow(QMainWindow):
         return offset
 
     def _on_ar_tag_align_single_axis(self, axis: str, angle: float):
-        """AR Tag TCP Align - 개별 축 tool.rot 테스트"""
+        """AR Tag TCP Align - 개별 축 tool.rot (TF5 기준)"""
         if not self._require_robot():
             return
-        tf_changed = False
+        # TF5 확인, 필요시 전환
+        if not self._ensure_toolframe(5):
+            self._log("[AR Tag] TF5 설정 실패")
+            return
         try:
             dbg = self.tabArucoReliability.txtAlignDebug
 
             # Vision→Robot 축 매핑 (카메라 마운트 기준)
             axis_map = {'rx': 'ry', 'ry': 'rz', 'rz': 'rx'}
             robot_axis = axis_map.get(axis.lower(), axis)
-
-            # TF4로 변경
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
-            if not success:
-                self._log(f"[AR Tag] TF4 설정 실패: {msg}")
-                return
-            tf_changed = True
-            self._log("[AR Tag] TF4 설정 완료")
-            time.sleep(0.2)
 
             # 정렬 전 자세
             before = self.robot.read_camera_pose()
@@ -1790,28 +1784,18 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log(f"[AR Tag] 오류: {e}")
         finally:
-            if tf_changed:
-                self._ensure_toolframe(3)
             self._update_statusbar()
 
     def _on_ar_tag_align_parallel(self, drx: float, dry: float, drz: float):
-        """AR Tag TCP Align - TF4 기준 tool.rot 회전으로 마커 평행 정렬"""
+        """AR Tag TCP Align - TF5 기준 tool.rot 회전으로 마커 평행 정렬"""
         if not self._require_robot():
             return
-
-        tf_changed = False
+        # TF5 확인, 필요시 전환
+        if not self._ensure_toolframe(5):
+            self._log("[AR Tag] TF5 설정 실패")
+            return
         try:
             dbg = self.tabArucoReliability.txtAlignDebug
-
-            # TF4로 변경
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
-            if not success:
-                self._log(f"[AR Tag] TF4 설정 실패: {msg}")
-                QMessageBox.warning(self, "오류", f"TF4 설정 실패:\n{msg}")
-                return
-            tf_changed = True
-            self._log("[AR Tag] TF4 설정 완료")
-            time.sleep(0.2)  # PRS 클린업 대기
 
             # 정렬 전 자세
             before = self.robot.read_camera_pose()
@@ -1852,8 +1836,6 @@ class MainWindow(QMainWindow):
             self._log(f"[AR Tag] 정렬 오류: {e}")
             QMessageBox.warning(self, "오류", f"정렬 실패:\n{e}")
         finally:
-            if tf_changed:
-                self._ensure_toolframe(3)
             self._update_statusbar()
 
     def _update_robot_status(self):
@@ -5574,11 +5556,11 @@ class MainWindow(QMainWindow):
         self._stop_all_cameras()
 
         # Vision 탭 (인덱스 1), 캘리브레이션 탭 (인덱스 2) → TF1
-        # ArUco 신뢰성 검증 탭 (인덱스 3) → TF4 (TF5는 TCP 오프셋이 커서 보호정지)
+        # ArUco 신뢰성 검증 탭 (인덱스 3) → TF5
         if index in [1, 2, 3]:
             if self.robot and self.robot.is_connected:
                 try:
-                    tf = 4 if index == 3 else 1
+                    tf = 5 if index == 3 else 1
                     success, msg = self.robot.send_set_toolframe(tf, wait=True)
                     tab_name = "Vision" if index == 1 else ("캘리브레이션" if index == 2 else "ArUco 신뢰성 검증")
                     if success:
