@@ -1528,7 +1528,7 @@ class TabArucoReliability(QWidget, JogMixin):
         self.align_single_axis_requested.emit(axis, angle)
 
     def _on_align_parallel(self):
-        """마커 평행 정렬 버튼 핸들러 - TF4 기준 tool.rot 회전"""
+        """마커 평행 정렬 버튼 핸들러 - TF5 기준 tool.rot 회전"""
         if not hasattr(self, '_last_tcp_correction') or self._last_tcp_correction is None:
             QMessageBox.warning(self, "경고", "TCP 보정값이 없습니다.\n먼저 신뢰성 검증을 실행하세요.")
             return
@@ -1538,7 +1538,7 @@ class TabArucoReliability(QWidget, JogMixin):
         self.align_parallel_requested.emit(drx, dry, drz)
 
     def _on_set_detection_pose(self):
-        """set_rz.py 방식: TF3 전환 → 현재XYZ+목표RxRyRz movel → TF5 복귀"""
+        """set_rz.py 방식: TF5 전환 → 현재XYZ+목표RxRyRz movel → TF5 유지"""
         if self.robot is None:
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
             return
@@ -1550,11 +1550,11 @@ class TabArucoReliability(QWidget, JogMixin):
         from PyQt5.QtWidgets import QApplication
 
         try:
-            # 1) TF3(기본)으로 전환 - set_rz.py와 동일 조건
-            self._log("Detection Pose: TF3으로 전환")
-            success, msg = self.robot.send_set_toolframe(3, wait=True)
+            # 1) TF5으로 전환
+            self._log("Detection Pose: TF5으로 전환")
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
             if not success:
-                self._log(f"TF3 전환 실패: {msg}")
+                self._log(f"TF5 전환 실패: {msg}")
                 return
             time.sleep(0.5)
 
@@ -1596,18 +1596,18 @@ class TabArucoReliability(QWidget, JogMixin):
             self._log("Detection Pose 이동 완료")
             time.sleep(0.5)
 
-            # 5) TF4로 복귀 (TF5는 TCP 오프셋이 커서 3축 보호정지 발생)
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            # 5) TF5 유지 확인
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
             if success:
-                self._log("TF4 복귀 완료")
+                self._log("TF5 확인 완료")
             else:
-                self._log(f"TF4 복귀 실패: {msg}")
+                self._log(f"TF5 설정 실패: {msg}")
 
         except Exception as e:
             QMessageBox.warning(self, "오류", f"Detection Pose 실패: {e}")
 
     def _on_set_robot_position(self):
-        """Config의 detection_pose XYZ + RxRyRz로 절대 이동 (TF3→movel→TF4)"""
+        """Config의 detection_pose XYZ + RxRyRz로 절대 이동 (TF5→movel→TF5 유지)"""
         if self.robot is None:
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
             return
@@ -1640,11 +1640,11 @@ class TabArucoReliability(QWidget, JogMixin):
             return
 
         try:
-            # 1) TF3 전환
-            self._log("Set Robot Position: TF3으로 전환")
-            success, msg = self.robot.send_set_toolframe(3, wait=True)
+            # 1) TF5 전환
+            self._log("Set Robot Position: TF5으로 전환")
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
             if not success:
-                self._log(f"TF3 전환 실패: {msg}")
+                self._log(f"TF5 전환 실패: {msg}")
                 return
             time.sleep(0.5)
 
@@ -1674,12 +1674,12 @@ class TabArucoReliability(QWidget, JogMixin):
             self._log("Set Robot Position 이동 완료")
             time.sleep(0.5)
 
-            # 4) TF4 복귀
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            # 4) TF5 유지 확인
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
             if success:
-                self._log("TF4 복귀 완료")
+                self._log("TF5 확인 완료")
             else:
-                self._log(f"TF4 복귀 실패: {msg}")
+                self._log(f"TF5 설정 실패: {msg}")
 
         except Exception as e:
             QMessageBox.warning(self, "오류", f"Set Robot Position 실패: {e}")
