@@ -1281,7 +1281,122 @@ class MainWindow(QMainWindow):
 
             self._update_statusbar()
         except Exception as e:
-            self._log(f"[ArUco] Base Y 보정 오류: {e}")
+            self._log(f"[ArUco] Base X 보정 오류: {e}")
+
+    def _on_ar_tag_align_base_z(self, dz_px: float, measure_func=None):
+        """수직 정렬 - 적응형 Base Z 위치 보정 (이미지 세로 중심 맞추기)
+
+        1단계: +5mm 테스트 이동 (Base Z) → px/mm 비율 산출
+        2단계: 비율 기반 보정 이동
+        3단계: 재측정 검증
+
+        Args:
+            dz_px: 초기 세로 오프셋 (픽셀, 양수=아래쪽)
+            measure_func: 재측정 함수 () -> Optional[float].
+                          None이면 기본 offset_z 측정 사용.
+        """
+        if measure_func is None:
+            measure_func = self._measure_marker_dz_px
+        if not self._require_robot():
+            return
+
+        DEAD_ZONE_PX = 3
+        TEST_MM = 5.0
+        MAX_CORRECTION_MM = 50.0
+
+        if abs(dz_px) < DEAD_ZONE_PX:
+            self._log("[ArUco] Base Z: 오프셋 3px 미만, 보정 불필요")
+            return
+
+        try:
+            d0 = dz_px
+            test_cmd = -TEST_MM if d0 > 0 else TEST_MM
+            self._log(f"[ArUco] Base Z 보정 시작: d0={d0:.1f}px")
+
+            # --- 1단계: 테스트 이동으로 px/mm 비율 산출 ---
+            pose_before = self.robot.read_current_pose()
+            if pose_before is None:
+                self._log("[ArUco] 현재 포즈 읽기 실패")
+                return
+            z_before = pose_before[2]
+
+            self._log(f"[ArUco] 1단계: Base Z {test_cmd:+.1f}mm 테스트 이동")
+            success, msg = self.robot.send_base_linear(
+                'z', test_cmd, wait=True,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                self._log(f"[ArUco] 테스트 이동 실패: {msg}")
+                return
+
+            _, final_z = self._wait_for_position_stable(
+                axis_idx=2, reference_val=z_before)
+            actual_mm = final_z - z_before
+            self._log(f"[ArUco] 실제 이동: {actual_mm:.2f}mm (명령: {test_cmd:+.1f}mm)")
+
+            if abs(actual_mm) < 0.5:
+                self._log("[ArUco] 실제 이동 < 0.5mm, 로봇 이동 불가. 복귀")
+                self.robot.send_base_linear(
+                    'z', -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            d1 = measure_func()
+            if d1 is None:
+                self._log("[ArUco] 테스트 후 마커 감지 실패, 복귀")
+                self.robot.send_base_linear(
+                    'z', -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            delta_px = d1 - d0
+            self._log(f"[ArUco] 테스트 결과: d1={d1:.1f}px, 변화={delta_px:.1f}px")
+
+            if abs(delta_px) < 2:
+                self._log("[ArUco] 픽셀 변화 < 2px, 측정 불안정. 복귀")
+                self.robot.send_base_linear(
+                    'z', -test_cmd, wait=True,
+                    process_events_callback=QApplication.processEvents)
+                return
+
+            px_per_mm = delta_px / actual_mm
+            self._log(f"[ArUco] 비율: {px_per_mm:.2f} px/mm ({abs(1.0/px_per_mm):.3f} mm/px)")
+
+            # --- 2단계: 비율 기반 보정 이동 ---
+            correction_mm = -d1 / px_per_mm
+            self._log(f"[ArUco] 2단계: Base Z 보정 {correction_mm:.1f}mm")
+
+            if abs(correction_mm) > MAX_CORRECTION_MM:
+                self._log(f"[ArUco] 보정 과대 ({correction_mm:.1f}mm > {MAX_CORRECTION_MM}mm), 안전 중단")
+                return
+
+            success, msg = self.robot.send_base_linear(
+                'z', correction_mm, wait=True,
+                process_events_callback=QApplication.processEvents)
+            if not success:
+                self._log(f"[ArUco] 보정 이동 실패: {msg}")
+                return
+
+            total_mm = test_cmd + correction_mm
+
+            # --- 3단계: 이동완료 대기 후 검증 ---
+            self._settle(0.5)
+
+            d_final = measure_func()
+            if d_final is not None:
+                self._log(f"[ArUco] Base Z 보정 완료: 총 {total_mm:.1f}mm, 잔여={d_final:.1f}px")
+            else:
+                self._log(f"[ArUco] Base Z 보정 완료: 총 {total_mm:.1f}mm (검증 측정 실패)")
+
+            self._update_statusbar()
+        except Exception as e:
+            self._log(f"[ArUco] Base Z 보정 오류: {e}")
+
+    def _measure_marker_dz_px(self):
+        """ArUco 마커 세로 오프셋(offset_z) 측정"""
+        alignment = self._aruco_tab_detect_alignment()
+        if alignment is not None and alignment.offset_z is not None:
+            return alignment.offset_z
+        return None
 
     def _get_target_tag_ids(self):
         """ArUco 탭에서 타겟 마커 ID 쌍 반환"""
@@ -1517,7 +1632,7 @@ class MainWindow(QMainWindow):
             self._set_aruco_align_buttons_enabled(True)
 
     def _on_aruco_align_x(self):
-        """수직 정렬: Rz 보정 (세로축 깊이 차이 기반)"""
+        """수직 정렬: Base Z 이동으로 이미지 세로 중심 맞추기"""
         if not self._require_robot():
             return
 
@@ -1531,26 +1646,20 @@ class MainWindow(QMainWindow):
                 self._log("[수직] 정렬 실패: 마커 미검출")
                 return
 
-            # 2) Rz 보정 (>=0.3deg)
-            if alignment.angle_rx is not None and abs(alignment.angle_rx) >= 0.3:
-                tab = self.tabArucoReliability
-                distance = getattr(tab, '_last_marker_distance', None)
-                if distance is None:
-                    self._log("[수직] 마커 거리 정보 없음, 기본값 360mm 사용")
-                    distance = 360.0
-
-                self._log(f"[수직] Rz 보정: {alignment.angle_rx:.2f}°, D={distance:.0f}mm")
-                self._on_ar_tag_align_base_rz(alignment.angle_rx, distance)
+            # 2) Base Z 보정 (세로 중심 맞추기, >=5px)
+            if alignment.offset_z is not None and abs(alignment.offset_z) >= 5.0:
+                self._log(f"[수직] Z 보정: {alignment.offset_z:.1f}px")
+                self._on_ar_tag_align_base_z(alignment.offset_z)
                 self._settle()
             else:
-                rx_disp = alignment.angle_rx if alignment.angle_rx is not None else 0
-                self._log(f"[수직] Rz 보정 불필요: {rx_disp:.2f}°")
+                oz_disp = alignment.offset_z if alignment.offset_z is not None else 0
+                self._log(f"[수직] Z 보정 불필요: {oz_disp:.1f}px")
 
             # 3) 최종 검출 + 결과
             alignment2 = self._aruco_tab_detect_alignment()
             if alignment2 is not None:
-                rx2 = alignment2.angle_rx if alignment2.angle_rx is not None else 0
-                self._log(f"[수직] 정렬 완료: Rz={rx2:.2f}°")
+                oz2 = alignment2.offset_z if alignment2.offset_z is not None else 0
+                self._log(f"[수직] 정렬 완료: offset_z={oz2:.1f}px")
             else:
                 self._log("[수직] 최종 검출 실패")
 
