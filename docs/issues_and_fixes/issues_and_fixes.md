@@ -3045,3 +3045,20 @@ sysfs 기반 자동 감지:
 - `scripts/tabs/__init__.py` (`TabAIDetection` import/export 추가)
 - `scripts/main_window.py` (import, insertTab, 프레임 핸들러, 시그널 연결, 탭 활성화)
 - 수동 고정 필요 시 `config/camera_config.json`에서 `"device_index": 0` 처럼 정수 지정
+
+---
+
+## 2026-03-21: 통합 정렬 코드 리팩토링
+
+### 문제
+- `_on_aruco_align_combined()`가 수평/수직 정렬 로직을 자체 구현 (Ry→BaseY→Rz 보정)
+- 기존 `_on_aruco_align_y()`(수평), `_on_aruco_align_x()`(수직) 핸들러와 로직 중복
+- 통합 정렬의 보정 항목(Ry+BaseY+Rz)이 개별 버튼과 불일치 (수직=Rz vs 수직=BaseZ)
+
+### 수정
+- `_on_aruco_align_combined()` 자체 보정 로직 삭제
+- 기존 `_on_aruco_align_y()` → `_on_aruco_align_x()` 순차 호출로 변경
+- 버튼 활성화/비활성화는 각 핸들러 내부에서 자체 관리
+
+### 수정 파일
+- `scripts/main_window.py` (`_on_aruco_align_combined` 간소화)
