@@ -94,7 +94,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._current_pose = None
         self._show_aruco_overlay = False
 
-        # 지그 초기 위치 (TF5 기준)
+        # 지그 초기 위치 (TF4 기준)
         self._jig_pos_vertical = None
         self._jig_pos_horizontal = None
 
@@ -343,7 +343,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.robot = robot
 
     def _on_set_detection_pose(self):
-        """현재 XYZ 유지 + config 목표 RxRyRz로 movel (TF5 기준)"""
+        """현재 XYZ 유지 + config 목표 RxRyRz로 movel (TF4 기준)"""
         if self.robot is None:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
@@ -352,10 +352,10 @@ class TabLaserCalibration(QWidget, JogMixin):
         from PyQt5.QtWidgets import QApplication, QMessageBox
 
         try:
-            # TF5 강제 설정
-            success, msg = self.robot.send_set_toolframe(5, wait=True)
+            # TF4 강제 설정
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
             if not success:
-                self._log(f"TF5 설정 실패: {msg}")
+                self._log(f"TF4 설정 실패: {msg}")
                 return
 
             # config에서 목표 포즈 읽기 (매번 핫 리로드)
@@ -380,21 +380,53 @@ class TabLaserCalibration(QWidget, JogMixin):
             self._log(f"목표: X={tgt_x:.1f} Y={tgt_y:.1f} Z={tgt_z:.1f} "
                       f"Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
 
-            success, msg = self.robot.send_move_to_pose(
-                tgt_x, tgt_y, tgt_z, tgt_rx, tgt_ry, tgt_rz,
-                wait=True,
-                process_events_callback=QApplication.processEvents,
-            )
-            if not success:
-                self._log(f"Detection Pose 이동 실패: {msg}")
+            # movel 대신 transx/y/z + rotrx/y/z 순차 이동 (Joint 3 리밋 방지)
+            cur = self.robot.read_current_pose()
+            if not cur:
+                self._log("현재 포즈 읽기 실패")
                 return
+
+            steps = [
+                ('Z', 'z', tgt_z - cur[2]),
+                ('Y', 'y', tgt_y - cur[1]),
+                ('X', 'x', tgt_x - cur[0]),
+            ]
+            for axis_name, axis, delta in steps:
+                if abs(delta) < 0.5:
+                    continue
+                self._log(f"  {axis_name} 이동: {delta:+.1f}mm")
+                ok, msg = self.robot.send_base_linear(
+                    axis, delta, wait=True,
+                    process_events_callback=QApplication.processEvents,
+                )
+                if not ok:
+                    self._log(f"Detection Pose {axis_name} 이동 실패: {msg}")
+                    return
+                QApplication.processEvents()
+
+            # Rz 보정 (현재값과 목표 차이)
+            cur = self.robot.read_current_pose()
+            if cur:
+                for axis_name, idx, tgt_val in [('Rx', 3, tgt_rx), ('Ry', 4, tgt_ry), ('Rz', 5, tgt_rz)]:
+                    delta = tgt_val - cur[idx]
+                    while delta > 180: delta -= 360
+                    while delta < -180: delta += 360
+                    if abs(delta) > 0.5:
+                        self._log(f"  {axis_name} 보정: {delta:+.1f}°")
+                        ok, msg = self.robot.send_base_rotate(
+                            axis_name.lower(), delta, wait=True,
+                            process_events_callback=QApplication.processEvents,
+                        )
+                        if not ok:
+                            self._log(f"Detection Pose {axis_name} 보정 실패: {msg}")
+                            return
 
             self._log("Detection Pose 이동 완료")
 
-            # movel 후 TF5 재설정
-            success, msg = self.robot.send_set_toolframe(5, wait=True)
+            # movel 후 TF4 재설정
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
             if not success:
-                self._log(f"TF5 재설정 실패: {msg}")
+                self._log(f"TF4 재설정 실패: {msg}")
 
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox
@@ -1133,7 +1165,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         )
 
     def _on_save_jig_pos(self, orientation):
-        """현재 위치를 수직/수평 초기 위치로 저장 (TF5 기준)"""
+        """현재 위치를 수직/수평 초기 위치로 저장 (TF4 기준)"""
         if self.robot is None:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
@@ -1157,7 +1189,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             self._update_jig_pos_label(orientation, pos_dict)
             self._save_jig_positions()
             label = '수직' if orientation == 'vertical' else '수평'
-            self._log(f"지그 {label} 위치 저장 (TF5): X={pos_dict['x']:.1f} Y={pos_dict['y']:.1f} "
+            self._log(f"지그 {label} 위치 저장 (TF4): X={pos_dict['x']:.1f} Y={pos_dict['y']:.1f} "
                       f"Z={pos_dict['z']:.1f} Rx={pos_dict['rx']:.1f} Ry={pos_dict['ry']:.1f} Rz={pos_dict['rz']:.1f}")
         except Exception as e:
             self._log(f"위치 저장 오류: {e}")
@@ -1169,7 +1201,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._on_save_jig_pos('horizontal')
 
     def _on_move_jig_pos(self, orientation):
-        """수직/수평 초기 위치로 이동 (TF5 유지)"""
+        """수직/수평 초기 위치로 이동 (TF4 유지)"""
         pos = self._jig_pos_vertical if orientation == 'vertical' else self._jig_pos_horizontal
         label = '수직' if orientation == 'vertical' else '수평'
         if pos is None:
@@ -1191,7 +1223,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             if not success:
                 self._log(f"지그 {label} 위치 이동 실패: {msg}")
                 return
-            self._log(f"지그 {label} 위치 이동 완료 (TF5)")
+            self._log(f"지그 {label} 위치 이동 완료 (TF4)")
         except Exception as e:
             self._log(f"이동 오류: {e}")
 

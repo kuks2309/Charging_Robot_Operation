@@ -43,6 +43,8 @@ class ModbusClient:
 
     # movel 장경로 보호 임계값 (로봇 3축 보호 범위 ±160° 기준)
     MOVEL_LONG_PATH_THRESHOLD = 160  # 이 각도 이상의 회전 delta는 증분(CMD 54-56)으로 전환
+    # movel 최대 이동거리 제한 (Joint 3 리밋 방지)
+    MOVEL_MAX_STEP_MM = 150  # 한 번의 movel에서 최대 XYZ 이동거리 (mm)
 
     # 연결 검증 설정
     VERIFICATION_TIMEOUT = 2.0  # 검증 타임아웃 (초)
@@ -660,22 +662,62 @@ class ModbusClient:
         try:
             current = self.read_current_pose()
             if current:
+                # 회전 장경로 사전 보정
                 axis_map = [('rx', current[3], rx), ('ry', current[4], ry), ('rz', current[5], rz)]
                 for axis_name, cur, tgt in axis_map:
                     cur_n = self.normalize_angle(cur)
                     raw_delta = tgt - cur_n  # wrapping 없는 raw 차이
                     if abs(raw_delta) >= self.MOVEL_LONG_PATH_THRESHOLD:
-                        # movel이 장경로(-350° 등)로 회전할 시나리오 → 증분 회전으로 사전 보정
                         short_delta = raw_delta
                         while short_delta > 180: short_delta -= 360
                         while short_delta < -180: short_delta += 360
                         print(f"[MOVE POSE] {axis_name.upper()} 장경로 감지 (raw={raw_delta:.1f}°, short={short_delta:.1f}°) → 증분 회전으로 사전 보정")
                         self.send_base_rotate(axis_name, short_delta, wait=True)
-                        time.sleep(0.1)
-        except Exception as e:
-            print(f"[MOVE POSE] 장경로 사전 보정 실패 (무시하고 movel 진행): {e}")
+                        time.sleep(0.2)
 
-        # mm×10, deg×10 스케일링 후 uint16 변환
+                # XYZ 이동거리 분할: 최대 MOVEL_MAX_STEP_MM 단위로 분할하여 순차 이동
+                current = self.read_current_pose()  # 회전 보정 후 재읽기
+                if current:
+                    dx = x - current[0]
+                    dy = y - current[1]
+                    dz = z - current[2]
+                    dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+                    if dist > self.MOVEL_MAX_STEP_MM:
+                        n_steps = math.ceil(dist / self.MOVEL_MAX_STEP_MM)
+                        print(f"[MOVE POSE] XYZ 이동거리 {dist:.1f}mm > {self.MOVEL_MAX_STEP_MM}mm → {n_steps}단계 분할 이동")
+                        for step in range(1, n_steps):
+                            t = step / n_steps
+                            wp_x = current[0] + dx * t
+                            wp_y = current[1] + dy * t
+                            wp_z = current[2] + dz * t
+                            # 회전은 최종 목표로 선형 보간 (이미 사전 보정 완료)
+                            wp_rx = current[3] + (rx - current[3]) * t
+                            wp_ry = current[4] + (ry - current[4]) * t
+                            wp_rz = current[5] + (rz - current[5]) * t
+                            print(f"[MOVE POSE] 분할 {step}/{n_steps}: X={wp_x:.1f} Y={wp_y:.1f} Z={wp_z:.1f}")
+                            wp_regs = [
+                                self.to_uint16(int(round(wp_x * 10))),
+                                self.to_uint16(int(round(wp_y * 10))),
+                                self.to_uint16(int(round(wp_z * 10))),
+                                self.to_uint16(int(round(self.normalize_angle(wp_rx) * 10))),
+                                self.to_uint16(int(round(self.normalize_angle(wp_ry) * 10))),
+                                self.to_uint16(int(round(self.normalize_angle(wp_rz) * 10))),
+                            ]
+                            self.write_registers(self.REGISTER_POSE_MAIN, wp_regs)
+                            self.write_command(self.CMD_MOVE_TO_POSE)
+                            ok, msg = self.wait_for_done_motion_aware(
+                                idle_timeout=idle_timeout,
+                                process_events_callback=process_events_callback,
+                                stop_flag_callback=stop_flag_callback
+                            )
+                            if not ok:
+                                return False, f"분할 이동 {step}/{n_steps} 실패: {msg}"
+                            time.sleep(0.1)
+                        # 마지막 단계는 아래 최종 movel에서 실행
+        except Exception as e:
+            print(f"[MOVE POSE] 사전 보정/분할 실패 (무시하고 movel 진행): {e}")
+
+        # mm×10, deg×10 스케일링 후 uint16 변환 — 최종 목표 좌표
         regs = [
             self.to_uint16(int(round(x * 10))),
             self.to_uint16(int(round(y * 10))),

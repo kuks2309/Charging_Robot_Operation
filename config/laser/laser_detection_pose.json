@@ -1,6 +1,10 @@
 {
-    "_desc": "레이저 캘리브레이션 검출 자세 (TF5 기준, RxRyRz만 사용, XYZ는 현재 위치 유지)",
+    "_desc": "레이저 캘리브레이션 검출 자세 (TF4 기준)",
+    "toolframe": 4,
+    "target_x": 459.67,
+    "target_y": 608.60,
+    "target_z": 612.79,
     "target_rx": 90.0,
     "target_ry": 0.0,
-    "target_rz": 180.0
+    "target_rz": -180.0
 }
