@@ -2,6 +2,49 @@
 
 ---
 
+## 2026-03-21 | ±180° Euler 각도 정규화 미적용 → PRS 165번 movel 중단
+
+### 문제
+
+- **PRS line 165 `movel(p1)` 중단**: `send_base_rotate`에서 현재 Euler 각도에 delta를 더한 결과가 ±180° 범위를 초과하면 로봇 컨트롤러가 에러/중단
+- 예: 현재 Rz=175°, +10° 회전 → 목표 Rz=185° → ±180° 범위 초과 → PRS movel 에러
+- 예: 현재 Rz=-175°, -10° 회전 → 목표 Rz=-185° → 동일 문제
+- **Python, PRS 양쪽 모두 각도 정규화 로직 부재**: 값을 그대로 전달하여 로봇 컨트롤러가 거부
+
+### 수정 내용
+
+1. **`normalize_angle()` 정적 메서드 추가** (`modbus_client.py`)
+   - 각도를 [-180°, 180°] 범위로 래핑: `angle % 360`, `> 180 → -360`
+2. **`send_base_rotate` 정규화 적용** (`modbus_client.py`)
+   - 목표 Euler 각도(Rx/Ry/Rz) 계산 후 `normalize_angle()` 적용
+3. **`send_move_to_pose` 정규화 적용** (`modbus_client.py`)
+   - 절대 좌표 이동 시에도 Rx/Ry/Rz 정규화 (외부 호출자 보호)
+4. **PRS CMD 20 이중 보호** (`Main_task.prs`)
+   - `movel` 직전 while 루프로 Rx/Ry/Rz를 ±180° 범위로 정규화
+   - PRS 호환성을 위해 `%` 연산자 대신 `while > 180 do -360` 패턴 사용
+5. **장경로 회전 방지** (`modbus_client.py`)
+   - `send_base_rotate`에서 정규화 후 movel delta > 180° 감지
+   - 경계 교차 시 CMD 54-56 (증분 회전)으로 자동 전환
+6. **NaN/Inf 입력 검증** (`modbus_client.py`)
+   - `normalize_angle()`에 `math.isfinite()` 가드 추가
+   - 통신 이상 시 부분 레지스터 쓰기 방지
+7. **독립 테스트 스크립트 정규화 적용**
+   - `test_base_rotate.py`, `test_absolute_move.py`, `test_relative_move.py`,
+     `test_baseframe.py`, `test_main_task.py`, `set_rz.py`
+   - `int()` → `int(round())` 절삭 오류도 수정
+8. **단위 테스트 추가** (`tests/test_normalize_angle.py`)
+   - 경계값, 래핑, NaN/Inf, 멱등성, int16 범위 테스트
+
+### 교훈
+
+- **모든 movel 경로에서 Euler 각도 정규화 필수** — 현재값 + delta가 ±180° 경계를 넘을 수 있음
+- **Python + PRS 이중 보호**: Python이 1차 정규화, PRS가 2차 안전장치
+- **-180°와 180°는 동일 각도** — 정규화 후 부호 차이는 무해
+- **movel은 Euler 각도를 선형 보간** — 정규화로 부호 반전 시 장경로(340°) 회전 위험. 경계 교차 감지 필수
+- **독립 테스트 스크립트도 정규화 필요** — ModbusClient를 우회하는 직접 레지스터 쓰기 주의
+
+---
+
 ## 2026-03-21 | ArUco 신뢰성 탭 TF5 전환 + 순수 회전 모션 감지 실패
 
 ### 문제

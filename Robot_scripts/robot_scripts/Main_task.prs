@@ -161,7 +161,29 @@ while true do
         if  Rz>32767  then
             Rz= Rz-65536
         end
-        p1 = pose(x/10, y/10, z/10, Rx/10, Ry/10, Rz/10)
+        -- Euler 각도 ±180° 정규화 (÷10 후 적용, movel 범위 초과 방지)
+        rx_deg = Rx/10
+        ry_deg = Ry/10
+        rz_deg = Rz/10
+        while rx_deg > 180 do
+            rx_deg = rx_deg - 360
+        end
+        while rx_deg < -180 do
+            rx_deg = rx_deg + 360
+        end
+        while ry_deg > 180 do
+            ry_deg = ry_deg - 360
+        end
+        while ry_deg < -180 do
+            ry_deg = ry_deg + 360
+        end
+        while rz_deg > 180 do
+            rz_deg = rz_deg - 360
+        end
+        while rz_deg < -180 do
+            rz_deg = rz_deg + 360
+        end
+        p1 = pose(x/10, y/10, z/10, rx_deg, ry_deg, rz_deg)
         movel(p1)
         modserv.write_register('task_done', 2)
         modserv.write_register('task_number', 0)

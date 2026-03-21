@@ -64,14 +64,22 @@ def wait_for_completion(client, timeout=10.0):
 
 def send_command(client, cmd, x=0, y=0, z=0, rx=0, ry=0, rz=0):
     """명령 전송 (포즈 데이터 포함)"""
-    # 포즈 데이터 쓰기 (위치는 mm, 회전은 deg×10)
+    # ±180° 정규화
+    rx = rx % 360
+    if rx > 180: rx -= 360
+    ry = ry % 360
+    if ry > 180: ry -= 360
+    rz = rz % 360
+    if rz > 180: rz -= 360
+
+    # 포즈 데이터 쓰기 (위치는 mm×10, 회전은 deg×10)
     pose_data = [
-        to_int16(int(x)),
-        to_int16(int(y)),
-        to_int16(int(z)),
-        to_int16(int(rx * 10)),  # deg → deg×10
-        to_int16(int(ry * 10)),
-        to_int16(int(rz * 10)),
+        to_int16(int(round(x * 10))),
+        to_int16(int(round(y * 10))),
+        to_int16(int(round(z * 10))),
+        to_int16(int(round(rx * 10))),  # deg → deg×10
+        to_int16(int(round(ry * 10))),
+        to_int16(int(round(rz * 10))),
     ]
     client.write_registers(REG_X, pose_data)
 

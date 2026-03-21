@@ -77,14 +77,20 @@ def main():
 
         input("\nEnter를 누르면 이동을 시작합니다...")
 
+        # ±180° 정규화
+        for key in ['rx', 'ry', 'rz']:
+            pos[key] = pos[key] % 360
+            if pos[key] > 180:
+                pos[key] -= 360
+
         # 레지스터 전송 (x10 스케일)
         regs = [
-            to_int16(int(pos['x'] * 10)),
-            to_int16(int(pos['y'] * 10)),
-            to_int16(int(pos['z'] * 10)),
-            to_int16(int(target_rx * 10)),
-            to_int16(int(target_ry * 10)),
-            to_int16(int(target_rz * 10)),
+            to_int16(int(round(pos['x'] * 10))),
+            to_int16(int(round(pos['y'] * 10))),
+            to_int16(int(round(pos['z'] * 10))),
+            to_int16(int(round(target_rx * 10))),
+            to_int16(int(round(target_ry * 10))),
+            to_int16(int(round(target_rz * 10))),
         ]
         client.write_registers(REG_X, regs)
         client.write_registers(REG_COMMAND, [20])

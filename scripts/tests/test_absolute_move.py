@@ -62,14 +62,22 @@ def read_current_position(client):
 
 def send_absolute_move(client, x, y, z, rx, ry, rz):
     """절대좌표 이동 명령 전송 (command 20)"""
+    # ±180° 정규화
+    rx = rx % 360
+    if rx > 180: rx -= 360
+    ry = ry % 360
+    if ry > 180: ry -= 360
+    rz = rz % 360
+    if rz > 180: rz -= 360
+
     # mm×10, deg×10 스케일링
     regs = [
-        to_int16(int(x * 10)),      # x (mm×10)
-        to_int16(int(y * 10)),      # y (mm×10)
-        to_int16(int(z * 10)),      # z (mm×10)
-        to_int16(int(rx * 10)),     # Rx (deg×10)
-        to_int16(int(ry * 10)),     # Ry (deg×10)
-        to_int16(int(rz * 10)),     # Rz (deg×10)
+        to_int16(int(round(x * 10))),      # x (mm×10)
+        to_int16(int(round(y * 10))),      # y (mm×10)
+        to_int16(int(round(z * 10))),      # z (mm×10)
+        to_int16(int(round(rx * 10))),     # Rx (deg×10)
+        to_int16(int(round(ry * 10))),     # Ry (deg×10)
+        to_int16(int(round(rz * 10))),     # Rz (deg×10)
     ]
 
     print(f"\n레지스터 전송값:")

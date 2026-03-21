@@ -107,12 +107,12 @@ def send_absolute_move(client, x, y, z, rx, ry, rz):
     """절대좌표 이동 명령 전송 (command 20)"""
     # mm 단위, deg×10 스케일링
     regs = [
-        to_int16(int(x * 10)),      # x (mm×10)
-        to_int16(int(y * 10)),      # y (mm×10)
-        to_int16(int(z * 10)),      # z (mm×10)
-        to_int16(int(rx * 10)),     # Rx (deg×10)
-        to_int16(int(ry * 10)),     # Ry (deg×10)
-        to_int16(int(rz * 10)),     # Rz (deg×10)
+        to_int16(int(round(x * 10))),      # x (mm×10)
+        to_int16(int(round(y * 10))),      # y (mm×10)
+        to_int16(int(round(z * 10))),      # z (mm×10)
+        to_int16(int(round(rx * 10))),     # Rx (deg×10)
+        to_int16(int(round(ry * 10))),     # Ry (deg×10)
+        to_int16(int(round(rz * 10))),     # Rz (deg×10)
     ]
 
     print(f"\n레지스터 전송값:")
@@ -216,9 +216,17 @@ def main():
         target_x = pos['x'] + args.dx
         target_y = pos['y'] + args.dy
         target_z = pos['z'] + args.dz
-        target_rx = pos['rx']
-        target_ry = pos['ry']
-        target_rz = pos['rz']
+        target_rx = pos['rx'] + args.drx
+        target_ry = pos['ry'] + args.dry
+        target_rz = pos['rz'] + args.drz
+
+        # ±180° 정규화
+        target_rx = target_rx % 360
+        if target_rx > 180: target_rx -= 360
+        target_ry = target_ry % 360
+        if target_ry > 180: target_ry -= 360
+        target_rz = target_rz % 360
+        if target_rz > 180: target_rz -= 360
 
         print(f"\n이동량: dx={args.dx}, dy={args.dy}, dz={args.dz}, drx={args.drx}, dry={args.dry}, drz={args.drz}")
         print(f"\n목표 위치:")

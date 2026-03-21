@@ -10,6 +10,7 @@ Main_task.prs 레지스터 정의:
 - 158~169: camera_pose (12 registers, float32)
 """
 
+import math
 import struct
 import time
 from typing import Optional, Tuple, List
@@ -483,6 +484,16 @@ class ModbusClient:
     # ==================== int16 변환 유틸리티 ====================
 
     @staticmethod
+    def normalize_angle(angle: float) -> float:
+        """각도를 (-180, 180] 범위로 정규화 (±180° 래핑)"""
+        if not math.isfinite(angle):
+            raise ValueError(f"normalize_angle: 유효하지 않은 각도 값: {angle}")
+        angle = angle % 360
+        if angle > 180:
+            angle -= 360
+        return angle
+
+    @staticmethod
     def to_uint16(value: int) -> int:
         """int16 → uint16 변환 (음수 처리)"""
         if value < 0:
@@ -561,6 +572,7 @@ class ModbusClient:
             wait: 완료 대기 여부
             process_events_callback: UI 이벤트 처리 콜백
         """
+        # Note: CMD 14-16은 상대 회전이므로 ±180° 정규화 불필요
         # 회전 전 좌표 출력
         before_pose = self.read_current_pose()
         if before_pose:
@@ -625,6 +637,14 @@ class ModbusClient:
         Note:
             Main_task.prs에서 movel(pose)로 이동 (베이스 좌표계 기준)
         """
+        # Euler 각도 ±180° 정규화 (PRS movel 범위 초과 방지)
+        orig_rx, orig_ry, orig_rz = rx, ry, rz
+        rx = self.normalize_angle(rx)
+        ry = self.normalize_angle(ry)
+        rz = self.normalize_angle(rz)
+        if abs(orig_rx - rx) > 0.01 or abs(orig_ry - ry) > 0.01 or abs(orig_rz - rz) > 0.01:
+            print(f"[MOVE POSE] 각도 정규화: Rx={orig_rx:.2f}→{rx:.2f}, Ry={orig_ry:.2f}→{ry:.2f}, Rz={orig_rz:.2f}→{rz:.2f}")
+
         # mm×10, deg×10 스케일링 후 uint16 변환
         regs = [
             self.to_uint16(int(round(x * 10))),
@@ -814,11 +834,41 @@ class ModbusClient:
         idx = axis_index[axis.lower()]
         target[idx] += angle
 
+        # 3. Euler 각도 ±180° 정규화 (PRS movel 범위 초과 방지)
+        for i in range(3, 6):
+            target[i] = self.normalize_angle(target[i])
+
         print(f"[BASE ROTATE] 명령: {axis.upper()} {'+' if angle > 0 else ''}{angle}° (movel 방식)")
         print(f"[BASE ROTATE] 목표: X={target[0]:.2f}, Y={target[1]:.2f}, Z={target[2]:.2f}, "
               f"Rx={target[3]:.2f}, Ry={target[4]:.2f}, Rz={target[5]:.2f}")
 
-        # 3. movel 전송 (×10 스케일, CMD 20)
+        # 경계 교차 감지: movel 장경로 방지
+        movel_delta = target[idx] - before_pose[idx]
+        if abs(movel_delta) > 180:
+            # ±180° 경계 교차 → 증분 회전(CMD 54-56)으로 전환
+            print(f"[BASE ROTATE] ±180° 경계 교차 감지 (delta={movel_delta:.1f}°) → 증분 회전으로 전환")
+            cmd_map = {
+                'rx': (self.REGISTER_POSE_RX, self.CMD_BASE_ROTATE_X),
+                'ry': (self.REGISTER_POSE_RY, self.CMD_BASE_ROTATE_Y),
+                'rz': (self.REGISTER_POSE_RZ, self.CMD_BASE_ROTATE_Z),
+            }
+            reg, cmd = cmd_map[axis.lower()]
+            val = self.to_uint16(int(round(angle * 10)))
+            self.write_register(reg, val)
+            self.write_command(cmd)
+
+            if wait:
+                result = self.wait_for_done_motion_aware(
+                    idle_timeout=idle_timeout,
+                    process_events_callback=process_events_callback)
+                after_pose = self.read_current_pose()
+                if after_pose:
+                    print(f"[BASE ROTATE] 회전 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, "
+                          f"Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
+                return result
+            return True, "명령 전송됨 (증분 회전)"
+
+        # 4. movel 전송 (×10 스케일, CMD 20)
         regs = [
             self.to_uint16(int(round(target[0] * 10))),
             self.to_uint16(int(round(target[1] * 10))),
@@ -838,8 +888,11 @@ class ModbusClient:
             if after_pose:
                 print(f"[BASE ROTATE] 회전 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, "
                       f"Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
-                print(f"[BASE ROTATE] 변화량: dRx={after_pose[3]-before_pose[3]:.2f}, dRy={after_pose[4]-before_pose[4]:.2f}, "
-                      f"dRz={after_pose[5]-before_pose[5]:.2f}")
+                dx = [after_pose[i] - before_pose[i] for i in range(3, 6)]
+                for j in range(3):
+                    while dx[j] > 180: dx[j] -= 360
+                    while dx[j] < -180: dx[j] += 360
+                print(f"[BASE ROTATE] 변화량: dRx={dx[0]:.2f}, dRy={dx[1]:.2f}, dRz={dx[2]:.2f}")
             return result
         return True, "명령 전송됨"
 

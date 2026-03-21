@@ -154,14 +154,25 @@ def main():
         print(f"\n목표: X = {target_x:.3f} mm (현재에서 +50mm)")
         input("Enter를 누르면 이동합니다...")
 
+        # ±180° 정규화 (Rx, Ry, Rz)
+        def normalize_angle(a):
+            a = a % 360
+            if a > 180:
+                a -= 360
+            return a
+
+        rx_val = normalize_angle(new_pos['rx'])
+        ry_val = normalize_angle(new_pos['ry'])
+        rz_val = normalize_angle(new_pos['rz'])
+
         # 레지스터 쓰기
         regs = [
-            to_int16(int(target_x * 10)),
-            to_int16(int(new_pos['y'] * 10)),
-            to_int16(int(new_pos['z'] * 10)),
-            to_int16(int(new_pos['rx'] * 10)),
-            to_int16(int(new_pos['ry'] * 10)),
-            to_int16(int(new_pos['rz'] * 10)),
+            to_int16(int(round(target_x * 10))),
+            to_int16(int(round(new_pos['y'] * 10))),
+            to_int16(int(round(new_pos['z'] * 10))),
+            to_int16(int(round(rx_val * 10))),
+            to_int16(int(round(ry_val * 10))),
+            to_int16(int(round(rz_val * 10))),
         ]
         client.write_registers(REG_X, regs)
 

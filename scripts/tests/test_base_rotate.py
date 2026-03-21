@@ -104,6 +104,12 @@ def main():
         idx = axis_index[axis]
         target[idx] += angle_deg
 
+        # ±180° 정규화
+        for i in range(3, 6):
+            target[i] = target[i] % 360
+            if target[i] > 180:
+                target[i] -= 360
+
         print(f"\n[2] 목표 자세 ({axis.upper()} += {angle_deg}°):")
         print(f"    X={target[0]:.2f}, Y={target[1]:.2f}, Z={target[2]:.2f}")
         print(f"    Rx={target[3]:.2f}, Ry={target[4]:.2f}, Rz={target[5]:.2f}")
