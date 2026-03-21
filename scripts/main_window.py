@@ -4112,14 +4112,32 @@ class MainWindow(QMainWindow):
         tab = self.tabLaserCalibration
         state = self._auto_vert_scan_state
         tab._update_auto_scan_progress("자동 스캔: 원점 복귀 중...")
-        self._log(f"[AutoVertScan] 원점 복귀 — total_moved={state.get('total_moved', 0.0):.1f}mm")
+        origin_pose = state.get('origin_pose')
+        self._log(f"[AutoVertScan] 원점 복귀 — 절대 이동 Z={origin_pose[2]:.1f}mm")
 
-        total_moved = state.get('total_moved', 0.0)
-        if abs(total_moved) > 0.05:
-            self.robot.send_base_linear(
-                'z', -total_moved, wait=True,
-                process_events_callback=QApplication.processEvents
-            )
+        self.robot.send_move_to_pose(
+            origin_pose[0], origin_pose[1], origin_pose[2],
+            origin_pose[3], origin_pose[4], origin_pose[5],
+            wait=True, process_events_callback=QApplication.processEvents
+        )
+
+        # -- Raw capture 데이터 일자별 폴더 저장 --
+        if tab._multi_vert_captures:
+            try:
+                from datetime import datetime as _dt
+                _now = _dt.now()
+                _date_dir = os.path.join(
+                    os.path.dirname(__file__), '..', 'data', 'laser_scan',
+                    'calibration', 'vertical', _now.strftime('%Y-%m-%d')
+                )
+                os.makedirs(_date_dir, exist_ok=True)
+                _cap_path = os.path.join(_date_dir, f"captures_{_now.strftime('%H%M%S')}.json")
+                import json as _json
+                with open(_cap_path, 'w') as f:
+                    _json.dump(tab._multi_vert_captures, f, indent=2, ensure_ascii=False)
+                self._log(f"[AutoVertScan] Raw capture 저장: {_cap_path}")
+            except Exception as e:
+                self._log(f"[AutoVertScan] Raw capture 저장 오류: {e}")
 
         QTimer.singleShot(state.get('settle_ms', 500), self._auto_vert_scan_finish)
 

@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-03-21 | 레이저 캘리브레이션 ROI 모드 수정 + 자동 스캔 복귀/저장 개선
+
+### 문제
+
+1. **Vertical ROI `symmetric` 모드 오류**: `roi_laser`가 좌/우 대칭 2개 ROI 생성 → 중앙 계단 지그 위의 레이저를 검출하지 못함
+2. **자동 스캔 복귀 로직 취약**: `total_moved` 상대 이동으로 복귀 → jitter retry 시 ±1mm 오차 발생 가능
+3. **Raw capture 데이터 유실**: `_multi_vert_captures`가 메모리에만 저장 → 탭 닫으면 캘리브레이션 데이터 소실
+
+### 수정 내용
+
+1. **`laser_vertical_scan_roi.json` ROI 모드 변경**
+   - `roi_laser`: `symmetric` → `single`, `center_x_offset_px`: 470 → 0
+   - 중앙 1개 ROI로 계단 지그 위 레이저 직접 검출
+   - `roi_laser_base`(바닥 검출용)는 `symmetric` 유지 (의도된 설계)
+2. **자동 스캔 복귀: 상대 → 절대 이동** (`main_window.py`)
+   - `send_base_linear('z', -total_moved)` → `send_move_to_pose(origin_pose)`
+   - 스캔 시작 시 저장한 `origin_pose`로 절대 좌표 복귀
+   - jitter 오차 누적 문제 원천 해결
+3. **Raw capture 일자별 폴더 저장** (`main_window.py`)
+   - 스캔 완료 시 `data/laser_scan/calibration/vertical/YYYY-MM-DD/captures_HHMMSS.json` 저장
+   - `_multi_vert_captures` 전체를 JSON으로 영구 보존
+
+### 영향 범위
+
+- `config/laser/vertical/laser_vertical_scan_roi.json` — ROI 모드 변경
+- `scripts/main_window.py` — `_auto_vert_scan_return()` 절대 복귀 + JSON 저장
+
+---
+
 ## 2026-03-21 | ±180° Euler 각도 정규화 미적용 → PRS 165번 movel 중단
 
 ### 문제
