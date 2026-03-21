@@ -1,10 +1,10 @@
 {
-    "_desc": "레이저 캘리브레이션 검출 자세 (TF4 기준)",
+    "_desc": "레이저 캘리브레이션 검출 자세 (TF4 기준, 실측값)",
     "toolframe": 4,
-    "target_x": 459.67,
-    "target_y": 608.60,
-    "target_z": 612.79,
+    "target_x": 489.90,
+    "target_y": 632.00,
+    "target_z": 522.30,
     "target_rx": 90.0,
     "target_ry": 0.0,
-    "target_rz": -180.0
+    "target_rz": 180.0
 }

@@ -1214,15 +1214,47 @@ class TabLaserCalibration(QWidget, JogMixin):
 
         from PyQt5.QtWidgets import QApplication
         try:
-            success, msg = self.robot.send_move_to_pose(
-                pos['x'], pos['y'], pos['z'],
-                pos['rx'], pos['ry'], pos['rz'],
-                wait=True,
-                process_events_callback=QApplication.processEvents,
-            )
-            if not success:
-                self._log(f"지그 {label} 위치 이동 실패: {msg}")
+            # movel 대신 transx/y/z 순차 이동 (Joint 3 리밋 방지)
+            cur = self.robot.read_current_pose()
+            if not cur:
+                self._log("현재 포즈 읽기 실패")
                 return
+
+            steps = [
+                ('Z', 'z', pos['z'] - cur[2]),
+                ('Y', 'y', pos['y'] - cur[1]),
+                ('X', 'x', pos['x'] - cur[0]),
+            ]
+            for axis_name, axis, delta in steps:
+                if abs(delta) < 0.5:
+                    continue
+                self._log(f"  {axis_name} 이동: {delta:+.1f}mm")
+                ok, msg = self.robot.send_base_linear(
+                    axis, delta, wait=True,
+                    process_events_callback=QApplication.processEvents,
+                )
+                if not ok:
+                    self._log(f"지그 {label} {axis_name} 이동 실패: {msg}")
+                    return
+                QApplication.processEvents()
+
+            # Rx/Ry/Rz 보정
+            cur = self.robot.read_current_pose()
+            if cur:
+                for axis_name, idx, tgt_val in [('Rx', 3, pos['rx']), ('Ry', 4, pos['ry']), ('Rz', 5, pos['rz'])]:
+                    delta = tgt_val - cur[idx]
+                    while delta > 180: delta -= 360
+                    while delta < -180: delta += 360
+                    if abs(delta) > 0.5:
+                        self._log(f"  {axis_name} 보정: {delta:+.1f}°")
+                        ok, msg = self.robot.send_base_rotate(
+                            axis_name.lower(), delta, wait=True,
+                            process_events_callback=QApplication.processEvents,
+                        )
+                        if not ok:
+                            self._log(f"지그 {label} {axis_name} 보정 실패: {msg}")
+                            return
+
             self._log(f"지그 {label} 위치 이동 완료 (TF4)")
         except Exception as e:
             self._log(f"이동 오류: {e}")
