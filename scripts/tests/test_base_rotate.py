@@ -7,7 +7,10 @@
 
 import time
 import sys
+import os
 import struct
+sys.path.insert(0, os.path.dirname(__file__))
+from angle_utils import normalize_angle
 from pymodbus.client import ModbusTcpClient
 
 ROBOT_IP = "192.168.0.29"
@@ -106,9 +109,7 @@ def main():
 
         # ±180° 정규화
         for i in range(3, 6):
-            target[i] = target[i] % 360
-            if target[i] > 180:
-                target[i] -= 360
+            target[i] = normalize_angle(target[i])
 
         print(f"\n[2] 목표 자세 ({axis.upper()} += {angle_deg}°):")
         print(f"    X={target[0]:.2f}, Y={target[1]:.2f}, Z={target[2]:.2f}")

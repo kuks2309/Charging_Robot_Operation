@@ -12,6 +12,7 @@ import os
 import time
 import struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from angle_utils import normalize_angle
 
 from pymodbus.client import ModbusTcpClient
 
@@ -155,12 +156,6 @@ def main():
         input("Enter를 누르면 이동합니다...")
 
         # ±180° 정규화 (Rx, Ry, Rz)
-        def normalize_angle(a):
-            a = a % 360
-            if a > 180:
-                a -= 360
-            return a
-
         rx_val = normalize_angle(new_pos['rx'])
         ry_val = normalize_angle(new_pos['ry'])
         rz_val = normalize_angle(new_pos['rz'])

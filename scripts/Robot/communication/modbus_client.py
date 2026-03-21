@@ -485,13 +485,12 @@ class ModbusClient:
 
     @staticmethod
     def normalize_angle(angle: float) -> float:
-        """각도를 (-180, 180] 범위로 정규화 (±180° 래핑)"""
+        """각도를 [-180, 180] 범위로 정규화 (±180° 래핑)"""
         if not math.isfinite(angle):
             raise ValueError(f"normalize_angle: 유효하지 않은 각도 값: {angle}")
-        angle = angle % 360
-        if angle > 180:
-            angle -= 360
-        return angle
+        # math.remainder: [-180, 180] 범위 (양쪽 포함, IEEE 754 대칭)
+        # PRS Main_task.prs while-loop [-180, 180] 범위와 정확히 일치
+        return math.remainder(angle, 360)
 
     @staticmethod
     def to_uint16(value: int) -> int:
@@ -843,8 +842,15 @@ class ModbusClient:
               f"Rx={target[3]:.2f}, Ry={target[4]:.2f}, Rz={target[5]:.2f}")
 
         # 경계 교차 감지: movel 장경로 방지
-        movel_delta = target[idx] - before_pose[idx]
-        if abs(movel_delta) > 180:
+        # before_pose도 정규화하여 일관성 확보
+        before_normalized = self.normalize_angle(before_pose[idx])
+        movel_delta = target[idx] - before_normalized
+        # wrap delta to [-180, 180] — PRS while-loop과 동일 패턴 (가독성 일치)
+        while movel_delta > 180: movel_delta -= 360
+        while movel_delta < -180: movel_delta += 360
+        # 정규화된 delta는 [-180, 180] 범위이므로 abs >= 180은 defense-in-depth 역할.
+        # 정확히 ±180° delta는 시계/반시계 방향이 모호하므로 증분 회전이 더 안전.
+        if abs(movel_delta) >= 180:
             # ±180° 경계 교차 → 증분 회전(CMD 54-56)으로 전환
             print(f"[BASE ROTATE] ±180° 경계 교차 감지 (delta={movel_delta:.1f}°) → 증분 회전으로 전환")
             cmd_map = {

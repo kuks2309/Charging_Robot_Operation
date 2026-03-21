@@ -27,7 +27,7 @@ class TestNormalizeAngle:
     # 경계값
     @pytest.mark.parametrize("angle,expected", [
         (180.0, 180.0),
-        (-180.0, 180.0),  # -180 maps to +180 (same orientation)
+        (-180.0, -180.0),  # -180 preserved (PRS [-180, 180] 범위 일치)
         (180.1, -179.9),
         (-180.1, 179.9),
     ])
@@ -44,7 +44,7 @@ class TestNormalizeAngle:
         (-270.0, 90.0),
         (360.0, 0.0),
         (-360.0, 0.0),
-        (540.0, 180.0),
+        (540.0, -180.0),  # math.remainder: 540/360=1.5 rounds to 2 → 540-720=-180
         (-540.0, 180.0),
         (720.0, 0.0),
     ])
@@ -64,13 +64,13 @@ class TestNormalizeAngle:
 
     # 출력 범위 검증
     def test_output_range(self):
-        """모든 출력이 (-180, 180] 범위 내"""
+        """모든 출력이 [-180, 180] 범위 내"""
         import random
         random.seed(42)
         for _ in range(10000):
             angle = random.uniform(-1000, 1000)
             result = ModbusClient.normalize_angle(angle)
-            assert -180 < result <= 180, f"normalize_angle({angle}) = {result} out of range"
+            assert -180 <= result <= 180, f"normalize_angle({angle}) = {result} out of range"
 
     # ×10 스케일링 후 int16 범위 검증
     def test_scaled_int16_range(self):

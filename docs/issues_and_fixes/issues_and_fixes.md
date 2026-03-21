@@ -3062,3 +3062,31 @@ sysfs 기반 자동 감지:
 
 ### 수정 파일
 - `scripts/main_window.py` (`_on_aruco_align_combined` 간소화)
+
+---
+
+## 2026-03-21: ±180° Euler 정규화 잔존 이슈 일괄 수정
+
+### 문제
+- `normalize_angle()`이 `(-180, 180]` 반개구간 사용 → PRS while-loop `[-180, 180]` 폐구간과 불일치
+  - `-180°` 입력 시 Python이 `+180°`으로 변환 → delta 계산에서 360° 오차 가능
+- `set_rz.py` CLI의 target args 미정규화 → `--rz 185` 입력 시 범위 초과 전송
+- 5개 테스트 스크립트에 인라인 `% 360` 복제 코드 산재
+- `send_base_rotate`의 `before_pose` 미정규화 + threshold `> 180` (방향 모호 미처리)
+
+### 수정
+- `normalize_angle` → `math.remainder(angle, 360)` 전환 (IEEE 754 symmetric remainder, `[-180, 180]` 폐구간)
+- `set_rz.py` target args + 현재 위치 모두 `math.remainder` 정규화
+- `scripts/tests/angle_utils.py` 공유 모듈 생성, 5개 테스트 스크립트 인라인 코드 제거
+- `send_base_rotate`: `before_pose` 정규화 + while-loop delta 래핑 + `>= 180` threshold
+
+### 교훈
+- Python `% 360`는 `(-180, 180]` (반개구간), `math.remainder`는 `[-180, 180]` (폐구간)
+- PRS 컨트롤러와 범위 일치가 이중 보호 아키텍처의 핵심
+- 정확히 ±180° delta는 방향 모호 → 증분 회전이 안전
+
+### 수정 파일
+- `scripts/Robot/communication/modbus_client.py` (`normalize_angle`, `send_base_rotate`)
+- `scripts/tests/set_rz.py` (target args 정규화)
+- `scripts/tests/angle_utils.py` (신규: 공유 정규화 유틸리티)
+- `scripts/tests/` 내 5개 스크립트 (인라인 `% 360` → `angle_utils` 전환)

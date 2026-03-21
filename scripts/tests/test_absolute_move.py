@@ -10,6 +10,9 @@
 import argparse
 import time
 import struct
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
+from angle_utils import normalize_angle
 from pymodbus.client import ModbusTcpClient
 
 ROBOT_IP = "192.168.0.29"
@@ -63,12 +66,9 @@ def read_current_position(client):
 def send_absolute_move(client, x, y, z, rx, ry, rz):
     """절대좌표 이동 명령 전송 (command 20)"""
     # ±180° 정규화
-    rx = rx % 360
-    if rx > 180: rx -= 360
-    ry = ry % 360
-    if ry > 180: ry -= 360
-    rz = rz % 360
-    if rz > 180: rz -= 360
+    rx = normalize_angle(rx)
+    ry = normalize_angle(ry)
+    rz = normalize_angle(rz)
 
     # mm×10, deg×10 스케일링
     regs = [

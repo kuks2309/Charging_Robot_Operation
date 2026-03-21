@@ -13,6 +13,9 @@
 import argparse
 import time
 import struct
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
+from angle_utils import normalize_angle
 from pymodbus.client import ModbusTcpClient
 
 ROBOT_IP = "192.168.0.29"
@@ -221,12 +224,9 @@ def main():
         target_rz = pos['rz'] + args.drz
 
         # ±180° 정규화
-        target_rx = target_rx % 360
-        if target_rx > 180: target_rx -= 360
-        target_ry = target_ry % 360
-        if target_ry > 180: target_ry -= 360
-        target_rz = target_rz % 360
-        if target_rz > 180: target_rz -= 360
+        target_rx = normalize_angle(target_rx)
+        target_ry = normalize_angle(target_ry)
+        target_rz = normalize_angle(target_rz)
 
         print(f"\n이동량: dx={args.dx}, dy={args.dy}, dz={args.dz}, drx={args.drx}, dry={args.dry}, drz={args.drz}")
         print(f"\n목표 위치:")

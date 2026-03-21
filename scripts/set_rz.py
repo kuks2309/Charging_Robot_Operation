@@ -7,6 +7,7 @@
 """
 
 import argparse
+import math
 import time
 import struct
 from pymodbus.client import ModbusTcpClient
@@ -54,6 +55,11 @@ def main():
     parser.add_argument('--rz', type=float, default=90, help='Rz (deg)')
     args = parser.parse_args()
 
+    # target 각도 정규화 [-180, 180]
+    args.rx = math.remainder(args.rx, 360)
+    args.ry = math.remainder(args.ry, 360)
+    args.rz = math.remainder(args.rz, 360)
+
     target_rx = args.rx
     target_ry = args.ry
     target_rz = args.rz
@@ -77,11 +83,9 @@ def main():
 
         input("\nEnter를 누르면 이동을 시작합니다...")
 
-        # ±180° 정규화
+        # 현재 위치 각도 정규화 [-180, 180] (math.remainder: PRS 범위 일치)
         for key in ['rx', 'ry', 'rz']:
-            pos[key] = pos[key] % 360
-            if pos[key] > 180:
-                pos[key] -= 360
+            pos[key] = math.remainder(pos[key], 360)
 
         # 레지스터 전송 (x10 스케일)
         regs = [

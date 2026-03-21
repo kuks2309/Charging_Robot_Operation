@@ -10,6 +10,9 @@ Main_task.prs 테스트 스크립트
 """
 
 import time
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
+from angle_utils import normalize_angle
 from pymodbus.client import ModbusTcpClient
 
 # 연결 설정
@@ -65,12 +68,9 @@ def wait_for_completion(client, timeout=10.0):
 def send_command(client, cmd, x=0, y=0, z=0, rx=0, ry=0, rz=0):
     """명령 전송 (포즈 데이터 포함)"""
     # ±180° 정규화
-    rx = rx % 360
-    if rx > 180: rx -= 360
-    ry = ry % 360
-    if ry > 180: ry -= 360
-    rz = rz % 360
-    if rz > 180: rz -= 360
+    rx = normalize_angle(rx)
+    ry = normalize_angle(ry)
+    rz = normalize_angle(rz)
 
     # 포즈 데이터 쓰기 (위치는 mm×10, 회전은 deg×10)
     pose_data = [
