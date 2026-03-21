@@ -453,14 +453,22 @@ class ModbusClient:
                 elif status == self.STATUS_ERROR:
                     return False, "로봇 오류 발생"
 
-            # 위치 변화 감지 → 변화 있으면 타임아웃 리셋
+            # 위치/회전 변화 감지 → 변화 있으면 타임아웃 리셋
             current_pose = self.read_current_pose()
             if current_pose is None:
                 # 통신 실패 = 상태 불명 → 이동 중으로 간주 (조기 타임아웃 방지)
                 last_motion_time = time.time()
             elif current_pose and last_pose:
-                delta = sum(abs(c - l) for c, l in zip(current_pose[:3], last_pose[:3]))
-                if delta > 0.05:  # 0.05mm 이상 변화 → 이동 중
+                # XYZ 변화 (mm)
+                pos_delta = sum(abs(c - l) for c, l in zip(current_pose[:3], last_pose[:3]))
+                # RxRyRz 변화 (deg, ±180° 래핑 처리)
+                rot_delta = 0.0
+                for c, l in zip(current_pose[3:], last_pose[3:]):
+                    d = abs(c - l)
+                    if d > 180.0:
+                        d = 360.0 - d
+                    rot_delta += d
+                if pos_delta > 0.05 or rot_delta > 0.1:  # 0.05mm 또는 0.1° 이상 변화 → 이동 중
                     last_motion_time = time.time()
                     last_pose = current_pose
 

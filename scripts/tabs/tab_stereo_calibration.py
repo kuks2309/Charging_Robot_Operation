@@ -33,9 +33,9 @@ class TabStereoCalibration(QWidget):
     log_message = pyqtSignal(str)
     camera_start_requested = pyqtSignal()
     camera_stop_requested = pyqtSignal()
-    calib_align_aruco_requested = pyqtSignal()      # ArUco 정렬 Y (Ry + BaseY)
-    calib_align_aruco_x_requested = pyqtSignal()    # ArUco 정렬 X (Rz)
-    calib_align_aruco_combined_requested = pyqtSignal()  # 통합 정렬 (Y + X)
+    calib_align_aruco_requested = pyqtSignal()      # 수평 정렬 (Ry + Base X)
+    calib_align_aruco_x_requested = pyqtSignal()    # 수직 정렬 (Rz)
+    calib_align_aruco_combined_requested = pyqtSignal()  # 통합 정렬 (수평 + 수직)
     calib_align_ds435_requested = pyqtSignal()
     handoff_ds435_to_arducam_requested = pyqtSignal()
     sweep_start_requested = pyqtSignal(float, int)   # (step_mm, count)
@@ -256,13 +256,13 @@ class TabStereoCalibration(QWidget):
         self.labelCalibStep.setText(message)
 
     def _on_btn_align_aruco(self):
-        """ArUco 정렬 Y 버튼 → 시그널 발행 (Ry + BaseY)"""
-        self._update_calib_step(1, "ArUco 정렬 Y 요청...")
+        """수평 정렬 버튼 → 시그널 발행 (Ry + Base X)"""
+        self._update_calib_step(1, "수평 정렬 요청...")
         self.calib_align_aruco_requested.emit()
 
     def _on_btn_align_aruco_x(self):
-        """ArUco 정렬 X 버튼 → 시그널 발행 (Rz)"""
-        self._update_calib_step(1, "ArUco 정렬 X 요청...")
+        """수직 정렬 버튼 → 시그널 발행 (Rz)"""
+        self._update_calib_step(1, "수직 정렬 요청...")
         self.calib_align_aruco_x_requested.emit()
 
     def _on_btn_align_aruco_combined(self):

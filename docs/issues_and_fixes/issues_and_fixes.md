@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-03-21 | ArUco 신뢰성 탭 TF5 전환 + 순수 회전 모션 감지 실패
+
+### 문제
+
+1. **ArUco 신뢰성 탭에서 TF5 미사용**: 탭 전환 시 TF4로 설정, movel/align 함수들도 TF3→TF4 사용
+2. **movel로 RxRyRz 동시 변경 시 보호정지**: TF5의 큰 TCP 오프셋으로 회전+이동 경로가 축 한계 초과
+3. **순수 회전 시 타임아웃**: `wait_for_done_motion_aware`가 XYZ만 모션 감지 → 순수 회전(Ry -5° 등) 시 변화=0으로 판단 → idle_timeout 발생
+4. **±180° Rz 특이점**: 회전 후 Rz=-180→+180 부호 반전 시 dRz=360°로 오감지
+
+### 수정 내용
+
+1. **탭 전체 TF5 적용** (`tab_aruco_reliability.py`, `main_window.py`)
+   - 탭 전환 시 TF5 설정 (`_on_tab_changed`)
+   - align 함수: `_ensure_toolframe(5)` 확인 후 실행, 불필요한 TF 복귀 제거
+   - detection_pose/set_robot_position: TF5 기준 movel
+2. **Set Robot Position 2단계 분리** (`tab_aruco_reliability.py`)
+   - 1단계: 현재 XYZ 유지 + 목표 RxRyRz (순수 회전)
+   - 2단계: 목표 XYZ + RxRyRz 유지 (순수 병진)
+3. **Set Detection Pose 개별 축 회전** (`tab_aruco_reliability.py`)
+   - Rx, Ry, Rz 각각 순차 movel (delta > 0.5° 축만)
+4. **모션 감지에 회전 포함 + ±180° 래핑** (`modbus_client.py`)
+   - `wait_for_done_motion_aware`: XYZ(>0.05mm) + RxRyRz(>0.1°) 모두 감지
+   - ±180° 래핑: `d > 180 → d = 360 - d`
+5. **UI 라벨 수정** (`tab_aruco_reliability.ui`)
+   - "마커 평행 정렬 (TF4)" → "마커 평행 정렬 (TF5)"
+6. **Config 좌표 업데이트** (`charging_gun_coupling.json`)
+   - detection_pose: X=386.0, Y=550.6, Z=236.1, Rx=90.0, Ry=0.0, Rz=180.0 (TF5 기준)
+
+### 교훈
+
+- TF5는 TCP 오프셋이 크므로 movel 시 회전+이동 동시 변경은 경로 분리 필수
+- 모션 감지는 XYZ뿐 아니라 회전도 포함해야 순수 회전 명령에서 타임아웃 방지
+- Euler 각도 ±180° 경계는 항상 래핑 처리 필요
+
+---
+
 ## 2026-03-21 | Task 편집 탭 TCP Position 그룹박스에 현재 TF 번호 미표시
 
 ### 문제

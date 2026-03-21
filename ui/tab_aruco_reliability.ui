@@ -1009,7 +1009,7 @@
             <bool>false</bool>
            </property>
            <property name="text">
-            <string>ArUco 정렬 Y</string>
+            <string>수평 정렬</string>
            </property>
           </widget>
          </item>
@@ -1019,7 +1019,7 @@
             <bool>false</bool>
            </property>
            <property name="text">
-            <string>ArUco 정렬 X</string>
+            <string>수직 정렬</string>
            </property>
           </widget>
          </item>
@@ -1875,7 +1875,7 @@
        <item>
         <widget class="QGroupBox" name="groupAlignParallel">
          <property name="title">
-          <string>마커 평행 정렬 (TF4)</string>
+          <string>마커 평행 정렬 (TF5)</string>
          </property>
          <layout class="QVBoxLayout" name="verticalLayoutAlignParallel">
           <item>

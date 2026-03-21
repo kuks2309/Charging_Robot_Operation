@@ -1502,13 +1502,13 @@ class TabArucoReliability(QWidget, JogMixin):
         self.align_base_y_requested.emit(dy_px)
 
     def _on_align_aruco_y(self):
-        """통합 ArUco Y 정렬 요청 (Ry + Base Y)"""
-        self._log("ArUco 정렬 Y 요청")
+        """수평 정렬 요청 (Ry + Base X)"""
+        self._log("수평 정렬 요청")
         self.align_aruco_y_requested.emit()
 
     def _on_align_aruco_x(self):
-        """통합 ArUco X 정렬 요청 (Rz)"""
-        self._log("ArUco 정렬 X 요청")
+        """수직 정렬 요청 (Rz)"""
+        self._log("수직 정렬 요청")
         self.align_aruco_x_requested.emit()
 
     def _on_align_aruco_combined(self):
@@ -1538,7 +1538,7 @@ class TabArucoReliability(QWidget, JogMixin):
         self.align_parallel_requested.emit(drx, dry, drz)
 
     def _on_set_detection_pose(self):
-        """set_rz.py 방식: TF5 전환 → 현재XYZ+목표RxRyRz movel → TF5 유지"""
+        """TF5 전환 → 현재XYZ 유지 + 개별 축 회전으로 목표 RxRyRz 적용"""
         if self.robot is None:
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
             return
@@ -1550,7 +1550,7 @@ class TabArucoReliability(QWidget, JogMixin):
         from PyQt5.QtWidgets import QApplication
 
         try:
-            # 1) TF5으로 전환
+            # 1) TF5 전환
             self._log("Detection Pose: TF5으로 전환")
             success, msg = self.robot.send_set_toolframe(5, wait=True)
             if not success:
@@ -1558,50 +1558,60 @@ class TabArucoReliability(QWidget, JogMixin):
                 return
             time.sleep(0.5)
 
-            # 2) 현재 위치 읽기 (set_rz.py와 동일: reg 158~169, float32)
+            # 2) 현재 위치 읽기 (TF5 기준)
             pose = self.robot.read_current_pose()
             if pose is None:
                 QMessageBox.warning(self, "경고", "TCP 좌표를 읽을 수 없습니다.")
                 return
 
-            x, y, z = pose[0], pose[1], pose[2]
+            cur_x, cur_y, cur_z = pose[0], pose[1], pose[2]
+            cur_rx, cur_ry, cur_rz = pose[3], pose[4], pose[5]
             tgt_rx = self.spinDetPoseRx.value()
             tgt_ry = self.spinDetPoseRy.value()
             tgt_rz = self.spinDetPoseRz.value()
 
-            self._log(f"현재: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
-            self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
+            self._log(f"현재: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={cur_rx:.1f} Ry={cur_ry:.1f} Rz={cur_rz:.1f}")
+            self._log(f"목표: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
 
-            # 3) 레지스터 직접 쓰기 (set_rz.py 방식 그대로)
+            # 3) 개별 축 회전 (delta가 0.5° 이상인 축만)
             to_int16 = self.robot.to_uint16
-            regs = [
-                to_int16(int(x * 10)),
-                to_int16(int(y * 10)),
-                to_int16(int(z * 10)),
-                to_int16(int(tgt_rx * 10)),
-                to_int16(int(tgt_ry * 10)),
-                to_int16(int(tgt_rz * 10)),
-            ]
-            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
-            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+            rot_x, rot_y, rot_z = cur_rx, cur_ry, cur_rz
 
-            # 4) 완료 대기
-            success, msg = self.robot.wait_for_done_motion_aware(
-                process_events_callback=QApplication.processEvents
-            )
-            if not success:
-                self._log(f"Detection Pose 이동 실패: {msg}")
-                return
+            for axis_name, cur_val, tgt_val in [('Rx', cur_rx, tgt_rx), ('Ry', cur_ry, tgt_ry), ('Rz', cur_rz, tgt_rz)]:
+                delta = tgt_val - cur_val
+                if abs(delta) < 0.5:
+                    self._log(f"  {axis_name}: Δ={delta:.2f}° → 스킵")
+                    continue
 
-            self._log("Detection Pose 이동 완료")
-            time.sleep(0.5)
+                # 현재까지 적용된 회전값 업데이트
+                if axis_name == 'Rx':
+                    rot_x = tgt_rx
+                elif axis_name == 'Ry':
+                    rot_y = tgt_ry
+                else:
+                    rot_z = tgt_rz
 
-            # 5) TF5 유지 확인
-            success, msg = self.robot.send_set_toolframe(5, wait=True)
-            if success:
-                self._log("TF5 확인 완료")
-            else:
-                self._log(f"TF5 설정 실패: {msg}")
+                self._log(f"  {axis_name}: {cur_val:.1f} → {tgt_val:.1f} (Δ={delta:.2f}°)")
+                regs = [
+                    to_int16(int(round(cur_x * 10))),
+                    to_int16(int(round(cur_y * 10))),
+                    to_int16(int(round(cur_z * 10))),
+                    to_int16(int(round(rot_x * 10))),
+                    to_int16(int(round(rot_y * 10))),
+                    to_int16(int(round(rot_z * 10))),
+                ]
+                self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+                self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+                success, msg = self.robot.wait_for_done_motion_aware(
+                    process_events_callback=QApplication.processEvents
+                )
+                if not success:
+                    self._log(f"  {axis_name} 회전 실패: {msg}")
+                    return
+                time.sleep(0.3)
+
+            self._log("Detection Pose 완료")
 
         except Exception as e:
             QMessageBox.warning(self, "오류", f"Detection Pose 실패: {e}")
@@ -1648,11 +1658,43 @@ class TabArucoReliability(QWidget, JogMixin):
                 return
             time.sleep(0.5)
 
-            # 2) 절대 좌표 이동 (config XYZ + UI RxRyRz)
+            # 2) 현재 위치 읽기 (TF5 기준)
+            pose = self.robot.read_current_pose()
+            if pose is None:
+                self._log("Set Robot Position: TCP 좌표 읽기 실패")
+                return
+            cur_x, cur_y, cur_z = pose[0], pose[1], pose[2]
+
+            self._log(f"현재: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={pose[3]:.1f} Ry={pose[4]:.1f} Rz={pose[5]:.1f}")
             self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
 
             to_int16 = self.robot.to_uint16
-            regs = [
+
+            # 3) 1단계: 현재 XYZ 유지 + 목표 RxRyRz로 회전
+            self._log("1단계: RxRyRz 회전")
+            regs_rot = [
+                to_int16(int(round(cur_x * 10))),
+                to_int16(int(round(cur_y * 10))),
+                to_int16(int(round(cur_z * 10))),
+                to_int16(int(round(tgt_rx * 10))),
+                to_int16(int(round(tgt_ry * 10))),
+                to_int16(int(round(tgt_rz * 10))),
+            ]
+            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs_rot)
+            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+            success, msg = self.robot.wait_for_done_motion_aware(
+                process_events_callback=QApplication.processEvents
+            )
+            if not success:
+                self._log(f"1단계 회전 실패: {msg}")
+                return
+            self._log("1단계 회전 완료")
+            time.sleep(0.3)
+
+            # 4) 2단계: 목표 XYZ로 위치 이동 (RxRyRz 유지)
+            self._log("2단계: XYZ 위치 이동")
+            regs_pos = [
                 to_int16(int(round(x * 10))),
                 to_int16(int(round(y * 10))),
                 to_int16(int(round(z * 10))),
@@ -1660,21 +1702,20 @@ class TabArucoReliability(QWidget, JogMixin):
                 to_int16(int(round(tgt_ry * 10))),
                 to_int16(int(round(tgt_rz * 10))),
             ]
-            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs_pos)
             self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
 
-            # 3) 완료 대기
             success, msg = self.robot.wait_for_done_motion_aware(
                 process_events_callback=QApplication.processEvents
             )
             if not success:
-                self._log(f"Set Robot Position 이동 실패: {msg}")
+                self._log(f"2단계 이동 실패: {msg}")
                 return
 
-            self._log("Set Robot Position 이동 완료")
+            self._log("Set Robot Position 완료")
             time.sleep(0.5)
 
-            # 4) TF5 유지 확인
+            # 5) TF5 유지 확인
             success, msg = self.robot.send_set_toolframe(5, wait=True)
             if success:
                 self._log("TF5 확인 완료")

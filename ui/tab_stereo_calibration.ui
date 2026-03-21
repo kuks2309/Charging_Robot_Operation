@@ -203,7 +203,7 @@ QPushButton:disabled {
            <layout class="QHBoxLayout" name="hboxStereoAlignButtons">
             <item>
              <widget class="QPushButton" name="btnAlignArucoY">
-              <property name="text"><string>ArUco 정렬 Y</string></property>
+              <property name="text"><string>수평 정렬</string></property>
               <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
               <property name="styleSheet">
                <string>QPushButton {
@@ -222,7 +222,7 @@ QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
             </item>
             <item>
              <widget class="QPushButton" name="btnAlignArucoX">
-              <property name="text"><string>ArUco 정렬 X</string></property>
+              <property name="text"><string>수직 정렬</string></property>
               <property name="minimumSize"><size><width>0</width><height>36</height></size></property>
               <property name="styleSheet">
                <string>QPushButton {

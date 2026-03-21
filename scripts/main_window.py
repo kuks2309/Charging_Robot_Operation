@@ -1470,7 +1470,7 @@ class MainWindow(QMainWindow):
             enabled)
 
     def _on_aruco_align_y(self):
-        """ArUco 정렬 Y: Ry 보정 + Base Y 보정 (detect-correct-redetect 패턴)"""
+        """수평 정렬: Ry 보정 + Base X 보정 (detect-correct-redetect 패턴)"""
         if not self._require_robot():
             return
 
@@ -1481,38 +1481,38 @@ class MainWindow(QMainWindow):
             # 1) 검출
             alignment = self._aruco_tab_detect_alignment()
             if alignment is None:
-                self._log("[ArUco Y] 정렬 실패: 마커 미검출")
+                self._log("[수평] 정렬 실패: 마커 미검출")
                 return
 
             # 2) Ry 보정 (>=0.5deg)
             active_ry = self._get_effective_ry(alignment)
             if active_ry is not None and abs(active_ry) >= 0.5:
-                self._log(f"[ArUco Y] Ry 보정: {active_ry:.2f}°")
+                self._log(f"[수평] Ry 보정: {active_ry:.2f}°")
                 self._on_ar_tag_align_base_ry(active_ry)
                 self._settle()
             else:
-                self._log(f"[ArUco Y] Ry 보정 불필요: {active_ry}°")
+                self._log(f"[수평] Ry 보정 불필요: {active_ry}°")
 
-            # 3) 재검출 + Base Y 보정 (>=5px)
+            # 3) 재검출 + Base X 보정 (>=5px)
             alignment2 = self._aruco_tab_detect_alignment()
             if alignment2 is not None and alignment2.offset_y is not None:
                 if abs(alignment2.offset_y) >= 5.0:
-                    self._log(f"[ArUco Y] Y 보정: {alignment2.offset_y:.1f}px")
+                    self._log(f"[수평] X 보정: {alignment2.offset_y:.1f}px")
                     self._on_ar_tag_align_base_y(alignment2.offset_y)
                     self._settle()
                 else:
-                    self._log(f"[ArUco Y] Y 보정 불필요: {alignment2.offset_y:.1f}px")
+                    self._log(f"[수평] X 보정 불필요: {alignment2.offset_y:.1f}px")
 
             # 4) 최종 검출 + 결과
             alignment3 = self._aruco_tab_detect_alignment()
             if alignment3 is not None:
                 ry_f = self._get_effective_ry(alignment3)
-                self._log(f"[ArUco Y] 정렬 완료: Ry={ry_f:.2f}°, offset_y={alignment3.offset_y:.1f}px")
+                self._log(f"[수평] 정렬 완료: Ry={ry_f:.2f}°, offset_y={alignment3.offset_y:.1f}px")
             else:
-                self._log("[ArUco Y] 최종 검출 실패")
+                self._log("[수평] 최종 검출 실패")
 
         except Exception as e:
-            self._log(f"[ArUco Y] 오류: {e}")
+            self._log(f"[수평] 오류: {e}")
         finally:
             self._set_aruco_align_buttons_enabled(True)
 
