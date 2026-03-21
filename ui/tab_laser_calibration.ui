@@ -152,6 +152,26 @@ QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
              </property>
             </widget>
            </item>
+           <item>
+            <widget class="QPushButton" name="btnHorizLaserOn">
+             <property name="text">
+              <string>수평레이저 ON</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnVertLaserOn">
+             <property name="text">
+              <string>수직레이저 ON</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
         </layout>
@@ -381,6 +401,55 @@ QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
             </widget>
            </item>
           </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <!-- 로봇 상태 (TF + 현재 위치/자세) -->
+      <item>
+       <widget class="QGroupBox" name="groupRobotStatus">
+        <property name="title">
+         <string>로봇 상태</string>
+        </property>
+        <property name="styleSheet">
+         <string>QGroupBox { border: 2px solid #4CAF50; border-radius: 4px; margin-top: 8px; padding-top: 12px; }
+QGroupBox::title { subcontrol-origin: margin; left: 8px; color: #4CAF50; font-weight: bold; }</string>
+        </property>
+        <layout class="QFormLayout" name="formLayoutRobotStatus">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelTFTitle">
+           <property name="text"><string>Tool Frame:</string></property>
+           <property name="styleSheet"><string>font-weight: bold; color: #4CAF50;</string></property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="labelTFValue">
+           <property name="text"><string>-</string></property>
+           <property name="styleSheet"><string>color: #4CAF50;</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="labelPosTitle">
+           <property name="text"><string>Position:</string></property>
+           <property name="styleSheet"><string>font-weight: bold;</string></property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="labelPosValue">
+           <property name="text"><string>-</string></property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="labelOriTitle">
+           <property name="text"><string>Orientation:</string></property>
+           <property name="styleSheet"><string>font-weight: bold;</string></property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="labelOriValue">
+           <property name="text"><string>-</string></property>
+          </widget>
          </item>
         </layout>
        </widget>

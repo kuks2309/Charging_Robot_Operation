@@ -12,7 +12,7 @@ import numpy as np
 from datetime import datetime
 from PyQt5 import uic
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QTimer
 
 from utils.common import display_frame_on_label
 from utils.overlay import draw_image_center_crosshair
@@ -93,7 +93,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._current_pose = None
         self._show_aruco_overlay = False
 
-        # 지그 초기 위치 (TF4 기준)
+        # 지그 초기 위치 (TF5 기준)
         self._jig_pos_vertical = None
         self._jig_pos_horizontal = None
 
@@ -130,6 +130,11 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._init_calib_table()
         self._init_vert_scan_ui()
 
+        # 로봇 상태 업데이트 타이머 (1초 주기, 탭 생존 기간 동안 유지)
+        self._robot_status_timer = QTimer()
+        self._robot_status_timer.timeout.connect(self._update_robot_status_ui)
+        self._robot_status_timer.start(1000)
+
     def _connect_signals(self):
         """시그널 연결"""
         self.btnStartCamera.clicked.connect(self._on_start_camera)
@@ -161,6 +166,8 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.btnAutoVertScan.clicked.connect(self._on_btn_auto_vert_scan)
         self.btnCancelAutoScan.clicked.connect(self.calib_auto_vert_scan_cancel_requested.emit)
         self.btnCancelAutoScan.setVisible(False)
+        self.btnHorizLaserOn.toggled.connect(self._on_toggle_horiz_laser)
+        self.btnVertLaserOn.toggled.connect(self._on_toggle_vert_laser)
 
     def _load_calibration(self):
         """ArduCam 캘리브레이션 파일 로드"""
@@ -281,6 +288,16 @@ class TabLaserCalibration(QWidget, JogMixin):
         btn_name, text_off, text_on = self._DISPLAY_BUTTONS[dtype]
         getattr(self, btn_name).setText(text_on if checked else text_off)
 
+    def _on_toggle_horiz_laser(self, checked):
+        """수평레이저 ON/OFF 토글 (하드웨어 미연결 — 버튼 텍스트만 변경)"""
+        self.btnHorizLaserOn.setText("수평레이저 OFF" if checked else "수평레이저 ON")
+        self._log(f"수평레이저 {'ON' if checked else 'OFF'}")
+
+    def _on_toggle_vert_laser(self, checked):
+        """수직레이저 ON/OFF 토글 (하드웨어 미연결 — 버튼 텍스트만 변경)"""
+        self.btnVertLaserOn.setText("수직레이저 OFF" if checked else "수직레이저 ON")
+        self._log(f"수직레이저 {'ON' if checked else 'OFF'}")
+
     def _on_toggle_laser(self, checked):
         self._on_display_toggle('laser', checked)
 
@@ -325,7 +342,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.robot = robot
 
     def _on_set_detection_pose(self):
-        """set_rz.py 방식: TF3 전환 → 현재 XYZ + 목표 RxRyRz movel → TF4 복귀"""
+        """set_rz.py 방식: TF3 전환 → 현재 XYZ + 목표 RxRyRz movel → TF5 복귀"""
         if self.robot is None:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
@@ -375,11 +392,11 @@ class TabLaserCalibration(QWidget, JogMixin):
             self._log("Detection Pose 이동 완료")
             time.sleep(0.5)
 
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            success, msg = self.robot.send_set_toolframe(5, wait=True)
             if success:
-                self._log("TF4 복귀 완료")
+                self._log("TF5 복귀 완료")
             else:
-                self._log(f"TF4 복귀 실패: {msg}")
+                self._log(f"TF5 복귀 실패: {msg}")
 
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox
@@ -1118,7 +1135,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         )
 
     def _on_save_jig_pos(self, orientation):
-        """현재 위치를 수직/수평 초기 위치로 저장 (TF4 기준)"""
+        """현재 위치를 수직/수평 초기 위치로 저장 (TF5 기준)"""
         if self.robot is None:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
@@ -1142,7 +1159,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             self._update_jig_pos_label(orientation, pos_dict)
             self._save_jig_positions()
             label = '수직' if orientation == 'vertical' else '수평'
-            self._log(f"지그 {label} 위치 저장 (TF4): X={pos_dict['x']:.1f} Y={pos_dict['y']:.1f} "
+            self._log(f"지그 {label} 위치 저장 (TF5): X={pos_dict['x']:.1f} Y={pos_dict['y']:.1f} "
                       f"Z={pos_dict['z']:.1f} Rx={pos_dict['rx']:.1f} Ry={pos_dict['ry']:.1f} Rz={pos_dict['rz']:.1f}")
         except Exception as e:
             self._log(f"위치 저장 오류: {e}")
@@ -1154,7 +1171,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._on_save_jig_pos('horizontal')
 
     def _on_move_jig_pos(self, orientation):
-        """수직/수평 초기 위치로 이동 (TF4 유지)"""
+        """수직/수평 초기 위치로 이동 (TF5 유지)"""
         pos = self._jig_pos_vertical if orientation == 'vertical' else self._jig_pos_horizontal
         label = '수직' if orientation == 'vertical' else '수평'
         if pos is None:
@@ -1185,7 +1202,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             if not success:
                 self._log(f"지그 {label} 위치 이동 실패: {msg}")
                 return
-            self._log(f"지그 {label} 위치 이동 완료 (TF4)")
+            self._log(f"지그 {label} 위치 이동 완료 (TF5)")
         except Exception as e:
             self._log(f"이동 오류: {e}")
 
@@ -1695,6 +1712,34 @@ class TabLaserCalibration(QWidget, JogMixin):
         """자동 스캔 진행 상태 레이블 업데이트."""
         if hasattr(self, 'labelAutoScanProgress'):
             self.labelAutoScanProgress.setText(text)
+
+    def _update_robot_status_ui(self):
+        """현재 로봇 TF/위치/자세 UI 업데이트 (1초 주기)"""
+        if not hasattr(self, 'labelTFValue'):
+            return
+
+        if self.robot is None:
+            self.labelTFValue.setText("로봇 미연결")
+            self.labelPosValue.setText("-")
+            self.labelOriValue.setText("-")
+            return
+
+        try:
+            tf = self.robot.read_current_toolframe()
+            self.labelTFValue.setText(f"TF{tf}" if tf is not None else "읽기 실패")
+
+            pose = self.robot.read_camera_pose()
+            if pose is not None:
+                x, y, z, rx, ry, rz = pose
+                self.labelPosValue.setText(f"X={x:.2f}, Y={y:.2f}, Z={z:.2f} mm")
+                self.labelOriValue.setText(f"Rx={rx:.2f}, Ry={ry:.2f}, Rz={rz:.2f}°")
+            else:
+                self.labelPosValue.setText("읽기 실패")
+                self.labelOriValue.setText("-")
+        except Exception as e:
+            self.labelTFValue.setText(f"오류: {e}")
+            self.labelPosValue.setText("-")
+            self.labelOriValue.setText("-")
 
     def _log(self, msg):
         self.log_message.emit(msg)

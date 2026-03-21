@@ -3892,10 +3892,10 @@ class MainWindow(QMainWindow):
             pass
         deltas = [offsets[0]] + [offsets[i] - offsets[i - 1] for i in range(1, len(offsets))]
 
-        # TF4 설정
-        ok, msg = self.robot.send_set_toolframe(4, wait=True)
+        # TF5 설정
+        ok, msg = self.robot.send_set_toolframe(5, wait=True)
         if not ok:
-            QMessageBox.warning(self, "TF 오류", f"TF4 설정 실패: {msg}")
+            QMessageBox.warning(self, "TF 오류", f"TF5 설정 실패: {msg}")
             return
 
         origin_pose = self.robot.read_current_pose()
@@ -5657,8 +5657,18 @@ class MainWindow(QMainWindow):
                         self._log(f"Tool Frame 설정 실패: {msg}")
                 except Exception as e:
                     self._log(f"Tool Frame 설정 오류: {e}")
-        # 레이저 캘리브레이션 탭 (인덱스 6) → ArduCam 강제 전환
+        # 레이저 캘리브레이션 탭 (인덱스 6) → TF5 강제 + ArduCam 강제 전환
         elif index == 6:
+            if self.robot and self.robot.is_connected:
+                try:
+                    success, msg = self.robot.send_set_toolframe(5, wait=True)
+                    if success:
+                        self._log("Laser Calibration 탭 선택: TF5 설정 완료")
+                        self._update_statusbar()
+                    else:
+                        self._log(f"Laser Calibration TF5 설정 실패: {msg}")
+                except Exception as e:
+                    self._log(f"Laser Calibration TF5 설정 오류: {e}")
             self._on_camera_type_changed(CAMERA_ARDUCAM)
         # 테스트 탭 (충전건 결합) 진입 → TF4 강제 + 카메라 자동 시작
         elif index == self.tabWidget.indexOf(self.tabTest):
