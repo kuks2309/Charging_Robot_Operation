@@ -2,6 +2,82 @@
 
 ---
 
+## 2026-03-21 | 레이저 좌표축 변환 (X→Y) + `_detect_in_roi` 중복 제거
+
+### 배경
+
+레이저 캘리브레이션 장비 위치 변경으로 물리적 좌표축 매핑이 변경됨:
+- **기존 X축 → 새 Y축** (횡방향 이동)
+- **기존 Y축 → 새 -X축**
+
+### 수정 내용
+
+#### 1. 좌표축 변환 (3개 파일)
+
+| 파일 | 변경 |
+|------|------|
+| `tab_laser_calibration.py` | 테이블 헤더 `X1/X2/ΔX` → `Y1/Y2/ΔY`, `_add_calib_row` 변수명 x→y |
+| `main_window.py` | `pose[0]`→`pose[1]` (캘리브레이션 위치 저장), `send_base_linear('x')`→`'y'`, 안정화 폴링 `axis='y'`, 로그 X→Y |
+| `laser_scan_service.py` | 삼각측량 `Bx_mm`→`By_mm`, `x_hit`→`y_hit`, 하위호환 fallback 추가 |
+
+#### 2. `_detect_in_roi` 중복 제거 (`laser_scan_service.py`)
+
+- **Before**: 40줄 자체 구현 (`extract_laser_center_conv` → `fit_laser_line` 직접 호출)
+- **After**: `LaserDetectionService.detect_in_roi()` 위임 + 5줄 래퍼
+- 불필요 import (`extract_laser_center_conv`, `fit_laser_line`) 제거
+
+#### 3. TF5 전환 + UI 추가 (`tab_laser_calibration.py`)
+
+- TF4 → TF5 전환 (laser calibration 탭 전역 + 탭 진입 시 자동 설정)
+- 수평/수직 레이저 ON/OFF 토글 버튼 추가
+- 로봇 상태(TF/위치/자세) 1초 주기 실시간 표시 그룹 추가
+- ROI config: symmetric→single, center_x 470→0, width 280→220
+
+### 변경 불필요 (확인 완료)
+
+- 이미지 픽셀 검출 (`cols`/`centers_y`) — 카메라가 로봇과 함께 회전하므로 불변
+- `slope_px_per_mm` (Z vs pixel Y) — Z 스캔 방향 불변
+- ROI config — 이미지 좌표 불변
+- `LaserDetectionService` 전체 — 이미지 공간 연산만 수행
+
+### 하위호환
+
+- `laser_scan_service.py`: config에 `Bx_mm` 키만 있고 `By_mm` 없으면 자동 매핑
+- 기존 스캔 JSON 데이터: `robot_pose[1]`에 Y값 이미 저장되어 있어 재활용 가능
+
+### 커밋
+
+- `ad2af74` [feat] Laser Calibration 탭 TF5 전환 + 레이저 토글/로봇 상태 UI 추가
+- `aca0a45` [refactor] laser_scan_service._detect_in_roi → LaserDetectionService 위임
+- `88958e2` [refactor] 레이저 캘리브레이션 좌표축 변환 — X축→Y축, Bx→By
+
+---
+
+## 2026-03-21 | 레이저 캘리브레이션 Set Detection Pose 간소화 + config 외부화
+
+### 문제
+
+1. **Detection Pose RxRyRz 하드코딩**: 목표 자세가 코드에 고정 → 현장 변경 시 재빌드 필요
+2. **불필요한 TF 전환**: TF3 전환 → movel → TF5 복귀 3단계 → TF5 기준 직접 movel이면 충분
+3. **기본 Rz 값 오류**: 90° → 실제 운용값 180°
+
+### 수정 내용
+
+1. **`laser_detection_pose.json` 신규 생성** (`config/laser/`)
+   - `target_rx: 90.0`, `target_ry: 0.0`, `target_rz: 180.0` (TF5 기준)
+   - 핫 리로드: 버튼 클릭 시 매번 config 재읽기
+2. **TF3/TF5 전환 로직 제거** (`tab_laser_calibration.py`)
+   - TF5 상태에서 직접 `send_move_to_pose()` 호출
+   - `time.sleep(0.5)` + `send_set_toolframe(5)` 복귀 코드 삭제
+3. **기본 Rz 90° → 180° 변경**
+
+### 영향 범위
+
+- `config/laser/laser_detection_pose.json` — 신규
+- `scripts/tabs/tab_laser_calibration.py` — `_on_set_detection_pose()` 간소화
+
+---
+
 ## 2026-03-21 | 레이저 캘리브레이션 ROI 모드 수정 + 자동 스캔 복귀/저장 개선
 
 ### 문제
