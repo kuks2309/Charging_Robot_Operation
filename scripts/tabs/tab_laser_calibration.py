@@ -343,23 +343,15 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.robot = robot
 
     def _on_set_detection_pose(self):
-        """set_rz.py 방식: TF3 전환 → 현재 XYZ + 목표 RxRyRz movel → TF5 복귀"""
+        """현재 XYZ 유지 + config 목표 RxRyRz로 movel (TF5 기준)"""
         if self.robot is None:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
             return
 
-        import time
         from PyQt5.QtWidgets import QApplication, QMessageBox
 
         try:
-            self._log("Detection Pose: TF3으로 전환")
-            success, msg = self.robot.send_set_toolframe(3, wait=True)
-            if not success:
-                self._log(f"TF3 전환 실패: {msg}")
-                return
-            time.sleep(0.5)
-
             pose = self.robot.read_current_pose()
             if pose is None:
                 QMessageBox.warning(self, "경고", "TCP 좌표를 읽을 수 없습니다.")
@@ -368,13 +360,13 @@ class TabLaserCalibration(QWidget, JogMixin):
             x, y, z = pose[0], pose[1], pose[2]
 
             # config에서 목표 RxRyRz 읽기 (매번 핫 리로드)
-            tgt_rx, tgt_ry, tgt_rz = 90.0, 0.0, 90.0  # 기본값
+            tgt_rx, tgt_ry, tgt_rz = 90.0, 0.0, 180.0  # 기본값
             try:
                 with open(LASER_DETECTION_POSE_FILE, 'r', encoding='utf-8') as f:
                     dp_cfg = json.load(f)
                 tgt_rx = dp_cfg.get('target_rx', 90.0)
                 tgt_ry = dp_cfg.get('target_ry', 0.0)
-                tgt_rz = dp_cfg.get('target_rz', 90.0)
+                tgt_rz = dp_cfg.get('target_rz', 180.0)
             except Exception as e:
                 self._log(f"Detection Pose config 로드 실패 (기본값 사용): {e}")
 
@@ -401,13 +393,6 @@ class TabLaserCalibration(QWidget, JogMixin):
                 return
 
             self._log("Detection Pose 이동 완료")
-            time.sleep(0.5)
-
-            success, msg = self.robot.send_set_toolframe(5, wait=True)
-            if success:
-                self._log("TF5 복귀 완료")
-            else:
-                self._log(f"TF5 복귀 실패: {msg}")
 
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox

@@ -1,0 +1,6 @@
+{
+    "_desc": "레이저 캘리브레이션 검출 자세 (TF5 기준, RxRyRz만 사용, XYZ는 현재 위치 유지)",
+    "target_rx": 90.0,
+    "target_ry": 0.0,
+    "target_rz": 180.0
+}
