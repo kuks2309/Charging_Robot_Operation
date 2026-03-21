@@ -15,11 +15,9 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import pyqtSignal
 
 from utils.common import display_frame_on_label
+from utils.image_processing import undistort_frame, compute_roi_rects, draw_laser_fit_line
 from tabs.jog_mixin import JogMixin
-from Sensor.laser.extract_laser_center import (
-    extract_laser_center_conv,
-    fit_laser_line,
-)
+from services.laser_detection_service import LaserDetectionService
 
 
 # UI 파일 경로
@@ -28,8 +26,8 @@ TAB_LASER_SCAN_UI = os.path.join(UI_DIR, 'tab_laser_scan.ui')
 
 # 캘리브레이션 파일 경로
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
-ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'arducam_calibration.yaml')
-LASER_SCAN_ROI_FILE = os.path.join(CONFIG_DIR, 'laser_scan_roi.json')
+ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'calibration', 'arducam', 'arducam_calibration.yaml')
+LASER_SCAN_ROI_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_vertical_scan_roi.json')
 
 
 class TabLaserScan(QWidget, JogMixin):
@@ -114,71 +112,17 @@ class TabLaserScan(QWidget, JogMixin):
             self._roi_config = None
             self.log_message.emit(f"ROI 설정 로드 실패: {e}")
 
-    @staticmethod
-    def _compute_roi_rects(frame_w, frame_h, roi_cfg):
-        """좌우 ROI 사각형 좌표 계산 (픽셀 단위)"""
-        cx = frame_w // 2
-        hw = roi_cfg['roi_width'] // 2
-        y0 = roi_cfg['y_offset']
-        y1 = y0 + roi_cfg['roi_height']
-
-        lx0 = cx - roi_cfg['offset_x'] - hw
-        lx1 = cx - roi_cfg['offset_x'] + hw
-        rx0 = cx + roi_cfg['offset_x'] - hw
-        rx1 = cx + roi_cfg['offset_x'] + hw
-
-        lx0 = int(max(0, lx0))
-        lx1 = int(min(frame_w, lx1))
-        rx0 = int(max(0, rx0))
-        rx1 = int(min(frame_w, rx1))
-        y0 = int(max(0, y0))
-        y1 = int(min(frame_h, y1))
-
-        return [(lx0, y0, lx1, y1), (rx0, y0, rx1, y1)]
-
     def _draw_roi_boxes(self, frame):
         """프레임에 ROI 박스 오버레이"""
         if self._roi_config is None:
             return
-        roi_cfg = self._roi_config['roi']
+        roi_cfg = self._roi_config['roi_laser']
         h, w = frame.shape[:2]
-        rects = TabLaserScan._compute_roi_rects(w, h, roi_cfg)
-        color = tuple(roi_cfg.get('color', [0, 0, 255]))
+        rects = compute_roi_rects(w, h, roi_cfg)
+        color = tuple(int(c) for c in roi_cfg.get('color', [0, 0, 255]))
         thickness = roi_cfg.get('thickness', 2)
         for (x0, y0, x1, y1) in rects:
             cv2.rectangle(frame, (x0, y0), (x1, y1), color, thickness)
-
-    @staticmethod
-    def _detect_laser_in_roi(frame, roi_rect):
-        """ROI 영역을 crop하여 레이저 라인 검출. 결과는 원본 좌표."""
-        x0, y0, x1, y1 = roi_rect
-        if (x1 - x0) < 10 or (y1 - y0) < 10:
-            return None
-
-        cropped = frame[y0:y1, x0:x1]
-        cols, centers_y, est_width = extract_laser_center_conv(cropped)
-
-        if len(cols) == 0:
-            return None
-
-        # crop 좌표 → 원본 프레임 좌표
-        cols = cols + x0
-        centers_y = centers_y + y0
-
-        coeffs, inlier_cols, inlier_y = fit_laser_line(cols, centers_y)
-        if coeffs is None or len(coeffs) < 2:
-            return None
-
-        angle_deg = float(np.degrees(np.arctan(coeffs[0])))
-        return {
-            'cols': cols,
-            'centers_y': centers_y,
-            'inlier_cols': inlier_cols,
-            'inlier_y': inlier_y,
-            'coeffs': coeffs,
-            'angle_deg': angle_deg,
-            'est_width': est_width,
-        }
 
     # 좌=Cyan(BGR), 우=Magenta(BGR)
     _ROI_COLORS = [(255, 255, 0), (255, 0, 255)]
@@ -188,20 +132,20 @@ class TabLaserScan(QWidget, JogMixin):
         if self._roi_config is None:
             return
 
-        roi_cfg = self._roi_config['roi']
+        roi_cfg = self._roi_config['roi_laser']
         h, w = frame.shape[:2]
-        rects = TabLaserScan._compute_roi_rects(w, h, roi_cfg)
+        rects = compute_roi_rects(w, h, roi_cfg)
         labels = [
             (self.labelLeftAngle, self.labelLeftPoints, self.labelLeftYRange),
             (self.labelRightAngle, self.labelRightPoints, self.labelRightYRange),
         ]
         angles = []
 
-        for i, rect in enumerate(rects):
-            lbl_angle, lbl_points, lbl_yrange = labels[i]
-            color = self._ROI_COLORS[i]
+        for (x0, y0, x1, y1), (lbl_angle, lbl_points, lbl_yrange) in zip(rects, labels):
+            color = self._ROI_COLORS[len(angles)]
+            rect = (x0, y0, x1, y1)
 
-            result = TabLaserScan._detect_laser_in_roi(frame, rect)
+            result = LaserDetectionService.detect_in_roi(frame, rect)
             if result is None:
                 lbl_angle.setText("-")
                 lbl_points.setText("-")
@@ -216,11 +160,7 @@ class TabLaserScan(QWidget, JogMixin):
             # 피팅 직선 표시
             coeffs = result['coeffs']
             ic = result['inlier_cols']
-            if len(ic) > 0:
-                x_start, x_end = int(ic.min()), int(ic.max())
-                y_start = int(round(np.polyval(coeffs, x_start)))
-                y_end = int(round(np.polyval(coeffs, x_end)))
-                cv2.line(display, (x_start, y_start), (x_end, y_end), color, 2)
+            draw_laser_fit_line(display, coeffs, ic, color)
 
             # 라벨 업데이트
             lbl_angle.setText(f"{result['angle_deg']:.3f} deg")
@@ -230,8 +170,14 @@ class TabLaserScan(QWidget, JogMixin):
                 lbl_yrange.setText(f"{iy.min():.1f} ~ {iy.max():.1f} px")
             angles.append(result['angle_deg'])
 
+        # 사용되지 않는 labels 초기화 (single ROI 모드 등)
+        for i in range(len(rects), len(labels)):
+            labels[i][0].setText("")
+            labels[i][1].setText("")
+            labels[i][2].setText("")
+
         # 좌우 각도 차이
-        if angles[0] is not None and angles[1] is not None:
+        if len(angles) >= 2 and angles[0] is not None and angles[1] is not None:
             diff = abs(angles[0] - angles[1])
             self.labelAngleDiff.setText(f"|L-R| = {diff:.3f} deg")
         else:
@@ -440,7 +386,7 @@ class TabLaserScan(QWidget, JogMixin):
         self.current_frame = frame.copy()
 
         if self.radioUndistorted.isChecked() and self.camera_matrix is not None:
-            base_frame = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
+            base_frame = undistort_frame(frame, self.camera_matrix, self.dist_coeffs)
         else:
             base_frame = frame.copy()
 

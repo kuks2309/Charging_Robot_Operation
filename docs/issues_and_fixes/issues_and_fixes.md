@@ -2,6 +2,661 @@
 
 ---
 
+## 2026-03-21 | Task 편집 탭 TCP Position 그룹박스에 현재 TF 번호 미표시
+
+### 문제
+
+- Task 편집 탭의 TCP Position 그룹박스 타이틀이 항상 "TCP Position"으로 고정
+- 현재 어떤 Tool Frame(TF) 기준인지 알 수 없어 혼동 발생 (TF3/TF4 간 TCP 좌표 150mm 이상 차이)
+- `update_current_toolframe()` 메서드가 placeholder(`pass`)로 비어있었음
+
+### 수정 내용
+
+- `scripts/tabs/tab_task_edit.py`: `update_current_toolframe()` 구현 — `self.groupTCPPosition.setTitle(f"TCP Position (TF{toolframe})")`
+- `main_window.py:1884`에서 이미 호출하고 있으므로 추가 연결 불필요
+
+### 교훈
+
+- TF에 따라 TCP 좌표가 크게 달라지므로, 현재 TF를 항상 명시적으로 표시해야 혼동 방지
+
+---
+
+## 2026-03-21 | Modbus 포트/IP 기본값 불일치 + Detection Pose config 외부화 + 테스트 폴더 통합
+
+### 문제
+
+1. **Modbus 포트 기본값 불일치**: `modbus_client.py` 기본 포트 1502인데, UI(`main_window.ui`, `tab_task_edit.ui`) 기본값도 1502지만, 로봇 IP가 `192.168.0.29`(구)로 하드코딩 → 실제 로봇 IP `192.168.0.39`와 불일치
+2. **UI 포트 변경 미반영**: `tab_task_edit.ui`의 기본 IP/포트가 구버전(192.168.0.29:1502)으로 하드코딩되어, 앱 재시작 시 항상 구값으로 리셋
+3. **Detection Pose 값 하드코딩**: `tab_aruco_reliability.ui` 스핀박스 기본값(Rx=90, Ry=0, Rz=90)만 사용, 외부 config 없음 → 앱 재시작 시 항상 리셋, XYZ 절대이동 불가
+4. **테스트 폴더 이원화**: `scripts/test/`와 `scripts/tests/` 두 폴더에 테스트 분산
+5. **btnSetRobotPosition 미존재 시 크래시**: UI 파일 미갱신 상태에서 시그널 연결 시 AttributeError → 탭 전환 불가
+
+### 수정 내용
+
+**Modbus 기본값 통일**
+- `modbus_client.py`: 기본 IP `192.168.0.29` → `192.168.0.39`
+- `main_window.ui`: 기본 IP `192.168.0.29` → `192.168.0.39`
+- `tab_task_edit.ui`: 기본 IP `192.168.0.29` → `192.168.0.39`
+- 포트는 1502 유지 (로봇 Modbus 서버 포트 확인 완료, 5001/5002는 TCP 버스용)
+
+**Detection Pose config 외부화**
+- `config/charging/charging_gun_coupling.json`에 `detection_pose` 추가 (x, y, z, rx, ry, rz, use_xyz)
+- `tab_aruco_reliability.py`: `_load_detection_pose_config()` 메서드 추가, 앱 시작 시 + 버튼 클릭 시 config 재로드
+- **Set Detection Pose** 버튼: Rx/Ry/Rz만 변경 (XYZ는 현재 로봇 위치 유지)
+- **Set Robot Position** 버튼 신규 추가: config의 XYZ + RxRyRz로 절대 이동 (확인 팝업 포함)
+- `hasattr` 가드로 UI 파일 미갱신 시에도 크래시 방지
+
+**테스트 폴더 통합**
+- `scripts/test/` → `scripts/tests/`로 12개 파일 이동, 빈 폴더 삭제
+- `test_modbus_connection.py` 신규 추가 (포트별 연결 테스트)
+
+### 교훈
+
+- **로봇 하드웨어 포트 확인 필수**: 티치펜던트 설정(5001/5002)과 Modbus 프로토콜 포트(1502)는 별개. 실제 테스트로 검증
+- **UI 기본값은 반드시 config와 동기화**: `.ui` 파일 하드코딩 기본값이 있으면, config에서 로드하여 덮어쓰기 필요
+- **신규 UI 위젯 참조 시 hasattr 가드 필수**: `.ui` 파일과 `.py` 파일 동기화 불일치 방지
+
+---
+
+## 2026-03-21 | 레이저 캘리브레이션 ROI 로직 전면 수정 + 자동 스캔 재설계
+
+### 문제
+
+1. **ROI config 키 무단 변경**: `center_y_offset_px` → `center_y_px`, `mode: single` → `symmetric` 등 config 파일이 임의로 변경됨 (약 5시간 낭비)
+2. **rects[0] 하드코딩**: `tab_laser_calibration.py` 4곳, `laser_scan_service.py` 1곳, `tab_laser_scan.py` 2곳에서 symmetric 모드 시 IndexError 또는 오른쪽 ROI 무시
+3. **`_roi_params`, `compute_calib_roi_rects`에서 `center_x_px` 미지원**: `compute_roi_rects`와 draw 함수 간 좌표 불일치
+4. **자동 스캔 이동축 오류**: Z축이어야 하는데 X축(`send_base_linear('x', ...)`)으로 구현됨
+5. **자동 스캔 범위/스텝 하드코딩**: `x_offsets_mm: [0, -40, -80]` 고정, UI 조정 불가
+6. **ROI config 키 하드코딩**: `roi`/`roi_preview` 고정 → config 키 변경 시 코드 수정 필요
+7. **z_tcp_mm 기록 버그**: X좌표(pose[0]) 기록 → Z좌표(pose[2])여야 함
+8. **Nelder-Mead 파라미터 무제한**: h, alpha, delta_z bounds 없음 → 발산 (h=2e14, RMSE=85px)
+
+### 수정 내용
+
+**ROI 로직 (image_processing.py)**
+- `_roi_params`: `center_x_px` 지원 추가
+- `compute_calib_roi_rects`: `center_x_px` 지원 추가
+- docstring 3개 함수 업데이트 (`center_x_px`/`center_y_px` 키 문서화)
+
+**tab_laser_calibration.py — rects[0] 버그 4곳 수정**
+- `_draw_calib_roi_overlay`: `rects[0]` → 전체 rects 반복
+- `_filter_by_calib_roi`: `rects[0]` → union 필터 (`np.zeros + |=`)
+- `_draw_rgb_overlay`: `rects[0]` → 전체 rects 마스크 병합
+- `_run_vert_scan`: `rects[0]` → union bounding box
+
+**tab_laser_calibration.py — ROI config 동적 로딩**
+- config 키 동적 읽기 (dict인 키 자동 감지, `_note` 제외)
+- `self._all_rois = [(name, config), ...]` 구조로 저장
+- overlay에 ROI 이름 표시 (`roi_laser`, `roi_laser_base(L)/(R)`)
+- 자동 스캔 시 모든 ROI에서 레이저 검출
+
+**tab_laser_scan.py — IndexError 2곳 수정**
+- `_draw_laser_results`: `enumerate(rects)` → `zip(rects, labels)`, 미사용 label 초기화
+- `angles[1]` 접근 전 `len(angles) >= 2` guard 추가
+
+**laser_scan_service.py — IndexError + docstring**
+- `rects[1]` → `if len(rects) > 1 else None` guard
+- docstring: `center_y_px` → `center_y_offset_px (or center_y_px)`, `mode` 키 추가
+
+**자동 스캔 (main_window.py)**
+- 이동축: `send_base_linear('x', ...)` → `send_base_linear('z', ...)`
+- 스텝 생성: `x_offsets_mm` 리스트 → `scan_range_mm / step_mm`로 자동 생성
+- UI `spinScanRange` 추가 (config 저장/로드)
+- z_tcp 기록: `pose[0]` → `pose[2]`
+- CSV 저장: 모든 ROI의 픽셀 단위 레이저 좌표 (col_px, center_y_px) 기록
+- Nelder-Mead bounds 추가: h=[1,500], alpha=[0,30], delta_z=[-2000,2000]
+
+### 삭제된 잘못된 데이터
+- `data/laser_scan/calibration/vertical/scan_raw_20260315_102600.csv` (X축 이동 데이터)
+- `data/laser_scan/calibration/vertical/calib_vert_20260315_102955.json` (발산 결과)
+- `data/laser_scan/calibration/vertical/calib_vert_20260315_103205.json` (발산 결과)
+- `config/laser/vertical/laser_vertical_triangulation_calib.json` (발산 캘리브 결과)
+
+### 교훈
+- **사용자가 수정한 config 파일을 임의로 변경하지 말 것**
+- **ROI config 키는 동적으로 읽어 하드코딩 금지**
+- **이동축, 좌표축 등 물리적 의미를 반드시 확인 후 구현**
+
+---
+
+## 2026-03-15 | 레이저 캘리브레이션 탭 수동 캡처 버튼 3개 제거
+
+### 변경 내용
+
+수직 스캔 섹션의 수동 버튼 3개(`위치로 이동`, `캡처 추가`, `클리어`)와 관련 핸들러 제거.
+
+자동 스캔(`btnAutoVertScan`)이 동일 기능을 완전히 대체하므로 수동 버튼 불필요.
+
+### 제거 항목
+
+- **UI** (`ui/tab_laser_calibration.ui`): `btnMoveToVertScan`, `btnScanVertical`, `btnClearVertScan` 위젯
+- **Python** (`scripts/tabs/tab_laser_calibration.py`):
+  - 3개 signal 연결 제거
+  - `_on_add_vert_capture()` 메서드 제거
+  - `_set_auto_scan_ui_state()` 내 제거된 버튼 참조 3줄 제거
+
+### 유지 항목
+
+- `_on_move_jig_pos_vertical()` — `btnMoveJigPosVertical`(지그 위치 저장 섹션)이 동일 메서드 사용 중이므로 유지
+- `_run_vert_scan()`, `_on_clear_vert_scan()` — `main_window.py` 자동 스캔 경로에서 직접 호출
+- `labelVertScanStatus`, `labelCaptureCount` — 자동 스캔 결과 표시에 사용
+
+---
+
+## 2026-03-14 | ROI center_y 하위호환 — center_y_px / center_y_offset_px 혼용 대응
+
+### 문제
+
+`laser_vertical_scan_roi.json`을 `center_y_offset_px: 0` (중심 상대)로 변경했으나,
+`laser_horizontal_scan_roi.json`과 `laser_vertical_calib_roi.json`은 여전히 `center_y_px` (절대 위치) 사용.
+
+`_roi_params()`, `compute_calib_roi_rects()`, `compute_roi_rects()` 세 함수 모두
+`center_y_offset_px`만 읽도록 되어 있어 레거시 파일에서 Y 위치가 이미지 중심(540px)으로
+잘못 계산되는 버그 발생.
+
+### 해결
+
+`utils/image_processing.py` 세 함수에 하위호환 처리 추가:
+
+```python
+int(roi_cfg['center_y_px']) if 'center_y_px' in roi_cfg \
+    else frame_h // 2 + int(roi_cfg.get('center_y_offset_px', 0))
+```
+
+- `center_y_px` 키 존재 시 → 절대 위치 사용 (레거시)
+- 없으면 → `frame_h // 2 + center_y_offset_px` (신규)
+
+**변경 파일:** `scripts/utils/image_processing.py` (`_roi_params`, `compute_calib_roi_rects`, `compute_roi_rects`)
+
+---
+
+## 2026-03-14 | config/laser ROI 스키마 통일 — compute_roi_rects 신설
+
+### 문제
+
+두 가지 ROI 스키마 혼재 + 절대 위치와 offset 혼용:
+
+- **Scan ROI** (`laser_vertical_scan_roi.json`, `laser_horizontal_scan_roi.json`): `offset_x`(중심 상대) + `y_offset`(절대 위치) 혼용
+- **Calib ROI** (`laser_vertical_calib_roi.json`): `center_x_offset_px`, `width_px`, `center_y_px`, `height_px` 사용
+- `tab_laser_calibration.py`가 잘못된 파일(`laser_vertical_calib_roi.json`) 읽음 → `laser_vertical_scan_roi.json` 읽어야 함
+
+### 해결
+
+**통일 스키마** (`center_x` 컨벤션):
+
+```json
+{ "roi": { "mode": "symmetric", "center_x_offset_px": 0, "width_px": 280, "center_y_px": 450, "height_px": 900, "color": [0,0,255], "thickness": 6 } }
+```
+
+**`compute_roi_rects(frame_w, frame_h, roi_cfg)`** 신설 (`utils/image_processing.py`):
+
+- 통일 스키마 사용, `height_px=0` → 전체 프레임 높이
+- `mode="symmetric"`: 좌/우 2개, `mode="single"`: 1개
+- `compute_scan_roi_rects`, `compute_calib_roi_rects` → deprecated alias 유지
+
+**변경 파일:**
+
+- `config/laser/vertical/laser_vertical_scan_roi.json`: 새 스키마, `center_y_px=450`
+- `config/laser/horizontal/laser_horizontal_scan_roi.json`: 새 스키마, `center_y_px=530`
+- `tab_laser_calibration.py`: `_roi_cfg` dict 기반으로 리팩터링, `_calib_roi_bounds()` 제거, `LASER_VERT_SCAN_ROI_FILE` 사용
+- `tab_laser_calibration.ui`: `btnCreateROI` → `btnCreateROIVertical` + `btnCreateROIHorizontal`
+- `tab_laser_scan.py`, `tab_ai_detection.py`, `laser_scan_service.py`: `compute_roi_rects` 사용
+- `test_image_processing.py`: `_STD_CFG` 새 키, `height_px=0` 테스트 추가
+
+---
+
+## 2026-03-14 | 레이저 피팅 직선 그리기 공통화 — draw_laser_fit_line 신설
+
+### 문제
+
+동일한 `np.polyval + cv2.line` 5줄 패턴이 3곳에 중복:
+
+- `tab_laser_calibration._draw_conv_overlay` L582 (PINK)
+- `tab_laser_calibration._draw_jig_laser_detect` L900 (CYAN)
+- `tab_laser_scan._draw_laser_results` L163 (가변색)
+
+### 해결
+
+`utils/image_processing.py`에 `draw_laser_fit_line` 공용 함수 신설.
+
+```python
+def draw_laser_fit_line(frame, coeffs, inlier_cols, color, thickness=2):
+    if len(coeffs) < 2 or len(inlier_cols) == 0:
+        return
+    x0, x1 = int(inlier_cols.min()), int(inlier_cols.max())
+    y0 = int(round(np.polyval(coeffs, x0)))
+    y1 = int(round(np.polyval(coeffs, x1)))
+    cv2.line(frame, (x0, y0), (x1, y1), color, thickness)
+```
+
+- `len(coeffs) < 2` 가드를 함수 내부로 통합 (호출부 조건문 제거)
+- `tab_laser_calibration._draw_line_overlay` L739 세그먼트 루프는 엔드포인트 원 표시와 결합되어 **제외**
+
+### 수정 파일
+
+- `scripts/utils/image_processing.py` — `draw_laser_fit_line` 추가
+- `scripts/tabs/tab_laser_calibration.py` — 2곳 교체, import 추가
+- `scripts/tabs/tab_laser_scan.py` — 1곳 교체, import 추가
+- `scripts/tests/test_image_processing.py` — 5개 테스트 추가 (총 23개)
+
+---
+
+## 2026-03-14 | AI Detection 탭 — ROI 내 레이저 검출 구현
+
+### 배경
+- 기존 `btnLaserAlign`은 Port_T bbox 좌표 기반 동적 노란 ROI를 생성했으나, 이는 요청한 적 없는 코드였음
+- 목표: 레이저 정렬 버튼 클릭 시 `laser_vertical_calib_roi.json` ROI 안에서만 레이저를 검출하고, YOLOv8 결과 위에 해당 ROI와 검출 결과를 오버레이
+
+### 구현 내용
+
+#### 1. `LaserState(IntEnum)` — bool 대체 3-상태 열거형
+```python
+class LaserState(IntEnum):
+    OFF = 0           # 레이저 모드 비활성
+    ROI_VISIBLE = 1   # ROI 표시만 (정렬 대기)
+    ALIGNING = 2      # 정렬 진행 중
+```
+- 기존 `_laser_mode_active: bool` 완전 제거 → `_laser_state: LaserState`로 교체
+- 버튼 토글: OFF→ROI_VISIBLE, ROI_VISIBLE→OFF (정렬 중 클릭은 무시)
+
+#### 2. `compute_calib_roi_rects(frame_w, frame_h, roi_cfg)` — `image_processing.py` 신규
+- calib 스키마(`center_x_offset_px/width_px/center_y_px/height_px/mode`) → `[(x0,y0,x1,y1), ...]`
+- `mode="symmetric"` (기본): 좌우 대칭 2개 rect 반환
+- `mode="single"`: `img_cx + offset` 위치 1개 rect 반환
+- scan ROI 스키마(`compute_scan_roi_rects`)와 분리 유지 (config 키 이름 불변)
+
+#### 3. `_last_laser_results` — 쓰레드 안전 검출 결과 공유
+```python
+self._last_laser_results: dict = {'left': None, 'right': None}
+```
+- `_run_detection` (백그라운드 스레드)에서 `with self._detect_lock:` 안에 쓰기
+- `_measure_laser_dy` (정렬 스레드)에서 동일 락으로 읽기 (shallow copy)
+
+#### 4. `_run_detection` — 레이저 검출 루프 추가
+- `_laser_state != LaserState.OFF`이면 매 프레임 ROI별 검출 실행
+- `LaserDetectionService.detect_in_roi(frame, rect)` 호출 (left/right)
+- 검출 성공 시: `cv2.circle`로 inlier 점 표시 + `draw_laser_fit_line`으로 피팅 직선 (초록)
+- `draw_laser_fit_line(frame, coeffs, inlier_cols, color)`: `image_processing.py` 공용 함수 사용
+
+#### 5. `_measure_laser_dy` — Port_T 의존성 제거
+- 기존: Port_T bbox 좌표에서 ROI 동적 생성 → 포트 미검출 시 실패
+- 변경: 3-phase wait 후 `_last_laser_results` 복사 → `np.polyval(coeffs, center_x)` + `np.mean` 집계
+- 반환: `float(laser_y - center_y_px)` (roi_cfg 기준 중심 Y 대비 레이저 Y 편차)
+
+### 수정 파일
+- `scripts/tabs/tab_ai_detection.py` — LaserState enum, _last_laser_results, _run_detection 레이저 루프, _on_laser_align_clicked 3-상태 로직, _measure_laser_dy 재작성
+- `scripts/utils/image_processing.py` — `compute_calib_roi_rects` 추가
+
+---
+
+## 2026-03-14 | ROI Overlay 공통화 — 탭별 독자 구현 제거
+
+### 문제
+
+ROI overlay 함수가 공용 모듈 없이 각 탭에서 중복 구현되어 있었음.
+
+#### 중복 1 — 같은 config, 다른 구현
+
+- `tab_laser_calibration._draw_calib_roi_overlay`: `laser_vertical_calib_roi.json` 사용, cv2 직접 호출(rectangle×2 + addWeighted + putText)
+- `tab_ai_detection`: 동일 config에서 공용 `draw_laser_calib_roi` 사용 — 탭 간 불일치
+
+#### 중복 2 — 스키마 불호환으로 인한 독자 구현
+
+- `tab_laser_scan._compute_roi_rects` + `_draw_roi_boxes`: `laser_vertical_scan_roi.json` 스키마(offset_x/roi_width/y_offset)로 좌표 계산
+- `laser_scan_service._capture_laser_data`: 동일 좌표 계산 로직을 독자 재구현 → 화면 ROI와 검출 ROI 불일치 위험
+
+### 해결 방안
+
+config 파일 스키마 변경 없이 공용 함수 2개 신설.
+
+1. **`draw_roi_box(frame, x0,y0,x1,y1, color, thickness, *, alpha, min_thickness, label)`**
+   - 좌표 직접 지정 ROI 렌더링 프리미티브
+   - `alpha>0`: addWeighted 반투명 fill, `min_thickness>0`: 최소 두께, `label`: putText
+   - `draw_roi_single`, `draw_roi_symmetric` 내부가 이 함수를 호출하도록 리팩토링
+
+2. **`compute_scan_roi_rects(frame_w, frame_h, roi_cfg)`**
+   - scan ROI 스키마(offset_x/roi_width/roi_height/y_offset)로 좌/우 ROI 좌표 계산
+   - 반환: `[(lx0,y0,lx1,y1), (rx0,y0,rx1,y1)]`
+
+### 수정 파일
+
+- `scripts/utils/image_processing.py` — `draw_roi_box`, `compute_scan_roi_rects` 추가; `draw_roi_single`, `draw_roi_symmetric` 내부를 `draw_roi_box` 호출로 교체
+- `scripts/tabs/tab_laser_calibration.py` — `_draw_calib_roi_overlay` cv2 직접 호출 → `draw_roi_box` 단일 호출
+- `scripts/tabs/tab_laser_scan.py` — `_compute_roi_rects` staticmethod 완전 제거, `_draw_roi_boxes`·`_draw_laser_results` → `compute_scan_roi_rects` 사용
+- `scripts/services/laser_scan_service.py` — ROI 좌표 인라인 계산 → `compute_scan_roi_rects` 단일 호출
+- `scripts/tests/test_image_processing.py` — 신규 8개 테스트 추가 (총 18개)
+
+### 변경 금지 사항 (의도적 유지)
+
+- `laser_vertical_calib_roi.json`, `laser_vertical_scan_roi.json` config 스키마 키 이름 불변
+- `draw_laser_calib_roi` 기존 시그니처 불변 (`tab_ai_detection` 기존 호출 보호)
+- `_calib_roi_bounds()`, `_filter_by_calib_roi()` 좌표 계산 로직 유지 (렌더링과 분리)
+
+---
+
+## 2026-03-14 | AI Detection — Laser 정렬 버튼 ROI 오버레이 구현
+
+### 내용
+- Laser 정렬 버튼 클릭 시 `laser_vertical_calib_roi.json`을 읽어 ArduCam 프레임에 ROI 박스 오버레이
+- YOLOv8 추론 결과 위에 ROI를 그려 레이저 검출 영역을 시각적으로 확인 가능
+
+### 변경 사항
+- `_on_laser_align_clicked`: 버튼 토글마다 JSON 재로드 → 파일 수정 후 OFF→ON으로 즉시 반영
+- 기존 Port_T bbox 기반 동적 노란 ROI 제거 (요청한 적 없는 코드)
+- 공용 ROI overlay 함수 3종을 `utils/image_processing.py`에 추가:
+  - `draw_roi_single(frame, roi_cfg)`: 단일 박스 (img_cx + offset)
+  - `draw_roi_symmetric(frame, roi_cfg)`: 좌우 대칭 2개 (img_cx ± offset)
+  - `draw_laser_calib_roi(frame, roi_cfg)`: JSON `mode` 필드로 single/symmetric 선택 (기본: symmetric)
+- `view_results.py`에서 위 함수들 re-export (하위 호환)
+- JSON에 `"mode": "symmetric"` 필드 추가
+
+### 수정 파일
+- `scripts/tabs/tab_ai_detection.py`
+- `scripts/utils/image_processing.py`
+- `scripts/AI/view_results.py`
+- `config/laser/align/laser_vertical_calib_roi.json`
+
+---
+
+## 2026-03-14 | tmux에서 충전 로봇 앱 실행
+
+### 내용
+- Qt GUI 앱을 tmux 세션 안에서 실행 가능
+- 가상환경(`charging_robot`)과 X11 디스플레이 변수 명시 필요
+
+### 실행 명령
+```bash
+tmux new-session -d -s charging_robot -c /home/argoon/Project/Charging_Robot_Operation
+tmux send-keys -t charging_robot "DISPLAY=:0 /home/argoon/Project/Charging_Robot_Operation/charging_robot/bin/python scripts/main_window.py" Enter
+tmux attach -t charging_robot
+```
+
+### 환경 정보
+- `DISPLAY=:0`, `XDG_SESSION_TYPE=x11`
+- 가상환경: `charging_robot/bin/python` (python 3.10)
+
+---
+
+## 2026-03-14 | DS435 3-phase wait 타이밍 버그 — Phase 1→2 사이 sleep 누락
+
+### 증상
+- DS435 수직/수평 정렬 측정 함수(`_measure_ds435_dy`, `_measure_ds435_dx`)가 로봇 이동 전 프레임의 OBB 결과를 반환할 수 있었음
+- ArduCam 측정 함수와 동일한 3-phase wait를 의도했으나 sleep 위치가 달랐음
+
+### 원인
+- 기존 구현이 `for flag in (False, True, False):` 루프 안에서 `if flag is True: time.sleep(0.05)` 처리
+- sleep이 Phase 2 감지 **이후**(Phase 2→3 사이)에 삽입됨
+- ArduCam 패턴은 sleep이 Phase 1 감지 **이후**(Phase 1→2 사이) — 즉 Phase 2 폴링 시작 전에 위치
+- 결과: Phase 1 완료 직후 Phase 2(`running=True`)를 즉시 re-detect할 수 있어 동일 프레임 결과를 반환할 위험
+
+### 수정 내용
+- `_measure_ds435_dy`, `_measure_ds435_dx`를 ArduCam의 `_measure_dy`, `_measure_dx`와 동일한 3-phase while 루프 구조로 재작성
+- `time.sleep(0.05)` 위치: Phase 1 while 루프 완료 직후, Phase 2 while 루프 시작 전으로 이동
+
+### 수정 파일
+- `scripts/tabs/tab_ai_detection.py`
+
+---
+
+## 2026-03-14 | PortAlignmentService — 대형 오프셋 분할 보정 + base frame 지원
+
+### 내용
+- `COARSE_MAX_MM` 20.0 → 30.0 상향 (DS435 사용 거리에서 오프셋 범위 확대)
+- `align_vertical()`에 `frame='tcp'|'base'` 파라미터 추가: 레이저 정렬 등 base frame 이동 필요 시 `send_base_linear` 경로 선택 가능
+- 보정량이 `COARSE_MAX_MM` 초과 시 단순 실패 대신 분할 이동(chunked correction) 수행 (최대 10회)
+- `_fine_align()`에 `move_fn` 파라미터 추가: frame-agnostic 이동 함수 주입
+
+### 수정 파일
+- `scripts/services/port_alignment_service.py`
+
+---
+
+## 2026-03-14 | AI Detection 탭 — 자동차 충전건 결합 그룹박스 추가
+
+### 내용
+- "자동차 충전건 결합" 그룹박스 신규 추가 (DS435→ArduCam 핸드오프 + 레이저 정렬 통합 UI)
+- `btnDS435ChargingAlign`: DS435 수직+수평 정렬 자동 순차 실행 (Port detect 미활성 시 자동 활성화)
+- `btnHandoff` (ArduCam 충전위치 변환): `config/charging/charging_gun_coupling.json` → `ds435_to_arducam` 오프셋으로 `send_base_linear` 이동
+- `btnArducamChargingAlign`: ArduCam 수직→Ry→수평 정렬 자동 순차 실행
+- `btnLaserAlign`: Port_T bbox 하단 기준 ROI 내 레이저 라인 검출 → `align_vertical(frame='base', tcp_axis='x')` 보정
+- `_measure_laser_dy()`: Port_T bbox 좌우 ROI 분할 검출 + fallback 전체 ROI, 레이저 Y − port_t_ymax 반환
+- `LaserDetectionService` 추가 임포트, `_last_raw_frame`, `_last_port_t_ymax/xmin/xmax` 상태 추가
+
+### 수정 파일
+- `scripts/tabs/tab_ai_detection.py`
+
+---
+
+## 2026-03-12 | AI Detection 탭 — DS435 Port detect 모델 로드 실패 (TkAgg 충돌)
+
+### 증상
+- "Port detect" 버튼 클릭 시 모델 로드 실패
+- 로그: `[DS435 Detect] 모델 로드 실패: Cannot load backend 'TkAgg' which requires the 'tk' interactive framework, as 'qt' is currently running`
+
+### 원인
+- `view_obb_results.py`가 모듈 최상단에 `matplotlib.use('TkAgg')`를 실행 (standalone 스크립트 설계)
+- `_load_ds435_model()`에서 `from view_obb_results import overlay_obb` 시 해당 코드가 즉시 실행됨
+- 앱은 이미 Qt5Agg 백엔드로 matplotlib를 초기화한 상태 → 백엔드 전환 불가 → 예외 발생
+
+### 수정 내용
+- `scripts/AI/obb_overlay.py` 신규 생성: matplotlib 의존성 없이 `overlay_obb`, `put_text_ko`, `get_font` 유틸 함수만 포함 (앱 import 가능)
+- `tab_ai_detection.py`: `from view_obb_results import overlay_obb` → `from obb_overlay import overlay_obb`로 교체
+- UI 분리 원칙 준수: 인라인 cv2 drawing 코드를 탭 파일에 두지 않고 `obb_overlay.py` 서비스 레이어로 분리
+
+### 수정 파일
+- `scripts/AI/obb_overlay.py` (신규)
+- `scripts/tabs/tab_ai_detection.py`
+
+---
+
+## 2026-03-12 | AI Detection 탭 — DS435 AI Detection 그룹박스 기능 추가
+
+### 내용
+- 기존 DS435 AI Detection 그룹박스는 UI만 존재하고 내부가 완전히 비어 있었음
+- Port detect (OBB 검출 토글), 수직 정렬, 수평 정렬 버튼 추가
+
+**신규 구현:**
+- `btnPortDetect` (checkable): DS435 YOLOv8-OBB 추론 토글
+  - 모델: `config/AI_weights/DS435/best.pt` (task='obb')
+  - 오버레이: `obb_overlay.overlay_obb()` (충전포트 OBB 박스 + 신뢰도)
+  - OBB 4 꼭짓점 평균 → `_ds435_last_center (cx, cy)` 저장
+- `btnDS435VertAlign`: OBB 중심 Y - 이미지 중심 Y → PortAlignmentService.align_vertical()
+- `btnDS435HorizAlign`: OBB 중심 X - 이미지 중심 X → PortAlignmentService.align_horizontal()
+- 3-phase wait 측정 함수 (`_measure_ds435_dy`, `_measure_ds435_dx`): 백그라운드 추론 완료 후 결과 반환
+
+### 수정 파일
+- `scripts/tabs/tab_ai_detection.py`
+- `scripts/AI/obb_overlay.py` (신규)
+
+---
+
+## 2026-03-12 | robot_tf_investigation.py — 하드코딩 절대경로 → 상대경로
+
+### 증상
+
+- 다른 PC에 설치 시 `SAVE_PATH`가 `/home/amap/Project/KAIST/...` 절대경로로 고정되어 파일 저장 실패
+
+### 원인
+
+- `scripts/utils/robot_tf_investigation.py`의 `SAVE_PATH`가 개발 머신 절대경로로 하드코딩
+- docstring의 저장 위치 설명도 동일한 절대경로 사용
+
+### 수정 내용
+
+- `SAVE_PATH`: 절대경로 → `os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'tf_config.json')`
+- docstring: `저장 위치: config/tf_config.json (프로젝트 루트 기준)` 으로 변경
+
+### 수정 파일
+
+- `scripts/utils/robot_tf_investigation.py`
+
+---
+
+## 2026-03-12 | config 폴더 기능별 하위폴더 구조 리팩토링
+
+### 내용
+config 루트에 평탄하게 놓여 있던 yaml/json 파일들을 기능별 하위폴더로 재구성.
+레이저는 향후 수평 스캔 구현을 고려해 방향별(vertical/horizontal) 구조로 설계.
+
+### 신규 구조
+
+```
+config/
+├── AI_weights/ArduCam/          (기존 유지)
+├── calibration/
+│   ├── arducam/                 ← arducam_calibration.yaml (active)
+│   │   └── archive/             ← 타임스탬프 버전 12개
+│   ├── ds435/                   ← ds435_calibration.yaml (active)
+│   │   └── archive/
+│   └── stereo/                  ← sweep_calibration.json, charging_robot_camera_calibration_20260307.yaml
+├── camera/
+│   ├── arducam/                 ← camera_config.json
+│   └── ds435/                   (향후 확장 대비)
+├── laser/
+│   ├── vertical/                ← laser_vertical_scan_roi.json, laser_vertical_triangulation_calib.json, laser_vertical_calib_roi.json
+│   └── horizontal/              (추후 구현 예정)
+└── charging/                    ← charging_gun_coupling.json, charging_coupling_config.json
+```
+
+### 경로 변경 요약
+
+| 구 경로 | 신 경로 |
+| ------- | ------- |
+| `config/arducam_calibration.yaml` | `config/calibration/arducam/arducam_calibration.yaml` |
+| `config/ds435_calibration.yaml` | `config/calibration/ds435/ds435_calibration.yaml` |
+| `config/laser_scan_roi.json` | `config/laser/vertical/laser_vertical_scan_roi.json` |
+| `config/laser_triangulation_calib.json` | `config/laser/vertical/laser_vertical_triangulation_calib.json` |
+| `config/laser_calib_roi.json` | `config/laser/vertical/laser_vertical_calib_roi.json` |
+| `config/camera_config.json` | `config/camera/arducam/camera_config.json` |
+| `config/charging_gun_coupling.json` | `config/charging/charging_gun_coupling.json` |
+| `config/charging_coupling_config.json` | `config/charging/charging_coupling_config.json` |
+
+### 수정 파일
+- `scripts/Sensor/arducam/arducam_controller.py`
+- `scripts/Sensor/d435/d435_controller.py`
+- `scripts/services/arducam_manager.py`
+- `scripts/services/camera_manager.py`
+- `scripts/services/laser_scan_service.py` (경로 + docstring)
+- `scripts/tabs/tab_aruco_reliability.py`
+- `scripts/tabs/tab_eye_in_hand.py`
+- `scripts/tabs/tab_laser_calibration.py`
+- `scripts/tabs/tab_laser_scan.py`
+- `scripts/main_window.py` (3곳)
+- `scripts/utils/coordinate_visualizer.py`
+- `scripts/analyze_ippe_ambiguity.py`
+- `scripts/calibrate_camera_boofcv.py`
+- `scripts/test_aruco_detect.py`
+- `scripts/utils/robot_tf_investigation.py` (하드코딩 절대경로 → 상대경로)
+
+---
+
+## 2026-03-12 | Laser Calibration 탭 — 캘리브레이션 지그 탭에 Laser ROI 토글 기능 추가
+
+### 내용
+
+- "캘리브레이션 지그" 서브탭에 "캘리브레이션" GroupBox + "Laser ROI 생성" 토글 버튼 추가
+- 이미지 수평 중심 기준 ±200px 수직 스트립 ROI
+
+### 구현
+
+**신규 파일:**
+
+- `config/laser/vertical/laser_vertical_calib_roi.json` — `half_width_px: 200`, 초록색
+
+**수정 파일:**
+
+- `ui/tab_laser_calibration.ui`: `tabCalibJig`에 `groupCalibration` GroupBox + `btnCreateROI` (checkable) 추가
+- `scripts/tabs/tab_laser_calibration.py`:
+  - `_load_calib_roi_config()` — JSON 설정 로드
+  - `_draw_calib_roi_overlay(frame)` — 반투명 수직 스트립 + 경계선 오버레이
+  - `_filter_by_calib_roi(cols, centers_y)` — x 범위 필터 (`_draw_conv_overlay`, `_draw_line_overlay`에 적용)
+  - `_on_create_roi()` — 토글 동작 (on/off)
+  - `deactivate()` — 탭 전환 시 ROI 상태 자동 리셋
+  - 죽은 `roi_create_requested` 시그널 제거
+
+---
+
+## 2026-03-12 | UI/알고리즘 분리 전체 codebase 재검증
+
+### 내용
+리팩토링 후 `scripts/` 전체를 대상으로 UI/알고리즘 분리 원칙 준수 여부 재검증.
+
+### 검증 결과
+
+| 레이어 | 상태 | 비고 |
+|--------|------|------|
+| `scripts/tabs/` | PASS | 이전 리팩토링 완전 적용 — 알고리즘 직접 호출 0건 |
+| `scripts/services/` | PASS | 알고리즘 레이어 — cv2 사용 정상 |
+| `scripts/Sensor/` | PASS | 센서 레이어 — cv2 사용 정상 |
+| `scripts/AI/view_results.py` | PASS | 순수 드로잉(line/circle)만 사용 |
+| `scripts/main_window.py` | PASS | import cv2만 존재, 알고리즘 호출 없음 |
+| `scripts/utils/coordinate_visualizer.py` | PARTIAL | solvePnP/Rodrigues 직접 호출 |
+
+### 잔존 항목 — `scripts/utils/coordinate_visualizer.py`
+
+- L331: `cv2.solvePnP(...)` 직접 실행
+- L338: `cv2.solvePnPRefineLM(...)` 직접 실행
+- L101, L113, L391: `cv2.Rodrigues(...)`
+
+utils/ 시각화 도구이므로 tabs 위반보다 심각도 낮음. 향후 수정 시 `ArucoCameraPoseEstimator` 경유로 전환 권장. 현재는 즉시 수정 대상 아님.
+
+---
+
+## 2026-03-12 | UI/알고리즘 분리 원칙 위반 전면 리팩토링
+
+### 증상
+- `scripts/tabs/*.py` 파일들이 cv2 알고리즘(`solvePnP`, `calibrateCamera`, `calibrateHandEye`, `Rodrigues`, `undistort`), 레이저 검출(`extract_laser_center`, `fit_laser_line`), 마스크 처리(`extract_red_mask`, `fit_multiple_lines`)를 탭에서 직접 호출
+- 탭이 `camera_matrix`/`dist_coeffs`를 직접 보유하여 왜곡 보정까지 수행
+- `tab_stereo_calibration.py`가 `ArucoCameraPoseEstimator`를 탭 내에서 직접 인스턴스화 (VisionManager 우회)
+- 서비스 레이어 없이 알고리즘 코드가 탭에 분산 → 테스트 불가, 재사용 불가
+
+### 원인
+- 초기 개발 시 빠른 구현을 위해 서비스 분리 없이 탭에 직접 구현
+
+### 수정 내용
+
+**신규 생성 (4개):**
+- `scripts/utils/image_processing.py`: `undistort_frame()`, `rvec_to_euler_deg()` 공통 유틸
+- `scripts/services/camera_calibration_service.py`: `CameraCalibrationService` — `cv2.calibrateCamera` 래퍼
+- `scripts/services/hand_eye_calibration_service.py`: `HandEyeCalibrationService` — `solvePnP`, `Rodrigues`, `calibrateHandEye` 래퍼
+- `scripts/services/laser_detection_service.py`: `LaserDetectionService` — 레이저 검출 7개 static method (`detect_laser_center`, `detect_laser_center_conv`, `detect_and_fit`, `fit_laser_centers`, `detect_in_roi`, `get_laser_y_at_center`, `extract_red_mask`, `fit_multiple_lines`)
+
+**수정 (6개 탭):**
+- `tab_calibration.py`: `cv2.calibrateCamera` → `CameraCalibrationService`, `cv2.undistort` → `undistort_frame`
+- `tab_eye_in_hand.py`: `solvePnP`/`Rodrigues` → `solve_pnp_and_store`, `calibrateHandEye` → `calibrate`, `undistort` → `undistort_frame`, `_euler_to_rotation_matrix` 서비스로 이전
+- `tab_laser_scan.py`: `_detect_laser_in_roi` 정적 메서드 삭제 → `LaserDetectionService.detect_in_roi`, `undistort` → `undistort_frame`
+- `tab_laser_calibration.py`: `extract_laser_center*`/`fit_laser_line`/`extract_red_mask`/`fit_multiple_lines` 직접 호출 → `LaserDetectionService` 경유, `undistort` → `undistort_frame`
+- `tab_stereo_calibration.py`: `ArucoCameraPoseEstimator` 직접 생성 → `__init__(aruco_estimator=None)` DI 패턴 (기본값으로 내부 생성, 하위호환)
+- `tab_aruco_reliability.py`: `cv2.Rodrigues` → `rvec_to_euler_deg`, `cv2.undistort` → `undistort_frame`
+
+**단위 테스트 추가:**
+- `scripts/tests/test_image_processing.py` (10개)
+- `scripts/tests/test_laser_detection_service.py` (10개)
+- `scripts/tests/test_calibration_services.py` (15개)
+- 실행: `PYTHONPATH=scripts charging_robot/bin/python -m pytest scripts/tests/ -v -p no:launch_testing` → 35/35 PASS
+
+### 검증
+```
+cv2.solvePnP / Rodrigues / calibrateCamera / calibrateHandEye / undistort in scripts/tabs/: 0건
+extract_laser_center / fit_laser_line (직접 import) in scripts/tabs/: 0건
+Syntax check 전 파일: PASS
+```
+
+### 수정 파일
+- `scripts/utils/image_processing.py` (신규)
+- `scripts/services/camera_calibration_service.py` (신규)
+- `scripts/services/hand_eye_calibration_service.py` (신규)
+- `scripts/services/laser_detection_service.py` (신규)
+- `scripts/tabs/tab_calibration.py`
+- `scripts/tabs/tab_eye_in_hand.py`
+- `scripts/tabs/tab_laser_scan.py`
+- `scripts/tabs/tab_laser_calibration.py`
+- `scripts/tabs/tab_stereo_calibration.py`
+- `scripts/tabs/tab_aruco_reliability.py`
+- `scripts/tests/` (신규 디렉토리)
+
+---
+
 ## 2026-03-11 | AI Detection — Ry 보정 부호 반전 (로봇이 반대 방향으로 움직임)
 
 ### 증상

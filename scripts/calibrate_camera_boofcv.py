@@ -111,7 +111,7 @@ SQUARE_SIZE_MM = 22.0     # 정사각형 크기 (mm)
 PROJECT_ROOT = Path(__file__).parent.parent
 IMAGE_DIR = PROJECT_ROOT / "calibration" / "camera" / "auto_20260128_170240"
 OUTPUT_FILE = PROJECT_ROOT / "calibration" / "camera" / "calibration_boofcv.npz"
-OUTPUT_YAML = PROJECT_ROOT / "config" / "arducam_calibration.yaml" #ds435_calibration
+OUTPUT_YAML = PROJECT_ROOT / "config" / "calibration" / "arducam" / "arducam_calibration.yaml" #ds435_calibration
 
 
 def load_images(image_dir):

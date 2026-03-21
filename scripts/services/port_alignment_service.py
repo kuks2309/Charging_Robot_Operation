@@ -152,7 +152,7 @@ class PortAlignmentService:
     """
 
     COARSE_TEST_MM  = 2.0    # px/mm 실측 테스트 이동량
-    COARSE_MAX_MM   = 20.0   # coarse 1회 최대 보정량 안전 한계
+    COARSE_MAX_MM   = 30.0   # coarse 1회 최대 보정량 안전 한계
     DEAD_ZONE_PX    = 3.0    # 이 이하이면 정렬 불필요
 
     FINE_MAX_STEP_MM  = 0.5   # 미세 정렬 1회 최대 이동량 (보수적 시작)
@@ -175,6 +175,7 @@ class PortAlignmentService:
         self,
         measure_fn: Callable[[], Optional[float]],
         tcp_axis: str = 'y',
+        frame: str = 'tcp',
     ) -> tuple:
         """수직 정렬 실행 (coarse → fine 자동 수행).
 
@@ -191,13 +192,19 @@ class PortAlignmentService:
             measure_fn: () -> Optional[float]
                 현재 dy_px를 반환하는 콜백. None=검출 실패.
                 내부적으로 충분한 대기(3-phase wait 등) 후 반환해야 함.
-            tcp_axis: 이동 TCP 축 ('y' 기본). TF4 기준 수직 = TCP Y.
+            tcp_axis: 이동 축 ('y' 기본).
+            frame: 'tcp' (send_tcp_linear) 또는 'base' (send_base_linear).
 
         Returns:
             (success: bool, message: str)
         """
         if self.robot is None or not self.robot.is_connected:
             return False, "로봇 미연결"
+
+        def _move(axis, val):
+            if frame == 'base':
+                return self.robot.send_base_linear(axis, val, wait=True)
+            return self.robot.send_tcp_linear(axis, val, wait=True)
 
         # 초기 오프셋
         d0 = measure_fn()
@@ -210,14 +217,14 @@ class PortAlignmentService:
         self._log(f"[PortAlign] 1단계: d0={d0:+.1f}px, 테스트 이동 +{self.COARSE_TEST_MM}mm")
 
         # 테스트 이동
-        ok, msg = self.robot.send_tcp_linear(tcp_axis, self.COARSE_TEST_MM, wait=True)
+        ok, msg = _move(tcp_axis, self.COARSE_TEST_MM)
         if not ok:
             return False, f"테스트 이동 실패: {msg}"
 
         # 테스트 이동 후 검출
         d1 = measure_fn()
         if d1 is None:
-            self.robot.send_tcp_linear(tcp_axis, -self.COARSE_TEST_MM, wait=True)
+            _move(tcp_axis, -self.COARSE_TEST_MM)
             return False, "테스트 이동 후 검출 실패 — 원위치 복귀"
 
         delta_px = d1 - d0
@@ -225,7 +232,7 @@ class PortAlignmentService:
 
         if abs(delta_px) < 2:
             self._log("[PortAlign] 픽셀 변화 < 2px — 원위치 복귀")
-            self.robot.send_tcp_linear(tcp_axis, -self.COARSE_TEST_MM, wait=True)
+            _move(tcp_axis, -self.COARSE_TEST_MM)
             return False, "측정 불안정 (픽셀 변화 < 2px)"
 
         px_per_mm = delta_px / self.COARSE_TEST_MM
@@ -235,15 +242,33 @@ class PortAlignmentService:
             f" → 보정 {correction_mm:+.2f}mm"
         )
 
-        if abs(correction_mm) > self.COARSE_MAX_MM:
-            return False, f"보정 과대 ({correction_mm:.1f}mm > ±{self.COARSE_MAX_MM}mm)"
+        # 보정량 한계 초과 시 COARSE_MAX_MM 단위로 분할 이동
+        _COARSE_MAX_ITER = 10
+        coarse_iter = 0
+        current_d = d1
+        while abs(correction_mm) > self.COARSE_MAX_MM:
+            if coarse_iter >= _COARSE_MAX_ITER:
+                return False, f"분할 보정 최대 반복({_COARSE_MAX_ITER}회) 초과: 잔여={current_d:+.1f}px"
+            step_mm = math.copysign(self.COARSE_MAX_MM, correction_mm)
+            self._log(
+                f"[PortAlign] 분할 보정 [{coarse_iter+1}]: {step_mm:+.1f}mm"
+                f" (잔여={current_d:+.1f}px)"
+            )
+            ok, msg = _move(tcp_axis, step_mm)
+            if not ok:
+                return False, f"분할 보정 이동 실패: {msg}"
+            current_d = measure_fn()
+            if current_d is None:
+                return False, "분할 보정 중 검출 실패"
+            correction_mm = -current_d / px_per_mm
+            coarse_iter += 1
 
-        ok, msg = self.robot.send_tcp_linear(tcp_axis, correction_mm, wait=True)
+        ok, msg = _move(tcp_axis, correction_mm)
         if not ok:
             return False, f"보정 이동 실패: {msg}"
 
         # 미세 정렬
-        final_px = self._fine_align(tcp_axis, px_per_mm, measure_fn)
+        final_px = self._fine_align(tcp_axis, px_per_mm, measure_fn, _move)
 
         if final_px is not None:
             return True, f"정렬 완료: 잔여={final_px:+.1f}px"
@@ -337,6 +362,7 @@ class PortAlignmentService:
         tcp_axis: str,
         px_per_mm: float,
         measure_fn: Callable[[], Optional[float]],
+        move_fn: 'Callable[[str, float], tuple] | None' = None,
     ) -> Optional[float]:
         """미세 정렬: coarse 잔여를 FINE_CONVERGE_PX 이내로 수렴.
 
@@ -373,7 +399,10 @@ class PortAlignmentService:
                 self._log(f"[PortAlign][Fine] 스텝 {step_mm:.3f}mm < {self.FINE_MIN_STEP_MM}mm, 종료")
                 return offset
 
-            ok, msg = self.robot.send_tcp_linear(tcp_axis, step_mm, wait=True)
+            _do_move = move_fn if move_fn is not None else (
+                lambda ax, v: self.robot.send_tcp_linear(ax, v, wait=True)
+            )
+            ok, msg = _do_move(tcp_axis, step_mm)
             if not ok:
                 self._log(f"[PortAlign][Fine] 이동 실패: {msg}")
                 break

@@ -31,6 +31,7 @@ from Sensor.laser.extract_laser_center import (
     extract_laser_center_conv,
     fit_laser_line,
 )
+from utils.image_processing import compute_roi_rects
 
 
 class LaserScanService(QObject):
@@ -57,7 +58,7 @@ class LaserScanService(QObject):
     # 삼각측량 캘리브레이션 파일 경로
     _CALIB_FILE = os.path.join(
         os.path.dirname(__file__), '..', '..', 'config',
-        'laser_triangulation_calib.json'
+        'laser', 'vertical', 'laser_vertical_triangulation_calib.json'
     )
 
     def __init__(self, robot, arducam_manager, roi_config,
@@ -66,9 +67,10 @@ class LaserScanService(QObject):
         Args:
             robot: ModbusClient (send_base_linear, read_current_pose)
             arducam_manager: ArduCamManager (get_frame)
-            roi_config: dict loaded from config/laser_scan_roi.json.
+            roi_config: dict loaded from config/laser/vertical/laser_vertical_scan_roi.json.
                         Expected: roi_config['roi'] with keys
-                        offset_x, roi_width, roi_height, y_offset
+                        center_x_offset_px (or center_x_px), width_px, height_px,
+                        center_y_offset_px (or center_y_px), mode ("single" or "symmetric")
             camera_matrix: numpy array for undistortion (optional)
             dist_coeffs: numpy array for undistortion (optional)
         """
@@ -491,27 +493,12 @@ class LaserScanService(QObject):
             frame = cv2.undistort(frame, self._camera_matrix, self._dist_coeffs)
 
         # ROI 좌표 계산
-        roi_cfg = self._roi_config['roi']
+        roi_cfg = self._roi_config['roi_laser']
         h, w = frame.shape[:2]
-        cx = w // 2
-        hw = roi_cfg['roi_width'] // 2
-        y0 = roi_cfg['y_offset']
-        y1 = y0 + roi_cfg['roi_height']
-
-        lx0 = max(0, cx - roi_cfg['offset_x'] - hw)
-        lx1 = min(w, cx - roi_cfg['offset_x'] + hw)
-        rx0 = max(0, cx + roi_cfg['offset_x'] - hw)
-        rx1 = min(w, cx + roi_cfg['offset_x'] + hw)
-        y0 = max(0, y0)
-        y1 = min(h, y1)
-
-        rects = [
-            (int(lx0), int(y0), int(lx1), int(y1)),
-            (int(rx0), int(y0), int(rx1), int(y1)),
-        ]
+        rects = compute_roi_rects(w, h, roi_cfg)
 
         left_result = self._detect_in_roi(frame, rects[0])
-        right_result = self._detect_in_roi(frame, rects[1])
+        right_result = self._detect_in_roi(frame, rects[1]) if len(rects) > 1 else None
         return left_result, right_result
 
     def _detect_in_roi(self, frame: np.ndarray, roi_rect: tuple):

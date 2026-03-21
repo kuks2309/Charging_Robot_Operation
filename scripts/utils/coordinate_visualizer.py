@@ -270,7 +270,7 @@ def run_realtime_mode():
     """실시간 모드: ArduCam + Modbus로 실시간 업데이트"""
     from Robot.communication.modbus_client import ModbusClient
 
-    CALIB_FILE = os.path.join(PROJECT_ROOT, 'config', 'arducam_calibration.yaml')
+    CALIB_FILE = os.path.join(PROJECT_ROOT, 'config', 'calibration', 'arducam', 'arducam_calibration.yaml')
     from utils.camera_utils import detect_arducam_index
     _detected = detect_arducam_index()
     DEVICE_INDEX = _detected if _detected is not None else 6  # fallback: 6 (기존 동작 보존)

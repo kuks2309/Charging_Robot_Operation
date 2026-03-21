@@ -1,0 +1,20 @@
+{
+  "_note": "레이저 캘리브레이션 지그 ROI: 이미지 중심 기준 직사각형 ROI",
+  "_resolution": "1920x1080",
+  "roi": {
+    "mode": "symmetric",
+    "center_x_offset_px": 480,
+    "width_px": 150,
+    "center_y_px": 950,
+    "height_px": 230,
+    "color": [255, 0, 0],
+    "thickness": 4
+  },
+  "reference_line": {
+    "_note": "수평 기준선 — center_y_px는 roi.center_y_px에서 런타임에 읽음 (중복 없음)",
+    "color": [0, 255, 255],
+    "thickness": 2,
+    "alpha": 0.0,
+    "enabled": true
+  }
+}

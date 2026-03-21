@@ -85,7 +85,7 @@ class ModbusClient:
     REGISTER_FINE_Y = 308       # DEPRECATED: y2 (int16, mm×10)
     REGISTER_FINE_Z = 309       # DEPRECATED: z2 (int16, mm×10)
 
-    def __init__(self, ip: str = "192.168.0.29", port: int = 1502, timeout: float = 1.0):
+    def __init__(self, ip: str = "192.168.0.39", port: int = 1502, timeout: float = 1.0):
         """
         Args:
             ip: 로봇 컨트롤러 IP

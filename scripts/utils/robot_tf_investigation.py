@@ -5,7 +5,7 @@ Robot Tool Frame Investigation 모듈
 목적: 로봇의 여러 Tool Frame (TF0, TF1, ...) 정보를 읽고 관계 분석
 용도: 좌표계 변환을 위한 기초 자료
 
-저장 위치: /home/amap/Project/KAIST/Charging_Robot/config/tf_config.json
+저장 위치: config/tf_config.json (프로젝트 루트 기준)
 """
 
 import sys
@@ -314,7 +314,7 @@ def main(compare=False, save=False):
     ROBOT_IP = "192.168.0.29"
     ROBOT_PORT = 1502
     TF_LIST = [0, 1]  # 조사할 Tool Frame 목록
-    SAVE_PATH = "/home/amap/Project/KAIST/Charging_Robot/config/tf_config.json"
+    SAVE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'tf_config.json')
 
     # 로봇 연결
     print(f"\n로봇 연결 중... ({ROBOT_IP}:{ROBOT_PORT})")

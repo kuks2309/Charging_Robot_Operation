@@ -41,18 +41,21 @@ class TabStereoCalibration(QWidget):
     sweep_start_requested = pyqtSignal(float, int)   # (step_mm, count)
     sweep_cancel_requested = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, aruco_estimator=None):
         super().__init__(parent)
         uic.loadUi(TAB_STEREO_CALIBRATION_UI, self)
 
         self._ds435_manager = None
         self._arducam_manager = None
 
-        # ArUco 검출기 (VisionManager는 단일 카메라 전용이므로 직접 생성)
-        self._aruco_estimator = ArucoCameraPoseEstimator(
-            marker_size_meters=0.015,
-            dictionary_type=cv2.aruco.DICT_5X5_50,
-        )
+        # ArUco 검출기 (VisionManager는 단일 카메라 전용이므로 직접 생성, 외부 주입 가능)
+        if aruco_estimator is not None:
+            self._aruco_estimator = aruco_estimator
+        else:
+            self._aruco_estimator = ArucoCameraPoseEstimator(
+                marker_size_meters=0.015,
+                dictionary_type=cv2.aruco.DICT_5X5_50,
+            )
 
         # 프레임 카운터 (쓰로틀링용)
         self._ds435_frame_count = 0

@@ -16,7 +16,7 @@ from PyQt5.QtCore import pyqtSignal
 
 from utils.common import display_frame_on_label
 from utils.overlay import draw_image_center_crosshair
-from utils.image_processing import undistort_frame, draw_roi_box
+from utils.image_processing import undistort_frame, draw_roi_box, draw_laser_fit_line, compute_roi_rects
 from tabs.jog_mixin import JogMixin
 from services.laser_detection_service import LaserDetectionService
 
@@ -29,10 +29,14 @@ TAB_LASER_CALIBRATION_UI = os.path.join(UI_DIR, 'tab_laser_calibration.ui')
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
 ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'calibration', 'arducam', 'arducam_calibration.yaml')
 LASER_CALIB_FILE = os.path.join(CONFIG_DIR, 'laser_calibration.json')
-LASER_CALIB_ROI_FILE = os.path.join(CONFIG_DIR, 'laser', 'align', 'laser_vertical_calib_roi.json')
+LASER_VERT_SCAN_ROI_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_vertical_scan_roi.json')
+LASER_HORIZ_SCAN_ROI_FILE = os.path.join(CONFIG_DIR, 'laser', 'horizontal', 'laser_horizontal_scan_roi.json')
 JIG_POSITIONS_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_jig_positions.json')
 LASER_JIG_STEP_CONFIG_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_jig_step_config.json')
 LASER_VERT_CALIB_FILE = os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_vertical_triangulation_calib.json')
+LASER_VERT_CALIB_DATA_DIR = os.path.join(
+    os.path.dirname(__file__), '..', '..', 'data', 'laser_scan', 'calibration', 'vertical'
+)
 
 
 class TabLaserCalibration(QWidget, JogMixin):
@@ -51,6 +55,8 @@ class TabLaserCalibration(QWidget, JogMixin):
     calib_save_compare_requested = pyqtSignal()
     calib_auto_requested = pyqtSignal()
     calib_cancel_requested = pyqtSignal()
+    calib_auto_vert_scan_requested = pyqtSignal()
+    calib_auto_vert_scan_cancel_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -83,6 +89,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._calib_step = 0
         self._z_adjust_cancel = False
         self._auto_calib_running = False
+        self._auto_vert_scan_running = False
         self._current_pose = None
         self._show_aruco_overlay = False
 
@@ -92,19 +99,17 @@ class TabLaserCalibration(QWidget, JogMixin):
 
         # 수직 스캔 데이터
         self._vert_scan_data = []       # list of {'step': int, 'y_px': float} — 최근 캡처
-        self._multi_vert_captures = []  # list of {'x_tcp': float, 'steps': [...]} — 누적
+        self._multi_vert_captures = []  # list of {'z_tcp': float, 'steps': [...]} — 누적
+        self._vert_scan_base_data = []  # list of {'y_px': float} — base ROI 데이터
         self._step_labels = []          # labelStep1..5
         self._step_res_labels = []      # labelStepRes1..5
 
         # 캘리브레이션 지그 ROI / Laser 검출
         self._calib_roi_active = False
         self._jig_detect_active = False
-        self._calib_roi_center_offset = 0
-        self._calib_roi_width = 400
-        self._calib_roi_center_y = 540   # 절대 픽셀 Y 좌표
-        self._calib_roi_height = 0        # 0 = 프레임 전체 높이
-        self._calib_roi_color = (0, 255, 0)
-        self._calib_roi_thickness = 2
+        self._roi_cfg = {}
+        self._roi2_cfg = None
+        self._all_rois = []  # [(name, config_dict), ...]
         self._frame_cx = 960
         self._frame_cy = 540
 
@@ -119,7 +124,7 @@ class TabLaserCalibration(QWidget, JogMixin):
         self._last_total_count = 0
 
         self._load_calibration()
-        self._load_calib_roi_config()
+        self._load_calib_roi_config(LASER_VERT_SCAN_ROI_FILE)
         self._load_jig_positions()
         self._connect_signals()
         self._init_calib_table()
@@ -145,16 +150,17 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.btnAutoCalib.clicked.connect(self._on_btn_auto_calib)
         self.btnClearCalibData.clicked.connect(self._clear_calib_data)
         self.btnSaveCalibResult.clicked.connect(self._save_calib_result)
-        self.btnCreateROI.clicked.connect(self._on_create_roi)
+        self.btnCreateROIVertical.clicked.connect(self._on_create_roi_vertical)
+        self.btnCreateROIHorizontal.clicked.connect(self._on_create_roi_horizontal)
         self.btnLaserDetect.clicked.connect(self._on_toggle_jig_detect)
         self.btnSaveJigPosVertical.clicked.connect(self._on_save_jig_pos_vertical)
         self.btnMoveJigPosVertical.clicked.connect(self._on_move_jig_pos_vertical)
         self.btnSaveJigPosHorizontal.clicked.connect(self._on_save_jig_pos_horizontal)
         self.btnMoveJigPosHorizontal.clicked.connect(self._on_move_jig_pos_horizontal)
-        self.btnMoveToVertScan.clicked.connect(self._on_move_jig_pos_vertical)
-        self.btnScanVertical.clicked.connect(self._on_add_vert_capture)
-        self.btnClearVertScan.clicked.connect(self._on_clear_vert_scan)
         self.btnFitVertModel.clicked.connect(self._on_fit_vert_model)
+        self.btnAutoVertScan.clicked.connect(self._on_btn_auto_vert_scan)
+        self.btnCancelAutoScan.clicked.connect(self.calib_auto_vert_scan_cancel_requested.emit)
+        self.btnCancelAutoScan.setVisible(False)
 
     def _load_calibration(self):
         """ArduCam 캘리브레이션 파일 로드"""
@@ -182,65 +188,67 @@ class TabLaserCalibration(QWidget, JogMixin):
             self.dist_coeffs = None
             self.log_message.emit(f"캘리브레이션 로드 실패: {e}")
 
-    def _load_calib_roi_config(self):
-        """레이저 캘리브레이션 ROI 설정 로드"""
+    def _load_calib_roi_config(self, roi_file):
+        """레이저 캘리브레이션 ROI 설정 로드 — config 키 이름을 동적으로 읽음."""
         try:
-            with open(LASER_CALIB_ROI_FILE, 'r') as f:
+            with open(roi_file, 'r') as f:
                 data = json.load(f)
-            roi = data.get('roi', {})
-            self._calib_roi_center_offset = int(roi.get('center_x_offset_px', 0))
-            self._calib_roi_width = int(roi.get('width_px', 400))
-            self._calib_roi_center_y = int(roi.get('center_y_px', self._frame_cy))
-            self._calib_roi_height = int(roi.get('height_px', 0))
-            color = roi.get('color', [0, 255, 0])
-            self._calib_roi_color = tuple(int(c) for c in color)
-            self._calib_roi_thickness = int(roi.get('thickness', 2))
-            self.log_message.emit(
-                f"[ROI] offset={self._calib_roi_center_offset} "
-                f"w={self._calib_roi_width} cy={self._calib_roi_center_y} "
-                f"h={self._calib_roi_height} color={self._calib_roi_color}"
-            )
+            # config에서 dict 값인 키만 ROI로 인식 (_note 등 문자열 제외)
+            self._all_rois = [
+                (key, val) for key, val in data.items()
+                if isinstance(val, dict) and not key.startswith('_')
+            ]
+            # 첫 번째 ROI = primary (검출/필터링용), 나머지 = secondary
+            if self._all_rois:
+                self._roi_cfg = self._all_rois[0][1]
+                self._roi2_cfg = self._all_rois[1][1] if len(self._all_rois) > 1 else None
+            else:
+                self._roi_cfg = {}
+                self._roi2_cfg = None
+            # 로드된 ROI 목록 로그
+            for name, cfg in self._all_rois:
+                mode = cfg.get('mode', 'symmetric')
+                rects_n = 1 if mode == 'single' else 2
+                self.log_message.emit(
+                    f"[ROI] {name}: mode={mode}({rects_n}rects) "
+                    f"w={cfg.get('width_px', 0)} h={cfg.get('height_px', 0)} "
+                    f"color={cfg.get('color', [])}"
+                )
         except Exception as e:
-            self.log_message.emit(f"[ROI] config 로드 실패: {e}")  # 기본값 유지
-
-    def _calib_roi_bounds(self):
-        """ROI (x0, y0, x1, y1) 계산.
-        X: 이미지 중심 + offset ± width/2
-        Y: 절대 center_y ± height/2 (height=0 이면 전체 높이)
-        """
-        cx = self._frame_cx + self._calib_roi_center_offset
-        half_x = self._calib_roi_width // 2
-        cy = self._calib_roi_center_y
-        half_y = self._calib_roi_height // 2 if self._calib_roi_height > 0 else None
-        x0, x1 = cx - half_x, cx + half_x
-        if half_y is None:
-            y0, y1 = 0, None  # 전체 높이
-        else:
-            y0, y1 = cy - half_y, cy + half_y
-        return x0, y0, x1, y1
+            self._roi_cfg = {}
+            self._roi2_cfg = None
+            self._all_rois = []
+            self.log_message.emit(f"[ROI] config 로드 실패: {e}")
 
     def _draw_calib_roi_overlay(self, frame):
-        """이미지 중심 기준 직사각형 ROI 오버레이"""
+        """이미지 중심 기준 직사각형 ROI 오버레이 — config 키 이름으로 표시"""
         if not self._calib_roi_active:
             return
         h, w = frame.shape[:2]
-        x0, y0, x1, y1 = self._calib_roi_bounds()
-        y1 = h if y1 is None else y1
-        cx = self._frame_cx + self._calib_roi_center_offset
-        label = f"ROI  cx={cx} cy={self._calib_roi_center_y}  {self._calib_roi_width}x{y1-y0}px"
-        draw_roi_box(frame, x0, y0, x1, y1,
-                     self._calib_roi_color, self._calib_roi_thickness,
-                     alpha=0.30, min_thickness=8, label=label)
+        for roi_idx, (roi_name, roi_cfg) in enumerate(self._all_rois):
+            rects = compute_roi_rects(w, h, roi_cfg)
+            color = tuple(roi_cfg.get('color', (0, 0, 255)))
+            thickness = roi_cfg.get('thickness', 2)
+            alpha = 0.30 if roi_idx == 0 else 0.15
+            side_labels = ['(L)', '(R)'] if len(rects) >= 2 else ['']
+            for i, (x0, y0, x1, y1) in enumerate(rects):
+                side = side_labels[i] if i < len(side_labels) else ''
+                cx = (x0 + x1) // 2
+                cy = (y0 + y1) // 2
+                lbl = f"{roi_name}{side}  cx={cx} cy={cy}  {x1-x0}x{y1-y0}px"
+                draw_roi_box(frame, x0, y0, x1, y1, color, thickness,
+                             alpha=alpha, min_thickness=8 if roi_idx == 0 else 0,
+                             label=lbl)
 
     def _filter_by_calib_roi(self, cols, centers_y):
         """캘리브 ROI 활성 시 범위 밖 점 제거. 비활성이면 전부 통과."""
         if not self._calib_roi_active or len(cols) == 0:
             return cols, centers_y
-        x0, y0, x1, y1 = self._calib_roi_bounds()
-        h = self._frame_cy * 2
-        if y1 is None:
-            y1 = h
-        keep = (cols >= x0) & (cols <= x1) & (centers_y >= y0) & (centers_y <= y1)
+        w, h = self._frame_cx * 2, self._frame_cy * 2
+        rects = compute_roi_rects(w, h, self._roi_cfg)
+        keep = np.zeros(len(cols), dtype=bool)
+        for x0, y0, x1, y1 in rects:
+            keep |= (cols >= x0) & (cols <= x1) & (centers_y >= y0) & (centers_y <= y1)
         return cols[keep], centers_y[keep]
 
     def _on_start_camera(self):
@@ -306,7 +314,8 @@ class TabLaserCalibration(QWidget, JogMixin):
                 btn.setText(text_off)
         self._clear_result_labels()
         self._calib_roi_active = False
-        self.btnCreateROI.setChecked(False)
+        self.btnCreateROIVertical.setChecked(False)
+        self.btnCreateROIHorizontal.setChecked(False)
         self._jig_detect_active = False
         self.btnLaserDetect.setChecked(False)
         self.labelJigDetectResult.setText("-")
@@ -521,11 +530,10 @@ class TabLaserCalibration(QWidget, JogMixin):
         # calib ROI 활성 시 해당 범위 밖 마스크 제거
         if self._calib_roi_active:
             h, w = src.shape[:2]
-            x0, y0, x1, y1 = self._calib_roi_bounds()
-            x0, x1 = max(0, x0), min(w, x1)
-            y0, y1 = max(0, y0), (h if y1 is None else min(h, y1))
+            rects = compute_roi_rects(w, h, self._roi_cfg)
             roi_mask = np.zeros_like(mask)
-            roi_mask[y0:y1, x0:x1] = mask[y0:y1, x0:x1]
+            for x0, y0, x1, y1 in rects:
+                roi_mask[y0:y1, x0:x1] = mask[y0:y1, x0:x1]
             mask = roi_mask
         # 시각화: display 프레임(frame)에 노란색 오버레이
         overlay = frame.copy()
@@ -579,12 +587,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             cv2.circle(frame, (int(cx), int(round(cy))), 2, PINK, -1)
 
         # 피팅 직선 표시
-        if len(coeffs) >= 2 and len(inlier_cols) > 0:
-            x_start = int(inlier_cols.min())
-            x_end = int(inlier_cols.max())
-            y_start = int(round(np.polyval(coeffs, x_start)))
-            y_end = int(round(np.polyval(coeffs, x_end)))
-            cv2.line(frame, (x_start, y_start), (x_end, y_end), PINK, 2)
+        draw_laser_fit_line(frame, coeffs, inlier_cols, PINK)
 
         # 결과 업데이트
         angle_deg = np.degrees(np.arctan(coeffs[0])) if len(coeffs) >= 2 else None
@@ -828,18 +831,46 @@ class TabLaserCalibration(QWidget, JogMixin):
         self.progressCalib.setMaximum(self.spinRepeatCount.value())
         self.progressCalib.setValue(0)
 
-    def _on_create_roi(self):
-        """Laser ROI config 재로드 + 활성화.
-        클릭 시 항상 config를 읽어 반영하고 ROI를 표시한다.
-        (끄기는 탭 전환 시 deactivate()에서만 처리)
-        """
-        self._load_calib_roi_config()
+    def _on_create_roi_vertical(self):
+        """Laser Vertical ROI config 재로드 + 활성화."""
+        self._load_calib_roi_config(LASER_VERT_SCAN_ROI_FILE)
         self._calib_roi_active = True
-        self.btnCreateROI.setChecked(True)
-        cx = self._frame_cx + self._calib_roi_center_offset
+        self.btnCreateROIVertical.setChecked(True)
+        self.btnCreateROIHorizontal.setChecked(False)
+        cx_parts = []
+        if 'center_x_px' in self._roi_cfg:
+            cx_parts.append(f"cx(abs)={self._roi_cfg['center_x_px']}")
+        if 'center_x_offset_px' in self._roi_cfg:
+            cx_parts.append(f"cx(offset)={self._roi_cfg['center_x_offset_px']}")
+        cy_parts = []
+        if 'center_y_px' in self._roi_cfg:
+            cy_parts.append(f"cy(abs)={self._roi_cfg['center_y_px']}")
+        if 'center_y_offset_px' in self._roi_cfg:
+            cy_parts.append(f"cy(offset)={self._roi_cfg['center_y_offset_px']}")
         self._log(
-            f"Laser ROI 갱신: cx={cx}  cy={self._calib_roi_center_y}"
-            f"  {self._calib_roi_width}x{self._calib_roi_height}px"
+            f"Laser Vertical ROI 갱신: {' '.join(cx_parts)}  {' '.join(cy_parts)}"
+            f"  {self._roi_cfg.get('width_px', 0)}x{self._roi_cfg.get('height_px', 0)}px"
+        )
+
+    def _on_create_roi_horizontal(self):
+        """Laser Horizontal ROI config 재로드 + 활성화."""
+        self._load_calib_roi_config(LASER_HORIZ_SCAN_ROI_FILE)
+        self._calib_roi_active = True
+        self.btnCreateROIHorizontal.setChecked(True)
+        self.btnCreateROIVertical.setChecked(False)
+        cx_parts = []
+        if 'center_x_px' in self._roi_cfg:
+            cx_parts.append(f"cx(abs)={self._roi_cfg['center_x_px']}")
+        if 'center_x_offset_px' in self._roi_cfg:
+            cx_parts.append(f"cx(offset)={self._roi_cfg['center_x_offset_px']}")
+        cy_parts = []
+        if 'center_y_px' in self._roi_cfg:
+            cy_parts.append(f"cy(abs)={self._roi_cfg['center_y_px']}")
+        if 'center_y_offset_px' in self._roi_cfg:
+            cy_parts.append(f"cy(offset)={self._roi_cfg['center_y_offset_px']}")
+        self._log(
+            f"Laser Horizontal ROI 갱신: {' '.join(cx_parts)}  {' '.join(cy_parts)}"
+            f"  {self._roi_cfg.get('width_px', 0)}x{self._roi_cfg.get('height_px', 0)}px"
         )
 
     def _on_toggle_jig_detect(self):
@@ -897,12 +928,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             cv2.circle(frame, (int(cx), int(round(cy))), 2, CYAN, -1)
 
         # 피팅 직선 표시
-        if len(coeffs) >= 2 and len(inlier_cols) > 0:
-            x_start = int(inlier_cols.min())
-            x_end = int(inlier_cols.max())
-            y_start = int(round(np.polyval(coeffs, x_start)))
-            y_end = int(round(np.polyval(coeffs, x_end)))
-            cv2.line(frame, (x_start, y_start), (x_end, y_end), CYAN, 2)
+        draw_laser_fit_line(frame, coeffs, inlier_cols, CYAN)
 
         # 결과 라벨 업데이트
         angle_deg = np.degrees(np.arctan(coeffs[0])) if len(coeffs) >= 2 else None
@@ -1184,7 +1210,13 @@ class TabLaserCalibration(QWidget, JogMixin):
         try:
             with open(LASER_JIG_STEP_CONFIG_FILE, 'r') as f:
                 cfg = json.load(f)
-            self.spinStepInterval.setValue(cfg.get('step_interval_mm', 10.0))
+            self.spinStepInterval.setValue(cfg.get('step_interval_mm', 2.0))
+        except Exception:
+            pass
+        try:
+            with open(os.path.join(CONFIG_DIR, 'laser', 'vertical', 'laser_jig_auto_scan.json'), 'r') as f:
+                scan_cfg = json.load(f)
+            self.spinScanRange.setValue(scan_cfg.get('scan_range_mm', 70.0))
         except Exception:
             pass
         self._reset_step_indicator()
@@ -1239,15 +1271,47 @@ class TabLaserCalibration(QWidget, JogMixin):
             res_lbl.setText(f"Step {idx + 1}: -")
             res_lbl.setStyleSheet("font-size: 11px; color: #aaa; padding: 1px 4px;")
 
-    def _run_vert_scan(self):
-        """현재 프레임에서 5단 지그 수직 스캔 — step 데이터 리스트 반환.
+    def _detect_roi_lines(self, frame, rect, max_lines=5):
+        """단일 ROI rect 에서 레이저 직선을 추출한다.
 
-        Returns: list of {'step': int, 'y_px': float}, 실패 시 []
+        Args:
+            frame: 전체 프레임 (undistort 적용 후)
+            rect: (x0, y0, x1, y1) ROI 좌표
+            max_lines: 최대 직선 수
+
+        Returns:
+            (lines, raw_pixels): lines=list of line dicts, raw_pixels=dict{'cols','centers_y'}
+            실패 시 ([], None)
+        """
+        x0, y0, x1, y1 = rect
+        roi_frame = frame[y0:y1, x0:x1]
+        conv_result = LaserDetectionService.detect_laser_center_conv(roi_frame)
+        if conv_result is None:
+            return [], None
+        cols = conv_result['cols'] + x0
+        centers_y = conv_result['centers_y'] + y0
+        raw_pixels = {'cols': cols.copy(), 'centers_y': centers_y.copy()}
+        lines = LaserDetectionService.fit_multiple_lines(
+            cols, centers_y,
+            residual_threshold=3.0,
+            min_inliers=30,
+            max_lines=max_lines,
+        )
+        return (lines if lines else []), raw_pixels
+
+    def _run_vert_scan(self):
+        """현재 프레임에서 5단 지그 수직 스캔 — ROI별 step 데이터 반환.
+
+        Returns:
+            dict {'center': list[{'step','y_px'}],
+                  'left':   list[{'step','y_px'}],
+                  'right':  list[{'step','y_px'}]}
+            실패 시 {} (빈 dict)
         """
         if self.current_frame is None:
             self._log("수직 스캔: 카메라 프레임 없음")
             self.labelVertScanStatus.setText("카메라 없음")
-            return []
+            return {}
 
         if self.radioUndistorted.isChecked() and self.camera_matrix is not None:
             frame = undistort_frame(self.current_frame, self.camera_matrix, self.dist_coeffs)
@@ -1255,111 +1319,82 @@ class TabLaserCalibration(QWidget, JogMixin):
             frame = self.current_frame.copy()
 
         h_f, w_f = frame.shape[:2]
-
-        if self._calib_roi_active:
-            x0, y0, x1, y1 = self._calib_roi_bounds()
-            x0 = max(0, x0); x1 = min(w_f, x1)
-            y0 = max(0, y0); y1 = h_f if y1 is None else min(h_f, y1)
-            roi_frame = frame[y0:y1, x0:x1]
-            offset_x, offset_y = x0, y0
-        else:
-            roi_frame = frame
-            offset_x, offset_y = 0, 0
-
-        conv_result = LaserDetectionService.detect_laser_center_conv(roi_frame)
-        if conv_result is None:
-            self.labelVertScanStatus.setText("레이저 검출 없음")
-            self._log("수직 스캔: 레이저 검출 없음")
-            return []
-
-        cols = conv_result['cols'] + offset_x
-        centers_y = conv_result['centers_y'] + offset_y
-
-        lines = LaserDetectionService.fit_multiple_lines(
-            cols, centers_y,
-            residual_threshold=3.0,
-            min_inliers=30,
-            max_lines=5,
-        )
-
-        if not lines:
-            self.labelVertScanStatus.setText("직선 피팅 실패")
-            self._log("수직 스캔: 다중 직선 피팅 실패")
-            return []
-
-        # Y 기준 정렬: 큰 Y(가까운 계단) → 작은 Y(먼 계단)
         center_x = w_f // 2
-        lines_sorted = sorted(
-            lines,
-            key=lambda l: float(np.polyval(l['coeffs'], center_x)),
-            reverse=True,
-        )
 
-        self._vert_scan_data = []
+        # -- ROI rect 목록 구성 (config 키 이름 사용) --
+        roi_entries = []  # list of (label, rect)
+        if self._calib_roi_active and self._all_rois:
+            side_suffixes = {1: [''], 2: ['(L)', '(R)']}
+            for roi_name, roi_cfg in self._all_rois:
+                rects = compute_roi_rects(w_f, h_f, roi_cfg)
+                suffixes = side_suffixes.get(len(rects), [f'({i})' for i in range(len(rects))])
+                for i, rect in enumerate(rects):
+                    label = f"{roi_name}{suffixes[i] if i < len(suffixes) else ''}"
+                    roi_entries.append((label, rect))
+
+        # ROI 미설정 시 전체 프레임 사용 (기존 fallback)
+        if not roi_entries:
+            roi_entries.append(('full_frame', (0, 0, w_f, h_f)))
+
+        # -- 각 ROI별 독립 레이저 직선 추출 --
+        result = {}
+        self._last_scan_raw_pixels = {}  # ROI별 원본 레이저 픽셀 데이터
+        for label, rect in roi_entries:
+            lines, raw_pixels = self._detect_roi_lines(frame, rect, max_lines=5)
+            if raw_pixels is not None:
+                # R ROI edge 오염 필터링 (col > 1300 제거)
+                col_limit = rect[2]  # ROI 오른쪽 경계
+                if 'base' in label and col_limit > 1300:
+                    cols = raw_pixels['cols']
+                    mask = cols <= 1300
+                    raw_pixels = {
+                        'cols': cols[mask],
+                        'centers_y': raw_pixels['centers_y'][mask],
+                    }
+                self._last_scan_raw_pixels[label] = raw_pixels
+            if lines:
+                lines_sorted = sorted(
+                    lines,
+                    key=lambda l: float(np.polyval(l['coeffs'], center_x)),
+                    reverse=True,
+                )
+                step_data = []
+                for i, line in enumerate(lines_sorted[:5]):
+                    y_px = float(np.polyval(line['coeffs'], center_x))
+                    step_data.append({'step': i, 'y_px': y_px})
+                result[label] = step_data
+            else:
+                result[label] = []
+            self._log(f"수직 스캔 {label} ROI: {len(result[label])}개 직선 검출")
+
+        # -- 첫 번째 ROI 결과로 UI 업데이트 --
+        primary_name = self._all_rois[0][0] if self._all_rois else 'full_frame'
+        center_data = result.get(primary_name, [])
+        self._vert_scan_data = list(center_data)
         self._reset_step_indicator()
 
-        detected = min(len(lines_sorted), 5)
+        detected = len(center_data)
         for i in range(detected):
-            y_px = float(np.polyval(lines_sorted[i]['coeffs'], center_x))
-            self._vert_scan_data.append({'step': i, 'y_px': y_px})
-            self._set_step_state(i, 'detected', y_px)
-
+            self._set_step_state(i, 'detected', center_data[i]['y_px'])
         for i in range(detected, 5):
             self._set_step_state(i, 'error')
 
+        # base ROI 데이터 저장 (single distance fallback용)
+        base_data = []
+        for key, steps in result.items():
+            if key.startswith('roi_laser_base') and steps:
+                for s in steps:
+                    base_data.append({'y_px': s['y_px']})
+        self._vert_scan_base_data = base_data
+
         self.labelVertScanStatus.setText(f"{detected}/5 스텝 검출")
-        return list(self._vert_scan_data)
-
-    def _on_add_vert_capture(self):
-        """TF4 pose 읽기 → 수직 스캔 → 다중 거리 데이터 누적."""
-        from PyQt5.QtWidgets import QApplication, QMessageBox
-
-        if self.robot is None:
-            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
-            return
-        if self.current_frame is None:
-            self._log("캡처: 카메라 프레임 없음")
-            return
-
-        # TF4 강제 설정
-        try:
-            ok, msg = self.robot.send_set_toolframe(4, wait=True)
-            QApplication.processEvents()
-            if not ok:
-                self._log(f"캡처: TF4 전환 실패 — {msg}")
-                return
-        except Exception as e:
-            self._log(f"캡처: TF4 전환 오류 — {e}")
-            return
-
-        # TF4 기준 TCP X 좌표 읽기 (접근 방향)
-        pose = self.robot.read_current_pose()
-        if pose is None:
-            self._log("캡처: TCP 좌표 읽기 실패")
-            return
-        x_tcp = pose[0]
-
-        # 수직 스캔
-        step_data = self._run_vert_scan()
-        if not step_data:
-            return
-
-        # 누적
-        self._multi_vert_captures.append({'x_tcp': x_tcp, 'steps': step_data})
-        n_cap = len(self._multi_vert_captures)
-        total_pts = sum(len(c['steps']) for c in self._multi_vert_captures)
-        self._log(f"캡처 #{n_cap}: X={x_tcp:.1f}mm, {len(step_data)}/5 스텝 → 누적 {total_pts}점")
-
-        if hasattr(self, 'labelCaptureCount'):
-            self.labelCaptureCount.setText(f"캡처: {n_cap}회 / {total_pts}pts")
-
-        valid_caps = [c for c in self._multi_vert_captures if len(c['steps']) >= 3]
-        self.btnFitVertModel.setEnabled(len(valid_caps) >= 2)
+        return result
 
     def _on_clear_vert_scan(self):
         """수직 스캔 데이터 초기화"""
         self._vert_scan_data = []
         self._multi_vert_captures = []
+        self._vert_scan_base_data = []
         self._reset_step_indicator()
         if hasattr(self, 'labelCaptureCount'):
             self.labelCaptureCount.setText("캡처: 0회")
@@ -1386,11 +1421,12 @@ class TabLaserCalibration(QWidget, JogMixin):
             self._log("모델 피팅: 데이터 부족 (캡처 2회 이상 권장)")
 
     def _fit_multi_distance(self, valid_caps):
-        """다중 거리 캡처: h, alpha, delta_z 동시 피팅.
+        """다중 거리 캡처: h_base, alpha, delta_z 동시 피팅.
 
-        모델: y = cy + fy * tan(arctan(h / Z_abs) - alpha)
-        Z_abs = x_tcp + delta_z + step * interval
-        미지수: h(mm), alpha(deg), delta_z(mm)
+        모델: y = cy + fy * tan(arctan(H_abs / Z_abs) - alpha)
+        Z_abs = z_tcp + delta_z + step * tread_mm   (depth 증분)
+        H_abs = h_base + step * rise_mm              (height 증분)
+        미지수: h_base(mm), alpha(deg), delta_z(mm)
         """
         try:
             from scipy.optimize import minimize as sp_minimize
@@ -1402,18 +1438,37 @@ class TabLaserCalibration(QWidget, JogMixin):
                 fy = 5347.3
                 cy_cam = 478.2
 
-            step_interval = self.spinStepInterval.value()
+            step_tread = self.spinStepInterval.value()
+            try:
+                with open(LASER_JIG_STEP_CONFIG_FILE, 'r') as f:
+                    _jig = json.load(f)
+                step_rise = float(_jig.get('step_rise_mm', step_tread))
+            except Exception:
+                step_rise = step_tread
 
-            # 데이터 수집: (x_tcp, z_rel, y_px) 트리플
-            x_tcps, z_rels, y_pixs = [], [], []
+            # 데이터 수집: (z_tcp, z_rel, h_rel, y_px) + base ROI
+            z_tcps, z_rels, h_rels, y_pixs, is_base = [], [], [], [], []
             for cap in valid_caps:
                 for d in cap['steps']:
-                    x_tcps.append(cap['x_tcp'])
-                    z_rels.append(d['step'] * step_interval)
+                    z_tcps.append(cap['z_tcp'])
+                    z_rels.append(d['step'] * step_tread)
+                    h_rels.append(d['step'] * step_rise)
                     y_pixs.append(d['y_px'])
-            x_tcps = np.array(x_tcps)
+                    is_base.append(False)
+                # base ROI 데이터 (h_rel=0, z_rel=0)
+                for key in cap:
+                    if key.startswith('roi_laser_base') and len(cap[key]) > 0:
+                        for d in cap[key]:
+                            z_tcps.append(cap['z_tcp'])
+                            z_rels.append(0.0)
+                            h_rels.append(0.0)
+                            y_pixs.append(d['y_px'])
+                            is_base.append(True)
+            z_tcps = np.array(z_tcps)
             z_rels = np.array(z_rels)
+            h_rels = np.array(h_rels)
             y_pixs = np.array(y_pixs)
+            is_base = np.array(is_base)
 
             # 초기값 (기존 파일 우선)
             h0, alpha0, delta_z0 = 70.0, 13.0, -200.0
@@ -1428,15 +1483,16 @@ class TabLaserCalibration(QWidget, JogMixin):
                 pass
 
             def cost(params):
-                h, alpha_deg, delta_z = params
-                if h <= 0:
+                h_base, alpha_deg, delta_z = params
+                if h_base <= 0:
                     return 1e9
-                Z_abs = x_tcps + delta_z + z_rels
+                Z_abs = z_tcps + delta_z + z_rels
+                H_abs = h_base + h_rels
                 if np.any(Z_abs <= 0):
                     return 1e9
                 try:
                     y_pred = cy_cam + fy * np.tan(
-                        np.arctan(h / Z_abs) - np.radians(alpha_deg)
+                        np.arctan(H_abs / Z_abs) - np.radians(alpha_deg)
                     )
                     return float(np.sum((y_pred - y_pixs) ** 2))
                 except Exception:
@@ -1444,16 +1500,24 @@ class TabLaserCalibration(QWidget, JogMixin):
 
             result = sp_minimize(
                 cost, x0=[h0, alpha0, delta_z0],
-                method='Nelder-Mead',
-                options={'xatol': 0.001, 'fatol': 0.01, 'maxiter': 20000},
+                method='L-BFGS-B',
+                bounds=[(1, 500), (0, 30), (-2000, 2000)],
+                options={'ftol': 0.01, 'maxiter': 20000},
             )
 
             h_fit, alpha_fit, delta_z_fit = result.x
-            Z_abs_fit = x_tcps + delta_z_fit + z_rels
+            Z_abs_fit = z_tcps + delta_z_fit + z_rels
+            H_abs_fit = h_fit + h_rels
             y_pred = cy_cam + fy * np.tan(
-                np.arctan(h_fit / Z_abs_fit) - np.radians(alpha_fit)
+                np.arctan(H_abs_fit / Z_abs_fit) - np.radians(alpha_fit)
             )
             rmse = float(np.sqrt(np.mean((y_pixs - y_pred) ** 2)))
+            step_mask = ~is_base
+            base_mask = is_base
+            step_rmse = float(np.sqrt(np.mean((y_pixs[step_mask] - y_pred[step_mask]) ** 2))) if np.any(step_mask) else 0.0
+            base_rmse = float(np.sqrt(np.mean((y_pixs[base_mask] - y_pred[base_mask]) ** 2))) if np.any(base_mask) else 0.0
+            n_base = int(np.sum(base_mask))
+            self._log(f"피팅: base={n_base}pts step={int(np.sum(step_mask))}pts | RMSE total={rmse:.2f} step={step_rmse:.2f} base={base_rmse:.2f}")
 
             calib_out = {
                 'h_mm': float(h_fit),
@@ -1461,19 +1525,29 @@ class TabLaserCalibration(QWidget, JogMixin):
                 'alpha_deg': float(alpha_fit),
                 'delta_z_mm': float(delta_z_fit),
                 'rmse_px': float(rmse),
+                'step_rmse_px': float(step_rmse),
+                'base_rmse_px': float(base_rmse),
+                'num_base_points': n_base,
                 'num_captures': len(valid_caps),
                 'num_points': len(y_pixs),
-                'step_interval_mm': float(step_interval),
+                'step_tread_mm': float(step_tread),
+                'step_rise_mm': float(step_rise),
+                'step_interval_mm': float(step_tread),
                 'calibration_date': datetime.now().strftime('%Y-%m-%d'),
                 'note': (
                     f'Multi-distance vertical calibration. '
                     f'fy={fy:.1f}, cy={cy_cam:.1f}. '
-                    f'{len(valid_caps)} captures, {len(y_pixs)} points. Nelder-Mead.'
+                    f'{len(valid_caps)} captures, {len(y_pixs)} points. L-BFGS-B.'
                 ),
             }
 
             os.makedirs(os.path.dirname(LASER_VERT_CALIB_FILE), exist_ok=True)
             with open(LASER_VERT_CALIB_FILE, 'w') as f:
+                json.dump(calib_out, f, indent=4, ensure_ascii=False)
+            _ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            _hist = os.path.join(LASER_VERT_CALIB_DATA_DIR, f'calib_vert_{_ts}.json')
+            os.makedirs(LASER_VERT_CALIB_DATA_DIR, exist_ok=True)
+            with open(_hist, 'w') as f:
                 json.dump(calib_out, f, indent=4, ensure_ascii=False)
 
             result_text = (
@@ -1489,7 +1563,7 @@ class TabLaserCalibration(QWidget, JogMixin):
             self.labelVertFitResult.setText(f"오류: {e}")
 
     def _fit_single_distance(self):
-        """단일 거리 캡처: h, alpha, z_ref 피팅 (레거시 fallback)."""
+        """단일 거리 캡처: h_base, alpha, z_ref 피팅 (레거시 fallback)."""
         try:
             from scipy.optimize import minimize as sp_minimize
 
@@ -1500,20 +1574,40 @@ class TabLaserCalibration(QWidget, JogMixin):
                 fy = 5347.3
                 cy_cam = 478.2
 
-            step_interval = self.spinStepInterval.value()
-            steps = np.array([d['step'] for d in self._vert_scan_data])
-            y_pix = np.array([d['y_px'] for d in self._vert_scan_data])
-            z_rel = steps * step_interval
+            step_tread = self.spinStepInterval.value()
+            try:
+                with open(LASER_JIG_STEP_CONFIG_FILE, 'r') as f:
+                    _jig = json.load(f)
+                step_rise = float(_jig.get('step_rise_mm', step_tread))
+            except Exception:
+                step_rise = step_tread
 
-            def model_y(Z_abs, h, alpha_rad):
-                return cy_cam + fy * np.tan(np.arctan(h / Z_abs) - alpha_rad)
+            steps = [d['step'] for d in self._vert_scan_data]
+            y_vals = [d['y_px'] for d in self._vert_scan_data]
+            is_base_list = [False] * len(steps)
+            z_rel_list = [s * step_tread for s in steps]
+            h_rel_list = [s * step_rise for s in steps]
+            # base ROI 데이터 (h_rel=0, z_rel=0)
+            for bd in self._vert_scan_base_data:
+                steps.append(0)
+                y_vals.append(bd['y_px'])
+                is_base_list.append(True)
+                z_rel_list.append(0.0)
+                h_rel_list.append(0.0)
+            z_rel = np.array(z_rel_list)
+            h_rel = np.array(h_rel_list)
+            y_pix = np.array(y_vals)
+            is_base = np.array(is_base_list)
+
+            def model_y(Z_abs, H_abs, alpha_rad):
+                return cy_cam + fy * np.tan(np.arctan(H_abs / Z_abs) - alpha_rad)
 
             def cost(params):
-                h, alpha_deg, z_ref = params
-                if h <= 0 or z_ref <= 0:
+                h_base, alpha_deg, z_ref = params
+                if h_base <= 0 or z_ref <= 0:
                     return 1e9
                 try:
-                    y_pred = model_y(z_ref + z_rel, h, np.radians(alpha_deg))
+                    y_pred = model_y(z_ref + z_rel, h_base + h_rel, np.radians(alpha_deg))
                     return float(np.sum((y_pred - y_pix) ** 2))
                 except Exception:
                     return 1e9
@@ -1531,13 +1625,20 @@ class TabLaserCalibration(QWidget, JogMixin):
 
             result = sp_minimize(
                 cost, x0=[h0, alpha0, 300.0],
-                method='Nelder-Mead',
-                options={'xatol': 0.001, 'fatol': 0.01, 'maxiter': 20000},
+                method='L-BFGS-B',
+                bounds=[(1, 500), (0, 30), (1, 2000)],
+                options={'ftol': 0.01, 'maxiter': 20000},
             )
 
             h_fit, alpha_fit, z_ref_fit = result.x
-            y_pred = model_y(z_ref_fit + z_rel, h_fit, np.radians(alpha_fit))
+            y_pred = model_y(z_ref_fit + z_rel, h_fit + h_rel, np.radians(alpha_fit))
             rmse = float(np.sqrt(np.mean((y_pix - y_pred) ** 2)))
+            step_mask = ~is_base
+            base_mask = is_base
+            step_rmse = float(np.sqrt(np.mean((y_pix[step_mask] - y_pred[step_mask]) ** 2))) if np.any(step_mask) else 0.0
+            base_rmse = float(np.sqrt(np.mean((y_pix[base_mask] - y_pred[base_mask]) ** 2))) if np.any(base_mask) else 0.0
+            n_base = int(np.sum(base_mask))
+            self._log(f"피팅: base={n_base}pts step={int(np.sum(step_mask))}pts | RMSE total={rmse:.2f} step={step_rmse:.2f} base={base_rmse:.2f}")
 
             calib_out = {
                 'h_mm': float(h_fit),
@@ -1545,17 +1646,27 @@ class TabLaserCalibration(QWidget, JogMixin):
                 'alpha_deg': float(alpha_fit),
                 'z_ref_mm': float(z_ref_fit),
                 'rmse_px': float(rmse),
+                'step_rmse_px': float(step_rmse),
+                'base_rmse_px': float(base_rmse),
+                'num_base_points': n_base,
                 'num_steps': len(self._vert_scan_data),
-                'step_interval_mm': float(step_interval),
+                'step_tread_mm': float(step_tread),
+                'step_rise_mm': float(step_rise),
+                'step_interval_mm': float(step_tread),
                 'calibration_date': datetime.now().strftime('%Y-%m-%d'),
                 'note': (
                     f'Single-distance fallback. '
-                    f'fy={fy:.1f}, cy={cy_cam:.1f}. Nelder-Mead.'
+                    f'fy={fy:.1f}, cy={cy_cam:.1f}. L-BFGS-B.'
                 ),
             }
 
             os.makedirs(os.path.dirname(LASER_VERT_CALIB_FILE), exist_ok=True)
             with open(LASER_VERT_CALIB_FILE, 'w') as f:
+                json.dump(calib_out, f, indent=4, ensure_ascii=False)
+            _ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            _hist = os.path.join(LASER_VERT_CALIB_DATA_DIR, f'calib_vert_{_ts}.json')
+            os.makedirs(LASER_VERT_CALIB_DATA_DIR, exist_ok=True)
+            with open(_hist, 'w') as f:
                 json.dump(calib_out, f, indent=4, ensure_ascii=False)
 
             result_text = (
@@ -1568,6 +1679,22 @@ class TabLaserCalibration(QWidget, JogMixin):
         except Exception as e:
             self._log(f"모델 피팅 오류: {e}")
             self.labelVertFitResult.setText(f"오류: {e}")
+
+    def _on_btn_auto_vert_scan(self):
+        """자동 수직 스캔 버튼 클릭 — main_window로 시그널 전달."""
+        self.calib_auto_vert_scan_requested.emit()
+
+    def _set_auto_scan_ui_state(self, running: bool):
+        """자동 스캔 중 버튼 활성/비활성 전환."""
+        self.btnAutoVertScan.setEnabled(not running)
+        self.btnFitVertModel.setEnabled(not running)
+        self.btnCancelAutoScan.setVisible(running)
+        self._auto_vert_scan_running = running
+
+    def _update_auto_scan_progress(self, text: str):
+        """자동 스캔 진행 상태 레이블 업데이트."""
+        if hasattr(self, 'labelAutoScanProgress'):
+            self.labelAutoScanProgress.setText(text)
 
     def _log(self, msg):
         self.log_message.emit(msg)

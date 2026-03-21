@@ -30,6 +30,8 @@ from utils.camera_calib_position_generator import (
     format_position_label_base,
 )
 from services.chessboard_alignment_service import ChessboardAlignmentService
+from services.camera_calibration_service import CameraCalibrationService
+from utils.image_processing import undistort_frame
 
 
 # UI 파일 경로
@@ -97,6 +99,9 @@ class TabCalibration(QWidget):
         # 체스보드 정렬 서비스
         self.alignment_service = ChessboardAlignmentService()
         self.alignment_service.set_log_callback(self._log)
+
+        # 카메라 캘리브레이션 서비스
+        self._calib_service = CameraCalibrationService()
 
         # 스텝 버튼 그룹 생성
         self.calib_step_button_group = QButtonGroup(self)
@@ -551,21 +556,20 @@ class TabCalibration(QWidget):
         img_shape = self.calib_images[0].shape[:2][::-1]  # (width, height)
 
         # 캘리브레이션 실행
-        ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+        result = self._calib_service.run_calibration(
             self.calib_points_3d,
             self.calib_points_2d,
             img_shape,
-            None, None
         )
 
-        if not ret:
+        if not result['success']:
             QMessageBox.critical(self, "오류", "캘리브레이션에 실패했습니다.")
             return
 
         # 결과 저장
-        self.camera_matrix = camera_matrix
-        self.dist_coeffs = dist_coeffs
-        self.rms_error = ret
+        self.camera_matrix = result['camera_matrix']
+        self.dist_coeffs = result['dist_coeffs']
+        self.rms_error = result['rms_error']
 
         # UI 업데이트
         self._update_results()

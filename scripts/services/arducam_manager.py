@@ -16,7 +16,7 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 # 기본 캘리브레이션 파일 경로
 DEFAULT_CALIBRATION_FILE = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'config', 'arducam_calibration.yaml'
+    os.path.dirname(__file__), '..', '..', 'config', 'calibration', 'arducam', 'arducam_calibration.yaml'
 )
 
 

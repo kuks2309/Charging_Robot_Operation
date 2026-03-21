@@ -65,7 +65,7 @@ class ArduCamController:
 
     # 기본 캘리브레이션 파일 경로
     DEFAULT_CALIBRATION = os.path.join(
-        os.path.dirname(__file__), '..', '..', '..', 'config', 'arducam_calibration.yaml'
+        os.path.dirname(__file__), '..', '..', '..', 'config', 'calibration', 'arducam', 'arducam_calibration.yaml'
     )
 
     def __init__(self, device_index: int = 0, calibration_file: str = None):

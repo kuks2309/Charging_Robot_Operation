@@ -662,8 +662,8 @@ class TabTaskEdit(QWidget, JogMixin):
         self._log(f"현재 위치 입력 완료: X={x:.2f}, Y={y:.2f}, Z={z:.2f}, Rx={rx:.2f}, Ry={ry:.2f}, Rz={rz:.2f}")
 
     def update_current_toolframe(self, toolframe: int):
-        """현재 툴프레임 업데이트 (placeholder)"""
-        pass
+        """현재 툴프레임 업데이트 — 그룹박스 타이틀에 TF 번호 표시"""
+        self.groupTCPPosition.setTitle(f"TCP Position (TF{toolframe})")
 
     def get_task_sequence(self) -> list:
         """태스크 시퀀스 반환"""

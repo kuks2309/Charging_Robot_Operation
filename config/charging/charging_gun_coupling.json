@@ -1,0 +1,49 @@
+{
+  "_note": "충전건 결합 오프셋 설정 (2026-03-13 측정)",
+  "reference_positions": {
+    "ds435_detection": {
+      "_desc": "DS435 검사 위치 (2026-03-13 측정)",
+      "x": 445.93, "y": 3.64, "z": 678.47,
+      "rx": 92.42, "ry": 1.39, "rz": 90.11
+    },
+    "aruco_alignment": {
+      "_desc": "ArduCam 정렬 위치 (2026-03-13 측정)",
+      "x": 446.71, "y": 45.10, "z": 758.57,
+      "rx": 92.40, "ry": 1.40, "rz": 90.10
+    },
+    "entrance": {
+      "_desc": "충전건 결합 입구 위치 (Rx/Ry/Rz는 현재값 유지)",
+      "x": 650.50, "y": -120.70, "z": 606.20
+    },
+    "full_coupling": {
+      "_desc": "충전건 완전 결합 좌표",
+      "x": 991.20, "y": -131.30, "z": 478.00,
+      "rx": 109.40, "ry": -0.90, "rz": 87.90
+    },
+    "detection_pose": {
+      "_desc": "ArUco 검출 자세 (XYZ + Rx/Ry/Rz)",
+      "x": 424.10, "y": 445.30, "z": 225.10,
+      "rx": 90.0, "ry": 0.0, "rz": -180.0,
+      "use_xyz": true
+    }
+  },
+  "offsets": {
+    "ds435_to_arducam": {
+      "_desc": "DS435 검사 위치 → ArduCam 정렬 위치 (base frame 순수 병진, 2026-03-13 측정)",
+      "x": 0.78, "y": 41.46, "z": 80.10
+    },
+    "corrected_to_entrance": {
+      "_desc": "Rx 보정 후 위치 → 입구 (base frame translation delta, 회전은 현재값 유지)",
+      "x": 128.50, "y": -2.90, "z": 155.30
+    },
+    "entrance_to_coupling": {
+      "_desc": "입구 → 완전결합 (tool Z축 리니어 이동)",
+      "tool_z_mm": 223.0,
+      "tool_z_step_mm": 35.0
+    },
+    "release_return": {
+      "_desc": "해제 복귀 (TCP Z 후퇴 → ArUco 정렬 위치로 movel)",
+      "tcp_z_retract_mm": 100.0
+    }
+  }
+}

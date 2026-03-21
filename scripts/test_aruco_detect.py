@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.camera_utils import detect_arducam_index
 _detected = detect_arducam_index()
 DEVICE_INDEX = _detected if _detected is not None else 6  # fallback: 6 (기존 동작 보존)
-CALIB_FILE = os.path.join(os.path.dirname(__file__), '..', 'config', 'arducam_calibration.yaml')
+CALIB_FILE = os.path.join(os.path.dirname(__file__), '..', 'config', 'calibration', 'arducam', 'arducam_calibration.yaml')
 
 def main():
     print(f"OpenCV: {cv2.__version__}")

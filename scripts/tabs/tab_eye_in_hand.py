@@ -34,6 +34,8 @@ from utils.camera_calib_position_generator import (
     format_position_label_base,
 )
 from tabs.calibration_mixin import CalibrationMixin
+from services.hand_eye_calibration_service import HandEyeCalibrationService
+from utils.image_processing import undistort_frame
 
 
 # UI 파일 경로
@@ -42,7 +44,7 @@ TAB_EYE_IN_HAND_UI = os.path.join(UI_DIR, 'tab_eye_in_hand.ui')
 
 # DS435 캘리브레이션 파일 경로
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
-DS435_CALIB_FILE = os.path.join(CONFIG_DIR, 'ds435_calibration.yaml')
+DS435_CALIB_FILE = os.path.join(CONFIG_DIR, 'calibration', 'ds435', 'ds435_calibration.yaml')
 
 
 class TabEyeInHand(CalibrationMixin, QWidget):
@@ -76,6 +78,9 @@ class TabEyeInHand(CalibrationMixin, QWidget):
         self.camera_matrix = None
         self.dist_coeffs = None
         self._load_ds435_calibration()
+
+        # Hand-Eye 캘리브레이션 서비스
+        self._hand_eye_service = HandEyeCalibrationService()
 
         # 체스보드 감지기
         self.chessboard_detector = ChessboardDetector(cols=10, rows=7, square_size=22.0)
@@ -289,17 +294,19 @@ class TabEyeInHand(CalibrationMixin, QWidget):
 
             # solvePnP로 카메라 포즈 계산
             obj_points = self.chessboard_detector.get_object_points()
-            success, rvec, tvec = cv2.solvePnP(
+            pnp_result = self._hand_eye_service.solve_pnp_and_store(
                 obj_points, corners,
                 self.camera_matrix, None  # undistort된 이미지이므로 distCoeffs=None
             )
 
-            if success:
+            if pnp_result is not None:
+                rvec = pnp_result["rvec"]
+                tvec = pnp_result["tvec"]
+                R_cam = pnp_result["R_cam"]
                 rvec_values = (rvec[0][0], rvec[1][0], rvec[2][0])
                 tvec_values = (tvec[0][0], tvec[1][0], tvec[2][0])
 
                 # 포즈 쌍 저장 (Hand-Eye 캘리브레이션용)
-                R_cam, _ = cv2.Rodrigues(rvec)
                 self.robot_poses.append(tcp_pose)
                 self.camera_poses.append((R_cam, tvec))
                 self._update_pose_pair_count()
@@ -447,20 +454,14 @@ class TabEyeInHand(CalibrationMixin, QWidget):
         self.current_frame = frame.copy()
 
         # undistort 적용
-        if self.camera_matrix is not None and self.dist_coeffs is not None:
-            self.undistorted_frame = cv2.undistort(
-                frame, self.camera_matrix, self.dist_coeffs
-            )
-        else:
-            self.undistorted_frame = frame.copy()
+        self.undistorted_frame = undistort_frame(
+            frame, self.camera_matrix, self.dist_coeffs
+        )
 
     def process_frame(self, frame: np.ndarray) -> np.ndarray:
         """프레임 처리 - undistort + 체스보드 감지"""
         # undistort 적용
-        if self.camera_matrix is not None and self.dist_coeffs is not None:
-            processed = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
-        else:
-            processed = frame.copy()
+        processed = undistort_frame(frame, self.camera_matrix, self.dist_coeffs)
 
         # 체스보드 감지
         if self.is_chessboard_detect_enabled():
@@ -1196,37 +1197,11 @@ class TabEyeInHand(CalibrationMixin, QWidget):
 
         self._log(f"Hand-Eye 캘리브레이션 시작 ({len(self.robot_poses)}개 포즈 쌍)")
 
-        try:
-            # 로봇 포즈를 R, t로 변환
-            R_gripper2base_list = []
-            t_gripper2base_list = []
+        result = self._hand_eye_service.calibrate(self.robot_poses, self.camera_poses)
 
-            for pose in self.robot_poses:
-                x, y, z, rx, ry, rz = pose
-                # Euler angles to rotation matrix
-                R = self._euler_to_rotation_matrix(rx, ry, rz)
-                t = np.array([[x], [y], [z]], dtype=np.float64)
-                R_gripper2base_list.append(R)
-                t_gripper2base_list.append(t)
-
-            # 카메라 포즈 (이미 R, t 형태)
-            R_target2cam_list = [p[0] for p in self.camera_poses]
-            t_target2cam_list = [p[1] for p in self.camera_poses]
-
-            # cv2.calibrateHandEye 호출
-            R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(
-                R_gripper2base_list, t_gripper2base_list,
-                R_target2cam_list, t_target2cam_list,
-                method=cv2.CALIB_HAND_EYE_TSAI
-            )
-
-            # 4x4 변환 행렬 생성
-            self.hand_eye_matrix = np.eye(4)
-            self.hand_eye_matrix[:3, :3] = R_cam2gripper
-            self.hand_eye_matrix[:3, 3] = t_cam2gripper.flatten()
-
-            # 결과 표시
-            t_mm = t_cam2gripper.flatten()
+        if result["success"]:
+            self.hand_eye_matrix = result["hand_eye_matrix"]
+            t_mm = result["t_cam2gripper"].flatten()
             result_text = f"T: [{t_mm[0]:.1f}, {t_mm[1]:.1f}, {t_mm[2]:.1f}] mm"
             self.labelHandEyeResult.setText(result_text)
 
@@ -1234,38 +1209,9 @@ class TabEyeInHand(CalibrationMixin, QWidget):
             self._log(f"  Translation: X={t_mm[0]:.2f}, Y={t_mm[1]:.2f}, Z={t_mm[2]:.2f} mm")
 
             QMessageBox.information(self, "완료", f"Hand-Eye 캘리브레이션 완료\n{result_text}")
-
-        except Exception as e:
-            self._log(f"Hand-Eye 캘리브레이션 오류: {e}")
-            QMessageBox.critical(self, "오류", f"캘리브레이션 실패: {e}")
-
-    def _euler_to_rotation_matrix(self, rx: float, ry: float, rz: float) -> np.ndarray:
-        """Euler angles (deg) to rotation matrix"""
-        import math
-
-        rx_rad = math.radians(rx)
-        ry_rad = math.radians(ry)
-        rz_rad = math.radians(rz)
-
-        Rx = np.array([
-            [1, 0, 0],
-            [0, math.cos(rx_rad), -math.sin(rx_rad)],
-            [0, math.sin(rx_rad), math.cos(rx_rad)]
-        ])
-
-        Ry = np.array([
-            [math.cos(ry_rad), 0, math.sin(ry_rad)],
-            [0, 1, 0],
-            [-math.sin(ry_rad), 0, math.cos(ry_rad)]
-        ])
-
-        Rz = np.array([
-            [math.cos(rz_rad), -math.sin(rz_rad), 0],
-            [math.sin(rz_rad), math.cos(rz_rad), 0],
-            [0, 0, 1]
-        ])
-
-        return Rz @ Ry @ Rx
+        else:
+            self._log(f"Hand-Eye 캘리브레이션 오류: {result['error_message']}")
+            QMessageBox.critical(self, "오류", f"캘리브레이션 실패: {result['error_message']}")
 
     def _on_save_hand_eye_calib(self):
         """Hand-Eye 캘리브레이션 결과 저장"""

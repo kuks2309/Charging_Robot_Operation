@@ -1028,9 +1028,9 @@ QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string></pr
               <layout class="QHBoxLayout" name="horizontalLayoutCalibration">
                <property name="spacing"><number>4</number></property>
                <item>
-                <widget class="QPushButton" name="btnCreateROI">
+                <widget class="QPushButton" name="btnCreateROIVertical">
                  <property name="text">
-                  <string>Laser ROI 생성</string>
+                  <string>Laser Vertical ROI 생성</string>
                  </property>
                  <property name="checkable">
                   <bool>true</bool>
@@ -1038,6 +1038,20 @@ QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string></pr
                  <property name="styleSheet">
                   <string>QPushButton { padding: 5px 10px; font-weight: bold; }
 QPushButton:checked { background-color: #FF8F00; color: white; }</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btnCreateROIHorizontal">
+                 <property name="text">
+                  <string>Laser Horizontal ROI 생성</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="styleSheet">
+                  <string>QPushButton { padding: 5px 10px; font-weight: bold; }
+QPushButton:checked { background-color: #6A1B9A; color: white; }</string>
                  </property>
                 </widget>
                </item>
@@ -1147,7 +1161,7 @@ QPushButton:checked { background-color: #0288D1; color: white; }</string>
               </layout>
              </item>
 
-             <!-- Config row: step interval -->
+             <!-- Config row: step interval + scan range -->
              <item>
               <layout class="QHBoxLayout" name="hLayoutVertConfig">
                <property name="spacing"><number>4</number></property>
@@ -1167,6 +1181,21 @@ QPushButton:checked { background-color: #0288D1; color: white; }</string>
                 </widget>
                </item>
                <item>
+                <widget class="QLabel" name="labelScanRangeTitle">
+                 <property name="text"><string>스캔 범위:</string></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QDoubleSpinBox" name="spinScanRange">
+                 <property name="minimum"><double>10.0</double></property>
+                 <property name="maximum"><double>300.0</double></property>
+                 <property name="value"><double>80.0</double></property>
+                 <property name="singleStep"><double>10.0</double></property>
+                 <property name="suffix"><string> mm</string></property>
+                 <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>
+                </widget>
+               </item>
+               <item>
                 <spacer name="hSpacerVertConfig">
                  <property name="orientation"><enum>Qt::Horizontal</enum></property>
                  <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
@@ -1175,33 +1204,30 @@ QPushButton:checked { background-color: #0288D1; color: white; }</string>
               </layout>
              </item>
 
-             <!-- Scan buttons -->
+             <!-- Auto scan buttons -->
              <item>
-              <layout class="QHBoxLayout" name="hLayoutVertButtons">
+              <layout class="QHBoxLayout" name="hLayoutAutoVertScan">
                <property name="spacing"><number>4</number></property>
                <item>
-                <widget class="QPushButton" name="btnMoveToVertScan">
-                 <property name="text"><string>위치로 이동</string></property>
-                 <property name="styleSheet"><string>QPushButton { padding: 5px 10px; background-color: #37474F; color: white; border-radius: 4px; }
-QPushButton:hover { background-color: #546E7A; }
-QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="btnScanVertical">
-                 <property name="text"><string>캡처 추가</string></property>
+                <widget class="QPushButton" name="btnAutoVertScan">
+                 <property name="text"><string>자동 스캔</string></property>
                  <property name="styleSheet">
                   <string>QPushButton { padding: 5px 12px; font-weight: bold; background-color: #1565C0; color: white; border-radius: 4px; }
 QPushButton:hover { background-color: #1976D2; }
 QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
                  </property>
+                 <property name="minimumHeight"><number>28</number></property>
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="btnClearVertScan">
-                 <property name="text"><string>클리어</string></property>
-                 <property name="styleSheet"><string>QPushButton { padding: 5px 10px; }</string></property>
+                <widget class="QPushButton" name="btnCancelAutoScan">
+                 <property name="text"><string>취소</string></property>
+                 <property name="visible"><bool>false</bool></property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="labelAutoScanProgress">
+                 <property name="text"><string>자동 스캔: 대기</string></property>
                 </widget>
                </item>
                <item>
@@ -1217,7 +1243,7 @@ QPushButton:disabled { background-color: #90A4AE; color: #eceff1; }</string>
                 </widget>
                </item>
                <item>
-                <spacer name="hSpacerVertButtons">
+                <spacer name="hSpacerAutoVertScan">
                  <property name="orientation"><enum>Qt::Horizontal</enum></property>
                  <property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property>
                 </spacer>

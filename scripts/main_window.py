@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         self.ds435_camera_manager.frame_ready.connect(self._on_camera_frame)
 
         # ArduCam 카메라 매니저 초기화 (시작 시 포트 자동 감지)
-        _cam_config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'camera_config.json')
+        _cam_config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'camera', 'arducam', 'camera_config.json')
         _arducam_cfg = {"device_index": "auto", "name_keyword": "FHD Camera", "fallback_index": 0}
         try:
             with open(_cam_config_path, 'r', encoding='utf-8') as _f:
@@ -401,6 +401,8 @@ class MainWindow(QMainWindow):
         self.tabLaserCalibration.calib_save_compare_requested.connect(self._on_calib_save_compare)
         self.tabLaserCalibration.calib_auto_requested.connect(self._on_calib_auto)
         self.tabLaserCalibration.calib_cancel_requested.connect(self._on_calib_cancel)
+        self.tabLaserCalibration.calib_auto_vert_scan_requested.connect(self._on_auto_vert_scan)
+        self.tabLaserCalibration.calib_auto_vert_scan_cancel_requested.connect(self._on_cancel_auto_vert_scan)
 
         # 레이저 스캔 탭 시그널
         self.tabLaserScan.log_message.connect(self._log)
@@ -907,7 +909,7 @@ class MainWindow(QMainWindow):
         """로봇 연결 토글 (메뉴/설정 탭에서 호출)"""
         # 설정 탭에서 IP/Port 가져오기
         ip = self.editSettingsRobotIP.text() if hasattr(self, 'editSettingsRobotIP') else "192.168.1.150"
-        port = self.spinSettingsPort.value() if hasattr(self, 'spinSettingsPort') else 502
+        port = self.spinSettingsPort.value() if hasattr(self, 'spinSettingsPort') else 1502
         self._connect_robot(ip, port)
 
     def _connect_robot(self, ip: str, port: int):
@@ -3793,6 +3795,308 @@ class MainWindow(QMainWindow):
         tab._update_calib_step(0, "취소됨")
         self._log("[Calib] 캘리브레이션 취소")
 
+    # -------------------------------------------------------------------------
+    # 자동 수직 스캔 상태머신 (_auto_calib_step 패턴)
+    # -------------------------------------------------------------------------
+
+    def _on_auto_vert_scan(self):
+        """자동 수직 스캔 시작 — 탭에서 시그널로 호출됨."""
+        import json, os
+        tab = self.tabLaserCalibration
+        if not self.robot or not self.robot.is_connected:
+            QMessageBox.warning(self, "오류", "로봇이 연결되지 않았습니다.")
+            return
+        if not self.arducam_manager or not self.arducam_manager.is_running:
+            QMessageBox.warning(self, "오류", "카메라가 실행되지 않았습니다.")
+            return
+        if getattr(self, '_auto_vert_scan_running', False):
+            return
+
+        config_path = os.path.join(
+            os.path.dirname(__file__), '..', 'config', 'laser', 'vertical', 'laser_jig_auto_scan.json'
+        )
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, "설정 오류", f"laser_jig_auto_scan.json 로드 실패: {e}")
+            return
+
+        scan_range = tab.spinScanRange.value()
+        step = cfg.get('step_mm', 2)
+        num_steps = int(scan_range / step)
+        offsets = [0.0] + [-step * i for i in range(1, num_steps + 1)]
+        settle_ms = cfg.get('settle_time_ms', 500)
+        auto_fit = cfg.get('auto_fit_after_scan', True)
+
+        # UI 값을 config에 저장 (다음 실행 시 복원)
+        cfg['scan_range_mm'] = scan_range
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(cfg, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+        deltas = [offsets[0]] + [offsets[i] - offsets[i - 1] for i in range(1, len(offsets))]
+
+        # TF4 설정
+        ok, msg = self.robot.send_set_toolframe(4, wait=True)
+        if not ok:
+            QMessageBox.warning(self, "TF 오류", f"TF4 설정 실패: {msg}")
+            return
+
+        origin_pose = self.robot.read_current_pose()
+        if origin_pose is None:
+            QMessageBox.warning(self, "오류", "현재 위치를 읽을 수 없습니다.")
+            return
+
+        # 이전 캡처 데이터 초기화
+        tab._multi_vert_captures.clear()
+        tab._on_clear_vert_scan()
+
+        # CSV 저장 디렉토리 생성
+        from datetime import datetime as _dt
+        _scan_ts = _dt.now().strftime('%Y%m%d_%H%M%S')
+        _csv_dir = os.path.join(
+            os.path.dirname(__file__), '..', 'data', 'laser_scan', 'calibration', 'vertical'
+        )
+        os.makedirs(_csv_dir, exist_ok=True)
+        _csv_path = os.path.join(_csv_dir, f'scan_raw_{_scan_ts}.csv')
+
+        self._auto_vert_scan_running = True
+        self._auto_vert_scan_cancel = False
+        self._auto_vert_scan_state = {
+            'offsets': offsets,
+            'deltas': deltas,
+            'settle_ms': settle_ms,
+            'auto_fit': auto_fit,
+            'step_idx': 0,
+            'origin_pose': origin_pose,
+            'total_moved': 0.0,
+            'csv_path': _csv_path,
+            'csv_header_written': False,
+        }
+        tab._set_auto_scan_ui_state(True)
+        tab._update_auto_scan_progress("자동 스캔: 시작 중...")
+        self._log(f"[AutoVertScan] 시작 — {len(offsets)}개 오프셋: {offsets}")
+        QTimer.singleShot(100, self._auto_vert_scan_step)
+
+    def _auto_vert_scan_step(self):
+        """자동 수직 스캔 상태머신 — _auto_calib_step 패턴."""
+        tab = self.tabLaserCalibration
+        state = self._auto_vert_scan_state
+        offsets = state['offsets']
+        deltas = state['deltas']
+        step_idx = state['step_idx']
+        total = len(offsets)
+
+        if self._auto_vert_scan_cancel:
+            self._auto_vert_scan_return()
+            return
+
+        if step_idx >= total:
+            self._auto_vert_scan_return()
+            return
+
+        tab._update_auto_scan_progress(f"자동 스캔: {step_idx + 1}/{total} 이동 중...")
+
+        delta = deltas[step_idx]
+        if abs(delta) > 0.05:
+            ok, msg = self.robot.send_base_linear(
+                'z', delta, wait=True,
+                process_events_callback=QApplication.processEvents
+            )
+            if not ok:
+                tab._update_auto_scan_progress(f"이동 오류: {msg}")
+                self._log(f"[AutoVertScan] Z 이동 실패: {msg}")
+                self._auto_vert_scan_return()
+                return
+            state['total_moved'] += delta
+
+        tab._update_auto_scan_progress(f"자동 스캔: {step_idx + 1}/{total} 안정화 대기...")
+        QTimer.singleShot(state['settle_ms'], self._auto_vert_scan_capture)
+
+    def _auto_vert_scan_capture(self):
+        """현재 위치에서 레이저 라인 캡처."""
+        tab = self.tabLaserCalibration
+        state = self._auto_vert_scan_state
+        step_idx = state['step_idx']
+        total = len(state['offsets'])
+
+        if self._auto_vert_scan_cancel:
+            self._auto_vert_scan_return()
+            return
+
+        tab._update_auto_scan_progress(f"자동 스캔: {step_idx + 1}/{total} 캡처 중...")
+
+        pose = self.robot.read_current_pose()
+        z_tcp = pose[2] if pose is not None else 0.0
+
+        # -- 다중 측정 + outlier 제거 --
+        import time
+        n_meas = state.get('measurements_per_pos', 10)
+        frame_interval = 0.25  # ArduCam 5FPS → 200ms + 여유
+
+        # ROI별 step별 y_px 수집 (config 키 이름 동적 사용)
+        all_measurements = {}  # {roi_label: {step_idx: [y_px, ...]}}
+        primary_roi_name = tab._all_rois[0][0] if tab._all_rois else 'full_frame'
+        valid_count = 0
+
+        for m in range(n_meas):
+            scan_result = tab._run_vert_scan()
+            if not isinstance(scan_result, dict):
+                scan_result = {primary_roi_name: scan_result if scan_result else []}
+            for roi_key, steps in scan_result.items():
+                if roi_key not in all_measurements:
+                    all_measurements[roi_key] = {}
+                for s in steps:
+                    idx = s['step']
+                    all_measurements[roi_key].setdefault(idx, []).append(s['y_px'])
+            primary_steps = scan_result.get(primary_roi_name, [])
+            if len(primary_steps) >= 1:
+                valid_count += 1
+            if m < n_meas - 1:
+                time.sleep(frame_interval)
+
+        # IQR 기반 outlier 제거 + 중앙값 산출
+        def robust_median(values):
+            if len(values) < 3:
+                return float(np.median(values)) if values else None
+            arr = np.array(values)
+            q1, q3 = np.percentile(arr, [25, 75])
+            iqr = q3 - q1
+            mask = (arr >= q1 - 1.5 * iqr) & (arr <= q3 + 1.5 * iqr)
+            filtered = arr[mask]
+            return float(np.median(filtered)) if len(filtered) > 0 else float(np.median(arr))
+
+        cleaned = {}
+        for roi_key, step_dict in all_measurements.items():
+            step_data_list = []
+            for s_idx in sorted(step_dict.keys()):
+                vals = step_dict[s_idx]
+                med = robust_median(vals)
+                if med is not None:
+                    step_data_list.append({'step': s_idx, 'y_px': med})
+            cleaned[roi_key] = step_data_list
+
+        center_data = cleaned.get(primary_roi_name, [])
+
+        # 로그: ROI별 검출 수
+        roi_summary = ', '.join(f"{k}={len(v)}" for k, v in cleaned.items())
+        self._log(
+            f"[AutoVertScan] {n_meas}회 측정 완료 (유효 {valid_count}/{n_meas}), {roi_summary}"
+        )
+
+        # primary ROI 1개만 검출 시 ±1mm jitter 재시도
+        if len(center_data) == 1:
+            for jitter in [-1.0, 1.0]:
+                self._log(f"[AutoVertScan] {primary_roi_name} 1개 — jitter {jitter:+.0f}mm 재시도")
+                ok, _ = self.robot.send_base_linear('z', jitter, wait=True)
+                if not ok:
+                    continue
+                time.sleep(0.3)
+                retry_result = tab._run_vert_scan()
+                if not isinstance(retry_result, dict):
+                    retry_result = {primary_roi_name: retry_result if retry_result else []}
+                retry_primary = retry_result.get(primary_roi_name, [])
+                if len(retry_primary) > len(center_data):
+                    center_data = retry_primary
+                    cleaned = retry_result
+                self.robot.send_base_linear('z', -jitter, wait=True)
+                time.sleep(0.2)
+                if len(center_data) >= 2:
+                    break
+
+        any_detected = any(len(v) > 0 for v in cleaned.values()) if cleaned else False
+        if any_detected and len(center_data) >= 1:
+            capture = {'z_tcp': z_tcp, 'steps': center_data}
+            # 전체 ROI 결과 저장
+            for roi_key, roi_steps in cleaned.items():
+                if roi_key != primary_roi_name:
+                    capture[roi_key] = roi_steps
+            tab._multi_vert_captures.append(capture)
+
+            # -- 원본 레이저 픽셀 데이터 CSV 저장 --
+            csv_path = state.get('csv_path')
+            if csv_path and hasattr(tab, '_last_scan_raw_pixels'):
+                try:
+                    write_header = not state.get('csv_header_written', False)
+                    with open(csv_path, 'a', newline='') as csvf:
+                        import csv
+                        writer = csv.writer(csvf)
+                        if write_header:
+                            writer.writerow(['capture_idx', 'z_tcp_mm', 'roi_name', 'col_px', 'center_y_px'])
+                            state['csv_header_written'] = True
+                        for roi_name, px_data in tab._last_scan_raw_pixels.items():
+                            cols_arr = px_data['cols']
+                            cy_arr = px_data['centers_y']
+                            for c, y in zip(cols_arr, cy_arr):
+                                writer.writerow([step_idx, f'{z_tcp:.2f}', roi_name, int(c), f'{y:.2f}'])
+                except Exception as e:
+                    self._log(f"[AutoVertScan] CSV 저장 오류: {e}")
+
+            n_caps = len(tab._multi_vert_captures)
+            n_pts = sum(len(c['steps']) for c in tab._multi_vert_captures)
+            if hasattr(tab, 'labelCaptureCount'):
+                tab.labelCaptureCount.setText(f"캡처: {n_caps}회 / {n_pts}pts")
+            valid_caps = [c for c in tab._multi_vert_captures if len(c['steps']) >= 3]
+            tab.btnFitVertModel.setEnabled(len(valid_caps) >= 2)
+            tab._update_auto_scan_progress(
+                f"자동 스캔: {step_idx + 1}/{total} 완료 (Z={z_tcp:.1f}mm, 누적 {n_caps}회/{n_pts}pts)"
+            )
+            self._log(
+                f"[AutoVertScan] 캡처 {step_idx + 1}/{total}: Z={z_tcp:.1f}mm, {roi_summary}"
+            )
+        else:
+            tab._update_auto_scan_progress(f"자동 스캔: {step_idx + 1}/{total} 검출 실패 (건너뜀)")
+            self._log(f"[AutoVertScan] 캡처 {step_idx + 1}/{total}: 검출 실패 — 건너뜀")
+
+        state['step_idx'] += 1
+        QTimer.singleShot(100, self._auto_vert_scan_step)
+
+    def _auto_vert_scan_return(self):
+        """원점으로 복귀."""
+        tab = self.tabLaserCalibration
+        state = self._auto_vert_scan_state
+        tab._update_auto_scan_progress("자동 스캔: 원점 복귀 중...")
+        self._log(f"[AutoVertScan] 원점 복귀 — total_moved={state.get('total_moved', 0.0):.1f}mm")
+
+        total_moved = state.get('total_moved', 0.0)
+        if abs(total_moved) > 0.05:
+            self.robot.send_base_linear(
+                'z', -total_moved, wait=True,
+                process_events_callback=QApplication.processEvents
+            )
+
+        QTimer.singleShot(state.get('settle_ms', 500), self._auto_vert_scan_finish)
+
+    def _auto_vert_scan_finish(self):
+        """스캔 완료 처리."""
+        tab = self.tabLaserCalibration
+        state = self._auto_vert_scan_state
+        self._auto_vert_scan_running = False
+
+        n_caps = len(tab._multi_vert_captures)
+        tab._set_auto_scan_ui_state(False)
+
+        if self._auto_vert_scan_cancel:
+            msg = f"자동 스캔: 취소됨 ({n_caps}회 캡처)"
+            self._log(f"[AutoVertScan] 취소됨 ({n_caps}회 캡처)")
+        else:
+            msg = f"자동 스캔: 완료 ({n_caps}회 캡처)"
+            self._log(f"[AutoVertScan] 완료 ({n_caps}회 캡처)")
+            if state.get('auto_fit') and n_caps >= 2:
+                tab._on_fit_vert_model()
+
+        tab._update_auto_scan_progress(msg)
+        valid_caps = [c for c in tab._multi_vert_captures if len(c['steps']) >= 3]
+        tab.btnFitVertModel.setEnabled(len(valid_caps) >= 2)
+
+    def _on_cancel_auto_vert_scan(self):
+        """자동 스캔 취소."""
+        self._auto_vert_scan_cancel = True
+
+    # -------------------------------------------------------------------------
+
     def _on_camera_frame(self, frame: np.ndarray):
         """카메라 프레임 수신 시 호출 (CameraManager signal)"""
         # 현재 활성 탭 인덱스
@@ -4617,7 +4921,7 @@ class MainWindow(QMainWindow):
     # ==================== 테스트 탭 레이저 스캔 ====================
 
     _CHARGING_CONFIG_FILE = os.path.join(
-        os.path.dirname(__file__), '..', 'config', 'charging_coupling_config.json')
+        os.path.dirname(__file__), '..', 'config', 'charging', 'charging_coupling_config.json')
 
     def _load_charging_config(self) -> dict:
         """충전건 결합 설정 로드"""
@@ -4844,7 +5148,7 @@ class MainWindow(QMainWindow):
             self.labelTestAlignStatus.setText(f"Rx 보정 오류: {e}")
 
     _COUPLING_CONFIG_FILE = os.path.join(
-        os.path.dirname(__file__), '..', 'config', 'charging_gun_coupling.json')
+        os.path.dirname(__file__), '..', 'config', 'charging', 'charging_gun_coupling.json')
 
     def _stop_cameras_for_movement(self):
         """이동 전 카메라 정지, TF4 강제, 버튼 상태 동기화"""

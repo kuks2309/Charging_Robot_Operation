@@ -1,7 +1,0 @@
-{
-    "h_mm": 70.0,
-    "Bx_mm": -30.0,
-    "alpha_deg": 13.278,
-    "calibration_date": "2026-03-07",
-    "note": "Nonlinear geometric model. h=laser above camera, Bx=horizontal offset, alpha=laser angle. Fitted via differential_evolution. ArduCam 1920x1080, fy=5347.3, cy=478.2"
-}

@@ -122,6 +122,13 @@
            </widget>
           </item>
           <item>
+           <widget class="QPushButton" name="btnSetRobotPosition">
+            <property name="text">
+             <string>Set Robot Position</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="horizontalSpacerCameraSelect">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>

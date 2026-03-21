@@ -354,6 +354,66 @@ def overlay_ry_angles(vis, dets: list):
     return vis
 
 
+def draw_bbox_centers(vis, dets: list):
+    """각 Det 바운딩박스 중심점 및 정렬 기준점 오버레이.
+
+    - Circle_A: 녹색 십자 + 좌표
+    - Port_T: 청색 십자 + 좌표
+    - 수직 기준 (Circle_A 최하단 cy): 마젠타 수평선 + 원
+    - 수평 기준 (Circle_A cx 평균): 시안 수직선
+
+    Args:
+        vis: BGR 이미지
+        dets: Det 리스트 (parse_detections 반환값)
+    Returns:
+        vis (수정된 이미지)
+    """
+    if not dets:
+        return vis
+
+    h, w = vis.shape[:2]
+    CROSS = 12
+    THICK = 2
+    CLR_CA  = (80, 220, 0)    # BGR 녹색 (Circle_A)
+    CLR_PT  = (255, 100, 0)   # BGR 청색 (Port_T)
+    CLR_VR  = (200, 0, 255)   # BGR 마젠타 (수직 기준)
+    CLR_HR  = (255, 200, 0)   # BGR 시안 (수평 기준)
+
+    circles = [d for d in dets if d.cls == 'Circle_A']
+
+    # 각 Det 십자 + 좌표 텍스트
+    for d in dets:
+        cx, cy = int(d.cx), int(d.cy)
+        clr = CLR_CA if d.cls == 'Circle_A' else CLR_PT
+        clr_rgb = tuple(reversed(clr))
+        cv2.line(vis, (cx - CROSS, cy), (cx + CROSS, cy), clr, THICK, cv2.LINE_AA)
+        cv2.line(vis, (cx, cy - CROSS), (cx, cy + CROSS), clr, THICK, cv2.LINE_AA)
+        cv2.circle(vis, (cx, cy), 4, clr, -1)
+        # '+' 문자 중심 표시 (십자 중앙에 겹쳐 표시)
+        vis = put_text_ko(vis, "+", (cx - 7, cy - 12),
+                          font_size=20, color_rgb=clr_rgb, bg_color=None)
+        vis = put_text_ko(vis, f"({cx},{cy})", (cx + 6, cy - 20),
+                          font_size=14, color_rgb=clr_rgb, bg_color=(20, 20, 20))
+
+    # 수직 기준: Circle_A 최하단 cy — 마젠타 수평선
+    if circles:
+        ref = max(circles, key=lambda d: d.cy)
+        ry = int(ref.cy)
+        cv2.line(vis, (0, ry), (w, ry), CLR_VR, 1, cv2.LINE_AA)
+        cv2.circle(vis, (int(ref.cx), ry), 8, CLR_VR, 2, cv2.LINE_AA)
+        vis = put_text_ko(vis, f"V-ref y={ry}", (4, max(0, ry - 22)),
+                          font_size=14, color_rgb=(255, 0, 200), bg_color=(20, 20, 20))
+
+    # 수평 기준: Circle_A cx 평균 — 시안 수직선
+    if circles:
+        rx = int(sum(d.cx for d in circles) / len(circles))
+        cv2.line(vis, (rx, 0), (rx, h), CLR_HR, 1, cv2.LINE_AA)
+        vis = put_text_ko(vis, f"H-ref x={rx}", (rx + 4, 4),
+                          font_size=14, color_rgb=(0, 200, 255), bg_color=(20, 20, 20))
+
+    return vis
+
+
 def overlay_masks(img_bgr, result):
     vis = img_bgr.copy()
 
@@ -431,6 +491,14 @@ def draw_hud(vis, info_text, guide_text):
 
     vis = put_text_ko(vis, guide_text, (w - 340, h - 26), font_size=15, color_rgb=(180, 180, 180))
     return vis
+
+
+# ──────────────────────────────────────────────────────
+# Laser calib ROI overlay — utils.image_processing에서 re-export
+# ──────────────────────────────────────────────────────
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
+from utils.image_processing import draw_roi_single, draw_roi_symmetric, draw_laser_calib_roi  # noqa: F401, E402
 
 
 # ──────────────────────────────────────────────────────

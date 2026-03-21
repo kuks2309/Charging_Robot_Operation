@@ -5,6 +5,7 @@ ArUco 태그의 위치/자세 검출 신뢰성을 반복 측정하여 통계적�
 """
 
 import os
+import json
 import csv
 import cv2
 import yaml
@@ -16,6 +17,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 
 from .jog_mixin import JogMixin
 from PyQt5.QtGui import QPixmap, QImage
+from utils.image_processing import undistort_frame, rvec_to_euler_deg
 
 # matplotlib 통합
 import matplotlib
@@ -47,8 +49,8 @@ TAB_ARUCO_RELIABILITY_UI = os.path.join(UI_DIR, 'tab_aruco_reliability.ui')
 
 # 캘리브레이션 파일 경로
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
-DS435_CALIB_FILE = os.path.join(CONFIG_DIR, 'ds435_calibration.yaml')
-ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'arducam_calibration.yaml')
+DS435_CALIB_FILE = os.path.join(CONFIG_DIR, 'calibration', 'ds435', 'ds435_calibration.yaml')
+ARDUCAM_CALIB_FILE = os.path.join(CONFIG_DIR, 'calibration', 'arducam', 'arducam_calibration.yaml')
 
 
 class TabArucoReliability(QWidget, JogMixin):
@@ -149,6 +151,9 @@ class TabArucoReliability(QWidget, JogMixin):
         # 시그널 연결
         self._connect_signals()
 
+        # Detection Pose config 로드
+        self._load_detection_pose_config()
+
         # 초기화
         self._init_ui()
 
@@ -170,6 +175,8 @@ class TabArucoReliability(QWidget, JogMixin):
 
         # Detection Pose 버튼
         self.btnSetDetectionPose.clicked.connect(self._on_set_detection_pose)
+        if hasattr(self, 'btnSetRobotPosition'):
+            self.btnSetRobotPosition.clicked.connect(self._on_set_robot_position)
 
         # 조그 이동 (JogMixin)
         self._connect_jog_buttons()
@@ -184,6 +191,26 @@ class TabArucoReliability(QWidget, JogMixin):
         self.btnAlignRy.clicked.connect(self._on_align_ry_from_angle)
         self.btnAlignRz.clicked.connect(lambda: self._on_align_single_axis('rz'))
         self.btnAlignParallel.clicked.connect(self._on_align_parallel)
+
+    def _load_detection_pose_config(self):
+        """config/charging/charging_gun_coupling.json에서 detection_pose 로드"""
+        config_path = os.path.join(CONFIG_DIR, 'charging', 'charging_gun_coupling.json')
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            pose = config.get('reference_positions', {}).get('detection_pose', {})
+            if pose:
+                self.spinDetPoseRx.setValue(pose.get('rx', 90.0))
+                self.spinDetPoseRy.setValue(pose.get('ry', 0.0))
+                self.spinDetPoseRz.setValue(pose.get('rz', 90.0))
+                self._detection_pose_xyz = (
+                    pose.get('x'), pose.get('y'), pose.get('z')
+                )
+                self._detection_pose_use_xyz = pose.get('use_xyz', False)
+        except Exception as e:
+            print(f"[TabArucoReliability] detection_pose config 로드 실패: {e}")
+            self._detection_pose_xyz = (None, None, None)
+            self._detection_pose_use_xyz = False
 
     def _init_ui(self):
         """UI 초기화"""
@@ -246,10 +273,7 @@ class TabArucoReliability(QWidget, JogMixin):
         self._load_calibration(camera_type)
 
         # undistort 저장 (표시용)
-        if self.camera_matrix is not None and self.dist_coeffs is not None:
-            self.undistorted_frame = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
-        else:
-            self.undistorted_frame = frame.copy()
+        self.undistorted_frame = undistort_frame(frame, self.camera_matrix, self.dist_coeffs)
 
         # 마커 중심 좌표 검출 (서비스 레이어 호출)
         tag_id1 = self.spinTagID1.value()
@@ -1519,6 +1543,9 @@ class TabArucoReliability(QWidget, JogMixin):
             QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
             return
 
+        # 버튼 클릭 시 config 다시 읽기
+        self._load_detection_pose_config()
+
         import time
         from PyQt5.QtWidgets import QApplication
 
@@ -1578,6 +1605,84 @@ class TabArucoReliability(QWidget, JogMixin):
 
         except Exception as e:
             QMessageBox.warning(self, "오류", f"Detection Pose 실패: {e}")
+
+    def _on_set_robot_position(self):
+        """Config의 detection_pose XYZ + RxRyRz로 절대 이동 (TF3→movel→TF4)"""
+        if self.robot is None:
+            QMessageBox.warning(self, "경고", "로봇이 연결되지 않았습니다.")
+            return
+
+        # 버튼 클릭 시 config 다시 읽기
+        self._load_detection_pose_config()
+
+        # config에서 XYZ 확인
+        if not hasattr(self, '_detection_pose_xyz') or None in self._detection_pose_xyz:
+            QMessageBox.warning(self, "경고", "Config에 detection_pose XYZ 값이 없습니다.")
+            return
+
+        import time
+        from PyQt5.QtWidgets import QApplication
+
+        x, y, z = self._detection_pose_xyz
+        tgt_rx = self.spinDetPoseRx.value()
+        tgt_ry = self.spinDetPoseRy.value()
+        tgt_rz = self.spinDetPoseRz.value()
+
+        reply = QMessageBox.question(
+            self, "확인",
+            f"로봇을 다음 위치로 이동합니다:\n"
+            f"X={x:.1f} Y={y:.1f} Z={z:.1f}\n"
+            f"Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}\n\n"
+            f"진행하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            # 1) TF3 전환
+            self._log("Set Robot Position: TF3으로 전환")
+            success, msg = self.robot.send_set_toolframe(3, wait=True)
+            if not success:
+                self._log(f"TF3 전환 실패: {msg}")
+                return
+            time.sleep(0.5)
+
+            # 2) 절대 좌표 이동 (config XYZ + UI RxRyRz)
+            self._log(f"목표: X={x:.1f} Y={y:.1f} Z={z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
+
+            to_int16 = self.robot.to_uint16
+            regs = [
+                to_int16(int(round(x * 10))),
+                to_int16(int(round(y * 10))),
+                to_int16(int(round(z * 10))),
+                to_int16(int(round(tgt_rx * 10))),
+                to_int16(int(round(tgt_ry * 10))),
+                to_int16(int(round(tgt_rz * 10))),
+            ]
+            self.robot.write_registers(self.robot.REGISTER_POSE_MAIN, regs)
+            self.robot.write_command(self.robot.CMD_MOVE_TO_POSE)
+
+            # 3) 완료 대기
+            success, msg = self.robot.wait_for_done_motion_aware(
+                process_events_callback=QApplication.processEvents
+            )
+            if not success:
+                self._log(f"Set Robot Position 이동 실패: {msg}")
+                return
+
+            self._log("Set Robot Position 이동 완료")
+            time.sleep(0.5)
+
+            # 4) TF4 복귀
+            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            if success:
+                self._log("TF4 복귀 완료")
+            else:
+                self._log(f"TF4 복귀 실패: {msg}")
+
+        except Exception as e:
+            QMessageBox.warning(self, "오류", f"Set Robot Position 실패: {e}")
 
     def _update_robot_pose_ui(self):
         """현재 로봇 포즈 UI 업데이트"""
@@ -1781,27 +1886,7 @@ class TabArucoReliability(QWidget, JogMixin):
 
     def _rvec_to_euler(self, rvec):
         """Rotation vector를 Euler 각도로 변환 (Rx, Ry, Rz in degrees)"""
-        import cv2
-
-        # Rodrigues 변환으로 회전 행렬 얻기
-        R, _ = cv2.Rodrigues(rvec)
-
-        # 회전 행렬에서 Euler 각도 추출 (ZYX 순서)
-        sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
-
-        singular = sy < 1e-6
-
-        if not singular:
-            rx = np.arctan2(R[2, 1], R[2, 2])
-            ry = np.arctan2(-R[2, 0], sy)
-            rz = np.arctan2(R[1, 0], R[0, 0])
-        else:
-            rx = np.arctan2(-R[1, 2], R[1, 1])
-            ry = np.arctan2(-R[2, 0], sy)
-            rz = 0
-
-        # 라디안을 도로 변환
-        return [np.degrees(rx), np.degrees(ry), np.degrees(rz)]
+        return rvec_to_euler_deg(rvec)
 
 
     def _log(self, message):

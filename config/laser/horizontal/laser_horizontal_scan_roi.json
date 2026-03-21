@@ -1,0 +1,12 @@
+{
+  "_note": "1920x1080 기준 수평 레이저 ROI. 현장 시각적 확인 후 미세 조정 필요",
+  "roi": {
+    "mode": "single",
+    "center_x_offset_px": 0,
+    "width_px": 280,
+    "center_y_offset_px": 0,
+    "height_px": 900,
+    "color": [0, 0, 255],
+    "thickness": 3
+  }
+}

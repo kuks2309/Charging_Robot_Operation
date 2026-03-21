@@ -252,7 +252,7 @@
            <item>
             <widget class="QLineEdit" name="editRobotIP">
              <property name="text">
-              <string>192.168.0.29</string>
+              <string>192.168.0.39</string>
              </property>
             </widget>
            </item>

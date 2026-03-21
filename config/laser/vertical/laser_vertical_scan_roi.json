@@ -1,0 +1,22 @@
+{
+  "_note": "1920x1080 기준 ROI (fy 비율 1.336 스케일링). 현장 시각적 확인 후 미세 조정 필요",
+  "roi_laser": {
+    "mode": "symmetric",
+    "center_x_offset_px": 470,
+    "width_px": 280,
+    "center_y_offset_px": -10,
+    "height_px": 900,
+    "color": [0, 0, 255],
+    "thickness": 3
+  },
+  "roi_laser_base": {
+    "_note": "바닥 검출 확인용 ROI (검출 필터링에 사용 함)",
+    "mode": "symmetric",
+    "center_x_offset_px": 240,
+    "width_px": 240,
+    "center_y_offset_px": 250,
+    "height_px": 500,
+    "color": [0, 255, 0],
+    "thickness": 2
+  }
+}

@@ -17,7 +17,7 @@ import numpy as np
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
-CALIB_FILE = os.path.normpath(os.path.join(PROJECT_ROOT, '..', 'config', 'arducam_calibration.yaml'))
+CALIB_FILE = os.path.normpath(os.path.join(PROJECT_ROOT, '..', 'config', 'calibration', 'arducam', 'arducam_calibration.yaml'))
 
 ARUCO_DICT_TYPE = cv2.aruco.DICT_5X5_50
 MARKER_SIZE = 0.015

@@ -1,0 +1,7 @@
+{
+    "_note": "자동 스캔 설정. scan_range_mm: 총 스캔 거리(mm). step_mm: 이동 간격(mm). 음수 방향(후퇴) 이동. x_offsets_mm 직접 지정 시 우선 사용.",
+    "scan_range_mm": 70.0,
+    "step_mm": 2,
+    "settle_time_ms": 500,
+    "auto_fit_after_scan": true
+}

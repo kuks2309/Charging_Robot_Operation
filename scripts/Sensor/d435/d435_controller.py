@@ -70,7 +70,7 @@ class D435Controller:
 
     # 기본 캘리브레이션 파일 경로
     DEFAULT_CALIBRATION = os.path.join(
-        os.path.dirname(__file__), '..', '..', '..', 'config', 'ds435_calibration.yaml'
+        os.path.dirname(__file__), '..', '..', '..', 'config', 'calibration', 'ds435', 'ds435_calibration.yaml'
     )
 
     def __init__(self, calibration_file: str = None):
