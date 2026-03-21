@@ -41,6 +41,7 @@ from services.plane_extractor import PlaneExtractor
 from services.dual_aruco_detector import DualArucoDetector, PlanePose
 from services.tcp_corrector import TCPCorrector
 from Sensor.aruco.aruco_detector import compute_dual_alignment, draw_dual_marker_overlay
+from Robot.communication.modbus_client import ModbusClient
 
 
 # UI 파일 경로
@@ -1571,9 +1572,9 @@ class TabArucoReliability(QWidget, JogMixin):
 
             cur_x, cur_y, cur_z = pose[0], pose[1], pose[2]
             cur_rx, cur_ry, cur_rz = pose[3], pose[4], pose[5]
-            tgt_rx = self.spinDetPoseRx.value()
-            tgt_ry = self.spinDetPoseRy.value()
-            tgt_rz = self.spinDetPoseRz.value()
+            tgt_rx = ModbusClient.normalize_angle(self.spinDetPoseRx.value())
+            tgt_ry = ModbusClient.normalize_angle(self.spinDetPoseRy.value())
+            tgt_rz = ModbusClient.normalize_angle(self.spinDetPoseRz.value())
 
             self._log(f"현재: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={cur_rx:.1f} Ry={cur_ry:.1f} Rz={cur_rz:.1f}")
             self._log(f"목표: X={cur_x:.1f} Y={cur_y:.1f} Z={cur_z:.1f} Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
@@ -1639,9 +1640,9 @@ class TabArucoReliability(QWidget, JogMixin):
         from PyQt5.QtWidgets import QApplication
 
         x, y, z = self._detection_pose_xyz
-        tgt_rx = self.spinDetPoseRx.value()
-        tgt_ry = self.spinDetPoseRy.value()
-        tgt_rz = self.spinDetPoseRz.value()
+        tgt_rx = ModbusClient.normalize_angle(self.spinDetPoseRx.value())
+        tgt_ry = ModbusClient.normalize_angle(self.spinDetPoseRy.value())
+        tgt_rz = ModbusClient.normalize_angle(self.spinDetPoseRz.value())
 
         reply = QMessageBox.question(
             self, "확인",

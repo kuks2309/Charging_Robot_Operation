@@ -350,6 +350,9 @@ while true do
         modserv.write_register('task_done', 0)
 
     -- command 54-56: 베이스 좌표계 회전 (rotx, roty, rotz) (×10 스케일, 0.1° 단위)
+    -- CMD 54-56은 증분(delta) 회전 명령이므로 ±180° 정규화 불필요
+    -- Python send_base_rotate()에서 경계 교차 감지 후 이 명령으로 전환됨 (CMD 20 movel 대신)
+    -- 정규화를 추가하면 증분 delta의 방향이 변경되어 유해함. CMD 20 while-loop 참조
     elseif command == 54 then
         modserv.write_register('task_done', 1)
         Rx = modserv.read_register('Rx')

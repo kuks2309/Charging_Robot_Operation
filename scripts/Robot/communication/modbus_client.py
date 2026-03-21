@@ -303,6 +303,14 @@ class ModbusClient:
                 break
             time.sleep(0.01)
 
+        # task_number(351) dirty 확인: 이전 명령이 남아있으면 리셋
+        _cmd_regs = self.read_registers(self.REGISTER_COMMAND, 1)
+        cmd_status = _cmd_regs[0] if _cmd_regs else None
+        if cmd_status is not None and cmd_status != 0:
+            print(f"[CMD] ⚠ task_number가 {cmd_status}로 dirty — 리셋 후 진행")
+            self.write_register(self.REGISTER_COMMAND, 0)
+            time.sleep(0.05)
+
         self._last_command_time = time.time()
         return self.write_register(self.REGISTER_COMMAND, value)
 
@@ -644,6 +652,26 @@ class ModbusClient:
         if abs(orig_rx - rx) > 0.01 or abs(orig_ry - ry) > 0.01 or abs(orig_rz - rz) > 0.01:
             print(f"[MOVE POSE] 각도 정규화: Rx={orig_rx:.2f}→{rx:.2f}, Ry={orig_ry:.2f}→{ry:.2f}, Rz={orig_rz:.2f}→{rz:.2f}")
 
+        # long-path 감지 및 사전 보정: ±180° 경계 교차 시 증분 회전(CMD 54-56)으로 선회전 후 movel
+        # 핵심: raw_delta(wrapping 전)로 경계 교차 감지. wrapping 후 delta는 항상 단경로이므로 감지 불가.
+        try:
+            current = self.read_current_pose()
+            if current:
+                axis_map = [('rx', current[3], rx), ('ry', current[4], ry), ('rz', current[5], rz)]
+                for axis_name, cur, tgt in axis_map:
+                    cur_n = self.normalize_angle(cur)
+                    raw_delta = tgt - cur_n  # wrapping 없는 raw 차이
+                    if abs(raw_delta) >= 180:
+                        # movel이 장경로(-350° 등)로 회전할 시나리오 → 증분 회전으로 사전 보정
+                        short_delta = raw_delta
+                        while short_delta > 180: short_delta -= 360
+                        while short_delta < -180: short_delta += 360
+                        print(f"[MOVE POSE] {axis_name.upper()} 장경로 감지 (raw={raw_delta:.1f}°, short={short_delta:.1f}°) → 증분 회전으로 사전 보정")
+                        self.send_base_rotate(axis_name, short_delta, wait=True)
+                        time.sleep(0.1)
+        except Exception as e:
+            print(f"[MOVE POSE] 장경로 사전 보정 실패 (무시하고 movel 진행): {e}")
+
         # mm×10, deg×10 스케일링 후 uint16 변환
         regs = [
             self.to_uint16(int(round(x * 10))),
@@ -842,15 +870,10 @@ class ModbusClient:
               f"Rx={target[3]:.2f}, Ry={target[4]:.2f}, Rz={target[5]:.2f}")
 
         # 경계 교차 감지: movel 장경로 방지
-        # before_pose도 정규화하여 일관성 확보
+        # 핵심: raw_delta(wrapping 전)로 감지. wrapping 후 delta는 항상 단경로이므로 감지 불가.
         before_normalized = self.normalize_angle(before_pose[idx])
-        movel_delta = target[idx] - before_normalized
-        # wrap delta to [-180, 180] — PRS while-loop과 동일 패턴 (가독성 일치)
-        while movel_delta > 180: movel_delta -= 360
-        while movel_delta < -180: movel_delta += 360
-        # 정규화된 delta는 [-180, 180] 범위이므로 abs >= 180은 defense-in-depth 역할.
-        # 정확히 ±180° delta는 시계/반시계 방향이 모호하므로 증분 회전이 더 안전.
-        if abs(movel_delta) >= 180:
+        raw_delta = target[idx] - before_normalized  # wrapping 없는 raw 차이
+        if abs(raw_delta) >= 180:
             # ±180° 경계 교차 → 증분 회전(CMD 54-56)으로 전환
             print(f"[BASE ROTATE] ±180° 경계 교차 감지 (delta={movel_delta:.1f}°) → 증분 회전으로 전환")
             cmd_map = {
@@ -871,6 +894,11 @@ class ModbusClient:
                 if after_pose:
                     print(f"[BASE ROTATE] 회전 후: X={after_pose[0]:.2f}, Y={after_pose[1]:.2f}, Z={after_pose[2]:.2f}, "
                           f"Rx={after_pose[3]:.2f}, Ry={after_pose[4]:.2f}, Rz={after_pose[5]:.2f}")
+                    # 증분 회전 후 delta 검증 (movel 경로와 동일 패턴)
+                    achieved = after_pose[idx] - before_pose[idx]
+                    while achieved > 180: achieved -= 360
+                    while achieved < -180: achieved += 360
+                    print(f"[BASE ROTATE] 증분 회전 결과: 요청 {angle:.1f}° → 실제 {achieved:.1f}°")
                 return result
             return True, "명령 전송됨 (증분 회전)"
 
@@ -975,6 +1003,13 @@ class ModbusClient:
     def write_pose_main(self, x: float, y: float, z: float,
                         rx: float, ry: float, rz: float) -> bool:
         """Pose Main (301~306) 쓰기"""
+        # Euler 각도 ±180° 정규화 (PRS movel 범위 초과 방지)
+        orig_rx, orig_ry, orig_rz = rx, ry, rz
+        rx = self.normalize_angle(rx)
+        ry = self.normalize_angle(ry)
+        rz = self.normalize_angle(rz)
+        if abs(orig_rx - rx) > 0.01 or abs(orig_ry - ry) > 0.01 or abs(orig_rz - rz) > 0.01:
+            print(f"[WRITE POSE] 각도 정규화: Rx {orig_rx:.1f}→{rx:.1f}, Ry {orig_ry:.1f}→{ry:.1f}, Rz {orig_rz:.1f}→{rz:.1f}")
         regs = [
             self.to_uint16(int(round(x * 10))),
             self.to_uint16(int(round(y * 10))),

@@ -3195,3 +3195,40 @@ sysfs 기반 자동 감지:
 - `scripts/tests/set_rz.py` (target args 정규화)
 - `scripts/tests/angle_utils.py` (신규: 공유 정규화 유틸리티)
 - `scripts/tests/` 내 5개 스크립트 (인라인 `% 360` → `angle_utils` 전환)
+
+---
+
+## 2026-03-21: ±180° 잔존 보완: Python bypass 보호 + PRS 분석 결과
+
+### 문제
+1. `write_pose_main()`이 `normalize_angle` 없이 직접 register 기록 → 5개 호출처 bypass
+2. `send_move_to_pose()`에 long-path 감지 없음 → movel 장경로 회전 위험
+3. `write_command()` pre-flight에 `task_number==0` 미확인 → movel 실패 후 dirty register
+4. PRS CMD 54-56에 설계 의도 미문서화 → 향후 불필요한 정규화 추가 위험
+5. `tab_aruco_reliability.py` spin box 범위 무제한 → ±180° 초과 입력 가능
+6. KAIST `Vision_task.prs` -65537 off-by-one 버그 (레거시)
+
+### 수정
+- `write_pose_main`: rx/ry/rz `normalize_angle` 추가 (bypass 일괄 보호)
+- `send_move_to_pose`: long-path 감지 경고 추가 (현재 pose 비교)
+- `write_command`: pre-flight `task_number` 리셋 추가
+- PRS CMD 54-56: 설계 의도 주석 추가
+- `tab_aruco_reliability.py`: spin box `[-180, 180]` 범위 제한
+- `Vision_task.prs`: -65537 → -65536 일괄 수정
+
+### 교훈
+- `normalize_angle()`은 모든 절대 각도 전송 경로에 적용해야 함 (send_* API뿐 아니라 raw register write 포함)
+- PRS는 thin execution layer로 유지 — 복잡한 로직은 Python에서 수행
+- 증분 회전(CMD 54-56)에 ±180° 정규화를 추가하면 유해 (delta 방향 변경)
+
+### 실물 테스트 필요 항목 (로봇 연결 시)
+1. `send_move_to_pose(x, y, z, 180.0, 0.0, 90.0)` — movel 정상 완료 확인
+2. `send_move_to_pose(x, y, z, -180.0, 0.0, 90.0)` — movel 정상 완료 확인
+3. 현재 Rz=175°에서 `send_move_to_pose(x, y, z, rx, ry, -179.0)` — 장경로 경고 출력 확인
+4. movel 실패 후 다음 명령 정상 전송 확인 (`task_number` 리셋)
+
+### 수정 파일
+- `scripts/Robot/communication/modbus_client.py` (`write_pose_main` 정규화, `send_move_to_pose` long-path 경고, `write_command` pre-flight 리셋)
+- `scripts/tabs/tab_aruco_reliability.py` (spin box 범위 제한)
+- `Robot_scripts/robot_scripts/Vision_task.prs` (-65537 → -65536)
+- `Robot_scripts/robot_scripts/Main_task.prs` (CMD 54-56 설계 의도 주석)

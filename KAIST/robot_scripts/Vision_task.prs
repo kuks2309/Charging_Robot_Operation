@@ -1,3 +1,5 @@
+-- NOTE: KAIST 레거시 스크립트. 현재 프로젝트는 Main_task.prs 사용
+-- 2026-03-21: int16 부호 변환 -65537 → -65536 수정 (off-by-one 버그)
 toolframe(1)
 modserv = modbus_server()
 modserv.write_register('task_number', var.i(1))
@@ -15,22 +17,22 @@ while move_count < 10 do
         Ry = modserv.read_register('Ry')
         Rz = modserv.read_register('Rz') 
         if  x>32767  then
-            x= x-65537
+            x= x-65536
         end
         if  y>32767  then
-            y= y-65537
+            y= y-65536
         end
         if  z>32767  then
-            z = z-65537
+            z = z-65536
         end
         if  Rx>32767  then
-            Rx= Rx-65537
+            Rx= Rx-65536
         end
         if Ry>32767  then
-            Ry= Ry-65537
+            Ry= Ry-65536
         end
         if  Rz>32767  then
-            Rz = Rz-65537
+            Rz = Rz-65536
         end
         toolframe(var.i(2))
         p1 = pose (x/10,y/10,z/10,Rx/10,Ry/10,Rz/10)
@@ -62,22 +64,22 @@ while move_count < 10 do
             Ry2 = modserv.read_register('Ry2')
             Rz2 = modserv.read_register('Rz2') 
             if  x2>32767  then
-                x2= x2-65537
+                x2= x2-65536
             end
             if  y2>32767  then
-                y2= y2-65537
+                y2= y2-65536
             end
             if  z2>32767  then
-                z2 = z2-65537
+                z2 = z2-65536
             end
             if  Rx2>32767  then
-                Rx2= Rx2-65537
+                Rx2= Rx2-65536
             end
             if Ry2>32767  then
-                Ry2= Ry2-65537
+                Ry2= Ry2-65536
             end
             if  Rz2>32767  then
-                Rz2 = Rz2-65537
+                Rz2 = Rz2-65536
             end
             toolframe(var.i(2))        
             p2 = pose (x2/10,y2/10,z2/10,Rx2/10,Ry2/10,Rz2/10)
