@@ -1517,7 +1517,7 @@ class MainWindow(QMainWindow):
             self._set_aruco_align_buttons_enabled(True)
 
     def _on_aruco_align_x(self):
-        """ArUco 정렬 X: Rz 보정 (세로축 깊이 차이 기반)"""
+        """수직 정렬: Rz 보정 (세로축 깊이 차이 기반)"""
         if not self._require_robot():
             return
 
@@ -1528,7 +1528,7 @@ class MainWindow(QMainWindow):
             # 1) 검출
             alignment = self._aruco_tab_detect_alignment()
             if alignment is None:
-                self._log("[ArUco X] 정렬 실패: 마커 미검출")
+                self._log("[수직] 정렬 실패: 마커 미검출")
                 return
 
             # 2) Rz 보정 (>=0.3deg)
@@ -1536,31 +1536,31 @@ class MainWindow(QMainWindow):
                 tab = self.tabArucoReliability
                 distance = getattr(tab, '_last_marker_distance', None)
                 if distance is None:
-                    self._log("[ArUco X] 마커 거리 정보 없음, 기본값 360mm 사용")
+                    self._log("[수직] 마커 거리 정보 없음, 기본값 360mm 사용")
                     distance = 360.0
 
-                self._log(f"[ArUco X] Rz 보정: {alignment.angle_rx:.2f}°, D={distance:.0f}mm")
+                self._log(f"[수직] Rz 보정: {alignment.angle_rx:.2f}°, D={distance:.0f}mm")
                 self._on_ar_tag_align_base_rz(alignment.angle_rx, distance)
                 self._settle()
             else:
                 rx_disp = alignment.angle_rx if alignment.angle_rx is not None else 0
-                self._log(f"[ArUco X] Rz 보정 불필요: {rx_disp:.2f}°")
+                self._log(f"[수직] Rz 보정 불필요: {rx_disp:.2f}°")
 
             # 3) 최종 검출 + 결과
             alignment2 = self._aruco_tab_detect_alignment()
             if alignment2 is not None:
                 rx2 = alignment2.angle_rx if alignment2.angle_rx is not None else 0
-                self._log(f"[ArUco X] 정렬 완료: Rz={rx2:.2f}°")
+                self._log(f"[수직] 정렬 완료: Rz={rx2:.2f}°")
             else:
-                self._log("[ArUco X] 최종 검출 실패")
+                self._log("[수직] 최종 검출 실패")
 
         except Exception as e:
-            self._log(f"[ArUco X] 오류: {e}")
+            self._log(f"[수직] 오류: {e}")
         finally:
             self._set_aruco_align_buttons_enabled(True)
 
     def _on_aruco_align_combined(self):
-        """통합 ArUco 정렬: Y축 먼저 → X축 (수평 정렬이 Rz 정확도에 영향)"""
+        """통합 정렬: 수평 먼저 → 수직 (수평 정렬이 Rz 정확도에 영향)"""
         if not self._require_robot():
             return
 
