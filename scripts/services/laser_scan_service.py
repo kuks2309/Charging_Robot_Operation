@@ -94,14 +94,29 @@ class LaserScanService(QObject):
         """삼각측량 기하학 캘리브레이션 파일 로드.
 
         필수 키: h_mm, By_mm (또는 하위호환 Bx_mm), alpha_deg
+
+        v3 구조(parameters 중첩) 및 v1/v2(최상위) 모두 지원.
         """
         try:
             with open(self._CALIB_FILE, 'r', encoding='utf-8') as f:
-                calib = json.load(f)
+                raw = json.load(f)
+
+            # v3: 파라미터가 'parameters' 중첩 블록에 있음 → 평탄화
+            if 'parameters' in raw and isinstance(raw['parameters'], dict):
+                calib = dict(raw)
+                calib.update(raw['parameters'])
+            else:
+                calib = raw
+
             # 하위호환: 기존 Bx_mm 키를 By_mm으로 매핑
             if 'Bx_mm' in calib and 'By_mm' not in calib:
                 calib['By_mm'] = calib['Bx_mm']
             if all(k in calib for k in ('h_mm', 'By_mm', 'alpha_deg')):
+                model = calib.get('model', 'unknown')
+                self._log(
+                    f"[LaserScan] 삼각측량 캘리브 로드 ({model}): "
+                    f"h={calib['h_mm']:.2f}, By={calib['By_mm']:.2f}, α={calib['alpha_deg']:.3f}°"
+                )
                 return calib
             self._log("[LaserScan] 캘리브레이션 파일에 필수 키 누락 (h_mm, By_mm, alpha_deg)")
         except FileNotFoundError:

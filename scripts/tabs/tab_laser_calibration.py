@@ -1509,13 +1509,16 @@ class TabLaserCalibration(QWidget, JogMixin):
                 fy = 5347.3
                 cy_cam = 478.2
 
-            step_tread = self.spinStepInterval.value()
+            # step_tread는 물리적 계단 깊이 (config step_tread_mm, 기본 10.0mm)
+            # spinStepInterval.value()는 로봇 이동 간격(2mm)이므로 사용 금지
             try:
                 with open(LASER_JIG_STEP_CONFIG_FILE, 'r') as f:
                     _jig = json.load(f)
-                step_rise = float(_jig.get('step_rise_mm', step_tread))
+                step_tread = float(_jig.get('step_tread_mm', 10.0))
+                step_rise = float(_jig.get('step_rise_mm', 10.0))
             except Exception:
-                step_rise = step_tread
+                step_tread = 10.0
+                step_rise = 10.0
 
             # 데이터 수집: (z_tcp, z_rel, h_rel, y_px) + base ROI
             z_tcps, z_rels, h_rels, y_pixs, is_base = [], [], [], [], []
@@ -1645,13 +1648,16 @@ class TabLaserCalibration(QWidget, JogMixin):
                 fy = 5347.3
                 cy_cam = 478.2
 
-            step_tread = self.spinStepInterval.value()
+            # step_tread는 물리적 계단 깊이 (config step_tread_mm, 기본 10.0mm)
+            # spinStepInterval.value()는 로봇 이동 간격(2mm)이므로 사용 금지
             try:
                 with open(LASER_JIG_STEP_CONFIG_FILE, 'r') as f:
                     _jig = json.load(f)
-                step_rise = float(_jig.get('step_rise_mm', step_tread))
+                step_tread = float(_jig.get('step_tread_mm', 10.0))
+                step_rise = float(_jig.get('step_rise_mm', 10.0))
             except Exception:
-                step_rise = step_tread
+                step_tread = 10.0
+                step_rise = 10.0
 
             steps = [d['step'] for d in self._vert_scan_data]
             y_vals = [d['y_px'] for d in self._vert_scan_data]

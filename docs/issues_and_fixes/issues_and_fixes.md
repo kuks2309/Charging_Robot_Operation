@@ -2,6 +2,145 @@
 
 ---
 
+## 2026-04-24 | 레이저 삼각측량 캘리브레이션 v2→v3 재피팅 — Ray-tracing 모델 + 3D 재구성
+
+### 문제
+
+1. **step_tread 5배 오류 버그**: `tab_laser_calibration.py` Line 1284에서 `cfg.get('step_interval_mm', 2.0)` → 로봇 이동 간격(2mm)을 물리적 계단 깊이(10mm)로 사용. L-BFGS-B 옵티마이저 발산 (h=500 bound, delta_z=2000 bound, RMSE=57px)
+2. **v2 모델(delta_z=1497) 물리적 부정확**: D≈2000mm 작업거리는 플레이트 시차(d0≈400mm) 및 FOV step jump(D≈1910mm)와 모순. 선형 근사로 Step 5에서 +2.61mm 높이 오차
+3. **03-07 캘리브레이션 파라미터 미갱신**: 수평 스캔에서 피팅된 h=70, Bx=-30, α=13.278°가 03-21 장비 이동(X축→Y축) 후 이름만 Bx→By로 변경되고 재피팅 없이 사용
+
+### 원인
+
+- `spinStepInterval` UI 위젯이 `step_interval_mm`(로봇 스텝)과 `step_tread_mm`(지그 깊이)를 혼동
+- v2 재파라미터화 모델이 α-δz 축퇴로 인해 비물리적 해(D≈2000mm)로 수렴
+- 장비 이동 후 ray-tracing 물리 파라미터(h, By) 재캘리브레이션 누락
+
+### 분석 과정
+
+#### Phase 1: 20명 에이전트 병렬 분석 (Scan 1, 24,183 rows)
+- 데이터 품질: 노이즈 σ=1.0px, SNR=25.9:1, Z 간격 2.00±0.006mm
+- 베이스라인: base(R) σ=0.430px (최적 기준선), 열 드리프트 +0.035 px/캡처
+- 7구간 플랫 영역 식별 (바닥→5단→바닥), 폐합 오차 0.2px
+- dY 증가 (27.2→32.6px): 1/d² 기하학으로 완전 설명 (이론 1.27 vs 실측 1.22)
+- step_tread 버그 확정: Line 1284, 1512, 1648 (1 root cause, 5 downstream sites)
+
+#### Phase 2: 추가 실험 2개 + 3-scan 통합
+- Scan 2 (baseline=797px), Scan 3 (baseline=844px) 추가
+- 동일 Z_tcp에서 baseline 차이 일정 → 로봇 높이 변화 확인 (10mm, 19mm)
+- α-δz 완전 축퇴 확인: α=0.5°~14.5°에서 RMSE 3.08~3.15px로 동일
+
+#### Phase 3: 10명 에이전트 검증
+- V1 수학적 정합성: 6/6 PASS (forward/inverse, 단조성, 특이점)
+- V2 RMSE: 6.95px (주장 7.12px와 2.4% 이내)
+- V4 D=2000mm 타당성: 플레이트 시차 d0≈406mm으로 반박
+- V7 분해능: σ=0.97px, 충전건 허용치 500µm 대비 9배 마진
+- V10 축퇴 영향: 충전건 워크플로우 전 측정에 무해
+
+#### Phase 4: 이슈픽스 참조 → Ray-tracing 모델 재피팅
+- `docs/issues_and_fixes/issues_and_fixes.md`의 03-07 비선형 모델 확인
+- 03-21 수직 스캔 3개 (18 plateau points)로 `differential_evolution` 재피팅
+
+### 수정 내용
+
+#### 1. Ray-tracing 모델 v3 재피팅
+
+**Forward model (기존 laser_scan_service.py 동일 구조):**
+```python
+# 레이저 원점: (0, By, h), 방향: (0, cos(α), -sin(α))
+# 평면 교차: t = (d - By) / cos(α)
+# 카메라 투영: y_px = cy - fy * z_hit / d
+```
+
+**Inverse model (3D 재구성용):**
+```python
+K = h + By * tan(α)
+d = fy * K / (cy + fy * tan(α) - y_px)
+depth = d0 - d  # 벽면으로부터의 돌출 거리
+```
+
+**피팅 결과 (v2→v3 비교):**
+
+| 파라미터 | v1 (03-07 수평) | v2 (03-26 선형) | v3 (04-24 ray-tracing) |
+|---------|----------------|----------------|----------------------|
+| h (mm) | 70.0 | — | **47.56** |
+| By (mm) | -30.0 | — | **66.75** |
+| α (deg) | 13.278 | 축퇴 | **12.863** |
+| d0 (mm) | 미측정 | δz=1497→D≈2000 | **362.7** |
+| RMSE | — | 7.12 px | **0.642 px** |
+| Max step err | — | 2.61 mm | **0.45 mm** |
+
+**Step 높이 정밀도:**
+
+| Step | v2 오차 | v3 오차 | 개선 |
+|------|--------|--------|------|
+| 1 | -0.54mm | +0.16mm | 3.4× |
+| 2 | -0.83mm | +0.05mm | 17× |
+| 3 | +0.26mm | +0.45mm | — |
+| 4 | +0.78mm | +0.07mm | 11× |
+| 5 | **+2.61mm** | **+0.29mm** | **9×** |
+
+**축퇴 분석:**
+- α는 robust (12.86° ≈ 기존 13.28°, 장비 이동에도 안정)
+- h, By는 개별 축퇴 — 조합 K = h + By·tan(α) = 62.80만 식별 가능
+- d0 = 362.7mm는 물리적 카메라→벽 거리 (V4 플레이트 시차 d≈406mm과 합리적 범위)
+
+#### 2. Config 업데이트
+
+`config/laser/vertical/laser_vertical_triangulation_calib.json`:
+- model: `raytrace_nonlinear_v3`
+- parameters: h=47.56, By=66.75, α=12.863, d0=362.7, K=62.80
+- `_history` 섹션에 v1/v2/v3 이력 보존
+- updated: `2026-04-24 17:10 KST`
+
+#### 3. 3D Viewer 수정
+
+`scripts/tools/laser_3d_viewer.py`:
+- 선형 모델(`Z = A * D / fy`) → ray-tracing 역모델(`d = fy*K/(C-y_px)`)
+- Config에서 파라미터 동적 로드 (`load_calib()`)
+- 이상치 제거 (Z < -10 or Z > 80 필터)
+
+#### 4. 3D 평면 추출
+
+레이저 포인트 클라우드에서 6개 평면(Floor + Step 1~5) 추출:
+- 히스토그램 기반 깊이 클러스터링 → 평면 피팅 (Z = p0 + p1·X + p2·Y)
+- 전이구간 오염: 클러스터 Y 범위 양끝 20% 트림으로 가짜 기울기 제거
+- 트림 후 모든 step 기울기 0.6°~2.8° (물리적으로 수평면과 일치)
+
+### 수정 파일
+
+- `config/laser/vertical/laser_vertical_triangulation_calib.json` (v3 파라미터 + `_history`)
+- `scripts/tools/laser_3d_viewer.py` (ray-tracing 역모델, config 동적 로드)
+- `scripts/tabs/tab_laser_calibration.py` (Line 1512, 1648: step_tread를 config에서 직접 로드 — `spinStepInterval.value()` 사용 중단)
+- `scripts/services/laser_scan_service.py` (`_load_triangulation_calib()`에서 v3 `parameters` 중첩 구조 지원)
+- `docs/laser_calibration/vertical_triangulation_analysis_report.md` (전체 분석 보고서)
+- `docs/request/request_log.md` (요청 로그)
+
+### 검증 테스트
+
+```
+[LaserScan] 삼각측량 캘리브 로드 (raytrace_nonlinear_v3): h=47.56, By=66.75, α=12.863°
+step_tread = 10.0mm (expected 10.0) ✓
+step_rise  = 10.0mm (expected 10.0) ✓
+```
+
+### 생성된 분석 파일
+
+- `data/laser_scan/calibration/vertical/analysis/` — 50+ 그래프
+- `.omc/scientist/reports/` — 20+ 리포트
+- `experiments/capture/20260424_173750_laser_3d_plane_fitting_v3.png` — 최종 캡처
+
+### 교훈
+
+1. **장비 이동 후 재캘리브레이션 필수** — 이름 변경(Bx→By)만으로는 물리 파라미터 무효
+2. **config 파라미터의 피팅 데이터 출처와 날짜 명시** — `_history` 섹션 유지 의무화
+3. **선형 근사의 한계** — d0≈360mm에서 50mm protrusion은 14% 거리 변화 → 비선형 ray-tracing 필수
+4. **축퇴 파라미터 주의** — h, By 개별 값이 아닌 조합(K=62.80)만 식별 가능. α만 robust
+5. **이슈픽스 문서 먼저 참조** — 기존 모델 히스토리와 장비 변경 이력이 분석 방향 결정
+6. **3D 평면 추출 시 전이구간 트림** — 계단 경계의 레이저 산란이 가짜 기울기 생성
+
+---
+
 ## 2026-03-21 | Laser Calibration Detection Pose config 외부화 + TF 동적 설정
 
 ### 증상
