@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-03-21 | Laser Calibration Detection Pose config 외부화 + TF 동적 설정
+
+### 증상
+1. Set Detection Pose 버튼의 목표 RxRyRz(90,0,90)가 하드코딩 — 현장 변경 불가
+2. TF가 하드코딩(TF4/TF5) — config 변경 시 코드 수정 필요
+3. movel 후 TF3으로 복귀되는 문제 (PRS 기본 TF3)
+
+### 원인
+- `_on_set_detection_pose()`에 목표 자세와 TF 번호가 리터럴로 하드코딩
+- movel(CMD 20) 완료 후 TF 재설정 누락
+
+### 수정
+- `config/laser/laser_detection_pose.json` 신규: toolframe, target_x/y/z/rx/ry/rz 외부화
+- `_on_set_detection_pose()`: config 핫 리로드 (버튼 클릭마다 읽음), TF를 config `toolframe` 필드에서 동적 설정
+- movel 전/후 TF 설정으로 TF3 복귀 방지
+- XYZ+RxRyRz 전체를 config에서 읽어 절대 위치 이동
+
+### 수정 파일
+- `config/laser/laser_detection_pose.json` (신규)
+- `scripts/tabs/tab_laser_calibration.py` (`_on_set_detection_pose`)
+
+---
+
 ## 2026-03-21 | 레이저 좌표축 변환 (X→Y) + `_detect_in_roi` 중복 제거
 
 ### 배경

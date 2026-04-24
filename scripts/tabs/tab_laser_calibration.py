@@ -352,12 +352,6 @@ class TabLaserCalibration(QWidget, JogMixin):
         from PyQt5.QtWidgets import QApplication, QMessageBox
 
         try:
-            # TF4 강제 설정
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
-            if not success:
-                self._log(f"TF4 설정 실패: {msg}")
-                return
-
             # config에서 목표 포즈 읽기 (매번 핫 리로드)
             try:
                 with open(LASER_DETECTION_POSE_FILE, 'r', encoding='utf-8') as f:
@@ -366,6 +360,7 @@ class TabLaserCalibration(QWidget, JogMixin):
                 self._log(f"Detection Pose config 로드 실패: {e}")
                 return
 
+            tf = dp_cfg.get('toolframe', 4)
             tgt_x = dp_cfg.get('target_x')
             tgt_y = dp_cfg.get('target_y')
             tgt_z = dp_cfg.get('target_z')
@@ -377,7 +372,13 @@ class TabLaserCalibration(QWidget, JogMixin):
                 self._log("Detection Pose config에 필수 값 누락")
                 return
 
-            self._log(f"목표: X={tgt_x:.1f} Y={tgt_y:.1f} Z={tgt_z:.1f} "
+            # config의 toolframe 설정
+            success, msg = self.robot.send_set_toolframe(tf, wait=True)
+            if not success:
+                self._log(f"TF{tf} 설정 실패: {msg}")
+                return
+
+            self._log(f"TF{tf} 기준 목표: X={tgt_x:.1f} Y={tgt_y:.1f} Z={tgt_z:.1f} "
                       f"Rx={tgt_rx:.1f} Ry={tgt_ry:.1f} Rz={tgt_rz:.1f}")
 
             # movel 대신 transx/y/z + rotrx/y/z 순차 이동 (Joint 3 리밋 방지)
@@ -423,10 +424,10 @@ class TabLaserCalibration(QWidget, JogMixin):
 
             self._log("Detection Pose 이동 완료")
 
-            # movel 후 TF4 재설정
-            success, msg = self.robot.send_set_toolframe(4, wait=True)
+            # movel 후 TF 재설정
+            success, msg = self.robot.send_set_toolframe(tf, wait=True)
             if not success:
-                self._log(f"TF4 재설정 실패: {msg}")
+                self._log(f"TF{tf} 재설정 실패: {msg}")
 
         except Exception as e:
             from PyQt5.QtWidgets import QMessageBox

@@ -1,0 +1,118 @@
+{
+  "model": "vertical_laser_triangulation_v2",
+  "description": "Reparametrized model: y_px = y_floor - fy * k * rise / (z_tcp + delta_z - k * tread)",
+  "calibration_date": "2026-03-21",
+  "model_date": "2026-03-26",
+
+  "sensitivity_model": {
+    "type": "linear_ypx",
+    "description": "y_px = a * z_tcp + b (linear fit of laser y-position vs robot Z)",
+    "a": -0.005535,
+    "b": 6.7516,
+    "r2": 0.98
+  },
+
+  "camera": {
+    "alpha_deg": 12.75,
+    "fy_px": 5347.3,
+    "cy_px": 478.2
+  },
+
+  "jig": {
+    "step_rise_mm": 10.0,
+    "step_tread_mm": 10.0
+  },
+
+  "scan_data": {
+    "num_scans": 3,
+    "scan_files": [
+      "data/laser_scan/calibration/vertical/scan_raw_20260321_195848.csv",
+      "data/laser_scan/calibration/vertical/scan_raw_20260321_202326.csv",
+      "data/laser_scan/calibration/vertical/scan_raw_20260321_203008.csv"
+    ]
+  },
+
+  "cross_validation": {
+    "rmse_mm": null,
+    "note": "placeholder — 교차검증 결과 대기"
+  },
+
+  "parameters": {
+    "delta_z_mm": 1497.0,
+    "fy_px": 5347.3,
+    "cy_px": 478.2,
+    "Bx_mm": -30.0,
+    "step_rise_mm": 10.0,
+    "step_tread_mm": 10.0
+  },
+
+  "derived": {
+    "D0_at_ztcp500": 1997.0,
+    "height_sensitivity_px_per_mm_at_ztcp500": 26.78,
+    "height_resolution_1sigma_mm": 0.0373,
+    "height_resolution_3sigma_mm": 0.112
+  },
+
+  "fitting": {
+    "rmse_plateau_px": 5.98,
+    "rmse_raw_px": 7.12,
+    "n_plateau_points": 15,
+    "n_raw_points": 109,
+    "n_scans": 3,
+    "scan_baselines_px": [
+      772.8,
+      797.3,
+      844.3
+    ],
+    "robot_height_changes_mm": {
+      "scan1_to_2": 10,
+      "scan2_to_3": 19,
+      "scan1_to_3": 29
+    }
+  },
+
+  "_legacy": {
+    "model": "vertical_laser_triangulation_v2",
+    "description": "Reparametrized model: y_px = y_floor - fy * k * rise / (z_tcp + delta_z - k * tread)",
+    "parameters": {
+      "delta_z_mm": 1497.0,
+      "fy_px": 5347.3,
+      "cy_px": 478.2,
+      "Bx_mm": -30.0,
+      "step_rise_mm": 10.0,
+      "step_tread_mm": 10.0
+    },
+    "derived": {
+      "D0_at_ztcp500": 1997.0,
+      "height_sensitivity_px_per_mm_at_ztcp500": 26.78,
+      "height_resolution_1sigma_mm": 0.0373,
+      "height_resolution_3sigma_mm": 0.112
+    },
+    "fitting": {
+      "rmse_plateau_px": 5.98,
+      "rmse_raw_px": 7.12,
+      "n_plateau_points": 15,
+      "n_raw_points": 109,
+      "n_scans": 3,
+      "scan_baselines_px": [772.8, 797.3, 844.3],
+      "robot_height_changes_mm": {
+        "scan1_to_2": 10,
+        "scan2_to_3": 19,
+        "scan1_to_3": 29
+      }
+    },
+    "notes": {
+      "degeneracy": "alpha and delta_z are individually degenerate; only D0=z_tcp+delta_z is identifiable",
+      "bug_fixed": "step_tread was 2.0mm (spinStepInterval), corrected to 10.0mm (physical jig)",
+      "bug_location": "tab_laser_calibration.py line 1284: cfg.get('step_interval_mm') should be cfg.get('step_tread_mm')"
+    },
+    "calibration_date": "2026-03-21",
+    "model_date": "2026-03-26"
+  },
+
+  "notes": {
+    "degeneracy": "alpha and delta_z are individually degenerate; only D0=z_tcp+delta_z is identifiable",
+    "bug_fixed": "step_tread was 2.0mm (spinStepInterval), corrected to 10.0mm (physical jig)",
+    "bug_location": "tab_laser_calibration.py line 1284: cfg.get('step_interval_mm') should be cfg.get('step_tread_mm')"
+  }
+}

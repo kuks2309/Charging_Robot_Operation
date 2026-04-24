@@ -1243,7 +1243,7 @@ QPushButton:checked { background-color: #0288D1; color: white; }</string>
                 <widget class="QDoubleSpinBox" name="spinStepInterval">
                  <property name="minimum"><double>1.0</double></property>
                  <property name="maximum"><double>100.0</double></property>
-                 <property name="value"><double>10.0</double></property>
+                 <property name="value"><double>2.0</double></property>
                  <property name="singleStep"><double>1.0</double></property>
                  <property name="suffix"><string> mm</string></property>
                  <property name="maximumSize"><size><width>80</width><height>16777215</height></size></property>

@@ -3990,7 +3990,9 @@ class MainWindow(QMainWindow):
             frame = self.arducam_manager.get_frame() if self.arducam_manager else None
             if frame is not None:
                 import cv2
-                img_dir = os.path.join(os.path.dirname(state['csv_path']), 'images')
+                # CSV 파일명에서 타임스탬프 추출하여 이미지 폴더 분리
+                _csv_basename = os.path.splitext(os.path.basename(state['csv_path']))[0]
+                img_dir = os.path.join(os.path.dirname(state['csv_path']), 'images', _csv_basename)
                 os.makedirs(img_dir, exist_ok=True)
                 img_path = os.path.join(img_dir, f"step_{step_idx + 1:02d}_Z{z_tcp:.1f}.png")
                 cv2.imwrite(img_path, frame)
